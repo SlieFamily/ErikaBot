@@ -4,3 +4,4 @@
 /.env.prod
 /ghostdriver.log
 /db.json
+/docker-compose.yml
