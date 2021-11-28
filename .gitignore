@@ -1,0 +1,5 @@
+##----------Private settings----------
+/.env
+/.env.dev
+/.env.prod
+/.ghostdriver.log
