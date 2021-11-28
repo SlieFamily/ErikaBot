@@ -1,15 +1,13 @@
 <!-- markdownlint-disable MD033 MD041-->
 
 <p align="center">
-  <img src="https://bu.dusays.com/2021/11/28/4189bd33cb9d5.bmp" width="200" height="200"/>
+  <img src="https://i.loli.net/2021/11/28/AsUmeoSyqzjNCZr.png" width="200" height="200"/>
 </p>
-
-
 <div align="center">
 
 # 绘梨花(胶布)Bot|<sub>ErikaBot</sub>
 <!-- markdownlint-disable-next-line MD036 -->
-_✨ 基于NoneBot2的绘梨花多功能Bot，自用 ✨_
+_✨ 基于NoneBot2的绘梨花多功能 Bot ，自用 ✨_
 
 </div>
 
@@ -96,6 +94,8 @@ update rule [语录名称]语录
 
 发送一句话`我真的好喜欢战人呀~`，机器人检索到`战人`二字后，会随机发送一句隶属于`战人迫害语录`中的一句话。
 
+**由此可见，对于宏观触发的语录，需要在创建时使用`[语录名称]迫害语录`进行追加**
+
 ### 2.推特更新推送
 
 > 基于`phantomjs`进行爬虫实现
@@ -129,6 +129,13 @@ update rule [语录名称]语录
 ```
 
 效果展示：
+
+<p align="center">
+  <img src="https://i.loli.net/2021/11/28/hDW5YtjEMBX6lxK.jpg" width="400"/>
+</p>
+<div align="center">
+
+注：输入`奥利给`或者字串超过50字有**彩蛋**
 
 ### 5.美图分享
 
