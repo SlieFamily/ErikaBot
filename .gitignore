@@ -2,4 +2,5 @@
 /.env
 /.env.dev
 /.env.prod
-/.ghostdriver.log
+/ghostdriver.log
+/db.json
