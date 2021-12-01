@@ -161,6 +161,7 @@ async def handle(bot: Bot, event: Event, state: T_State):
     ana = state["_matched_groups"][0]
     infs = model.Inf(ana)
     if infs:
+        await FindAna.send(Message("[CQ:image,file=91356418a33db6e251c28fae1911a1e9.image,url=https://c2cpicdw.qpic.cn/offpic_new/1364374624//1364374624-735706666-91356418A33DB6E251C28FAE1911A1E9/0?term=3]"))
         msg = f"发现{len(infs)}条同内容语录\n"
         for i in range(len(infs)):
             msg += f"第{i+1}条：\n"
@@ -170,7 +171,8 @@ async def handle(bot: Bot, event: Event, state: T_State):
                 msg += 'Auto'
             else:
                 msg += f'[CQ:at,qq={infs[i][1]}]'
-            msg += '\n\n'
+            if i < len(infs)-1:
+                msg += '\n\n'
         await FindAna.send(Message(msg))
     await FindAna.finish()
 
