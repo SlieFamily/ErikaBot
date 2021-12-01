@@ -14,11 +14,13 @@ import datetime
 global time_task
 
 time_task = []
+time_task.append(('N1等级考试',datetime.date(2021,12,5)))
 time_task.append(('2022考研',datetime.date(2021,12,25)))
 time_task.append(('2021下英语六级',datetime.date(2021,12,18)))
-time_task.append(('N1等级考试',datetime.date(2021,12,5)))
+time_task.append(('科A复兴祭CP29',datetime.date(2021,12,11)))
+time_task.append(('大年夜/春假',datetime.date(2022,1,31)))
+time_task.append(('亲戚催婚',datetime.date(2022,2,1)))
 time_task.append(('2022高考',datetime.date(2022,6,7)))
-time_task.append(('科A复兴祭cp29',datetime.date(2021,12,11)))
 groups = ["904517835","729901771","318573830"]
 
 async def CallDays()->str:

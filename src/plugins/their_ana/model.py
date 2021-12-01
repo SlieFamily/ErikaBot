@@ -153,6 +153,9 @@ def Merge(name1:str,name2:str)->bool:
         return False
 
 def SetLock(name:str,group:str)->bool:
+    '''
+    设置对群限制访问
+    '''
     if not Isexisted(name):
         return False
     db = sqlite3.connect('anas.db')
@@ -165,12 +168,18 @@ def SetLock(name:str,group:str)->bool:
     return True
 
 def GetList():
+    '''
+    获取语录清单
+    '''
     db = sqlite3.connect('anas.db')
     cur = db.cursor()
     cur.execute('select * from AnaList')
-    return cur.fetchall()
+    return [name[0] for name in cur.fetchall()]
 
 def SetUnlock(name:str,group:str)->bool:
+    '''
+    设置对群限制访问解除
+    '''
     if not Isexisted(name):
         return False
     db = sqlite3.connect('anas.db')
@@ -192,6 +201,9 @@ def GetReRule():
     return rule[0][0]
 
 def UpdateReRule(name:str)->bool:
+    '''
+    更新 超级语录的规则列表
+    '''
     if not Isexisted(name+"迫害"):
         return False
     db = sqlite3.connect('anas.db')
@@ -206,3 +218,23 @@ def UpdateReRule(name:str)->bool:
     except:
         return False
     return True
+
+def Inf(ana:str):
+    '''
+    获取具体语录(string)的信息
+    '''
+    db = sqlite3.connect('anas.db')
+    cur = db.cursor()
+    names = GetList()
+    inf_list = []
+    print(ana)
+    for name in names:
+        cur.execute(f'select * from _{name} where ana="{ana}"')
+        inf = cur.fetchall()
+        if inf:
+            inf_list.append((name,inf[0][1]))
+    if inf_list == []:
+        return False
+    return inf_list
+
+
