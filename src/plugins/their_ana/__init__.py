@@ -7,6 +7,7 @@ from nonebot.typing import T_State
 from nonebot.adapters import Bot,Event
 from nonebot.adapters.cqhttp import Message,MessageSegment,GroupIncreaseNoticeEvent,GroupMessageEvent
 from nonebot.permission import SUPERUSER
+from nonebot.adapters.cqhttp.permission import GROUP_ADMIN, GROUP_OWNER, PRIVATE_FRIEND
 from nonebot.log import logger
 from nonebot.message import run_postprocessor
 from nonebot.matcher import Matcher
@@ -36,6 +37,7 @@ Delabuse = on_regex("del Erika嘴臭 '([\s\S]+)'", priority=2)
 MergeAna = on_regex("merge ([\u4E00-\u9FA5A-Za-z0-9_]+)语录 ([\u4E00-\u9FA5A-Za-z0-9_]+)语录",priority=1,permission=SUPERUSER)
 LockAna = on_command("lock",priority=1,permission=SUPERUSER)
 UnlockAna = on_command("unlock",priority=1,permission=SUPERUSER)
+FindAna = on_regex("find '([\s\S]+)'",priority=1,permission=SUPERUSER|GROUP_ADMIN|GROUP_OWNER,)
 
 
 AnaList = on_command("语录清单",priority=3)
@@ -47,7 +49,7 @@ async def handle(bot: Bot, event: Event, state: T_State):
     names = model.GetList()
     msg = ''
     for name in names:
-        msg += name[0]+'\n'
+        msg += name+'\n'
     if msg:
         await AnaList.finish(Message(msg))
     else:
@@ -154,6 +156,23 @@ async def got_name(bot: Bot,event: Event, state: T_State):
         await UnlockAna.finish(Message(f"本群访问{name}语录限制解除~"))
     await UnlockAna.finish(Message("解除访问失败~"))
 
+@FindAna.handle()
+async def handle(bot: Bot, event: Event, state: T_State):
+    ana = state["_matched_groups"][0]
+    infs = model.Inf(ana)
+    if infs:
+        msg = f"发现{len(infs)}条同内容语录\n"
+        for i in range(len(infs)):
+            msg += f"第{i+1}条：\n"
+            msg += f'---From: {infs[i][0]}语录\n'
+            msg += '---By: '
+            if infs[i][1] == "Auto":
+                msg += 'Auto'
+            else:
+                msg += f'[CQ:at,qq={infs[i][1]}]'
+            msg += '\n\n'
+        await FindAna.send(Message(msg))
+    await FindAna.finish()
 
 @abuse.handle()
 async def handle(bot: Bot, event: GroupMessageEvent, state: T_State):
