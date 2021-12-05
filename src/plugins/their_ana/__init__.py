@@ -28,8 +28,8 @@ global_config = nonebot.get_driver().config
 plugin_config = Config(**global_config.dict())
 
 # 响应命令
-theirAna = on_regex("([\u4E00-\u9FA5A-Za-z0-9_]+)语录", priority=3)
-AddAna = on_regex("add ([\u4E00-\u9FA5A-Za-z0-9_]+)语录 '([\s\S]+)'", priority=2)
+theirAna = on_regex("([\s\S]+)语录", priority=3) # [\u4E00-\u9FA5A-Za-z0-9_]+
+AddAna = on_regex("add ([\s\S]+)语录 '([\s\S]+)'", priority=2)
 Addabuse = on_regex("add Erika嘴臭 '([\s\S]+)'", priority=2)
 AddReRule = on_regex("update rule ([\s\S]+)", priority=1,permission=SUPERUSER)
 DelAna = on_regex("del ([\u4E00-\u9FA5A-Za-z0-9_]+)语录 '([\s\S]+)'",priority=2)
@@ -37,7 +37,7 @@ Delabuse = on_regex("del Erika嘴臭 '([\s\S]+)'", priority=2)
 MergeAna = on_regex("merge ([\u4E00-\u9FA5A-Za-z0-9_]+)语录 ([\u4E00-\u9FA5A-Za-z0-9_]+)语录",priority=1,permission=SUPERUSER)
 LockAna = on_command("lock",priority=1,permission=SUPERUSER)
 UnlockAna = on_command("unlock",priority=1,permission=SUPERUSER)
-FindAna = on_regex("find '([\s\S]+)'",priority=1,permission=SUPERUSER|GROUP_ADMIN|GROUP_OWNER,)
+FindAna = on_regex("find '([\s\S]+)'",priority=1)
 
 
 AnaList = on_command("语录清单",priority=3)
@@ -131,7 +131,7 @@ async def handle(bot: Bot,event: Event, state: T_State):
 
 @LockAna.got("name", prompt="该限制什么语录呢？")
 async def got_name(bot: Bot,event: Event, state: T_State):
-    name = re.findall("to ([\u4E00-\u9FA5A-Za-z0-9_]+)语录",state["name"])[0]
+    name = re.findall("to ([\s\S]+)语录",state["name"])[0]
     flag = model.SetLock(name,state["group"])
     if flag:
         await LockAna.finish(Message(f"本群已限制访问{name}语录~"))
@@ -149,7 +149,7 @@ async def handle(bot: Bot,event: Event, state: T_State):
 
 @UnlockAna.got("name", prompt="该解除什么语录呢？")
 async def got_name(bot: Bot,event: Event, state: T_State):
-    name = re.findall("to ([\u4E00-\u9FA5A-Za-z0-9_]+)语录",state["name"])[0]
+    name = re.findall("to ([\s\S]+)语录",state["name"])[0]
     print(name)
     flag = model.SetUnlock(name,state["group"])
     if flag:
@@ -170,7 +170,7 @@ async def handle(bot: Bot, event: Event, state: T_State):
             if infs[i][1] == "Auto":
                 msg += 'Auto'
             else:
-                msg += f'[CQ:at,qq={infs[i][1]}]'
+                msg += f'[QQ:{infs[i][1]}]'
             if i < len(infs)-1:
                 msg += '\n\n'
         await FindAna.send(Message(msg))
