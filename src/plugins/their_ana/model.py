@@ -26,7 +26,7 @@ def AppendList(name:str)->bool:
     try:
         cur.execute(f'insert into AnaList (ana_name) values ("{name}")')
         db.commit()
-        cur.execute(f'create table _{name} (ana TEXT UNIQUE, set_by TEXT)')
+        cur.execute(f'create table "_{name}" (ana TEXT UNIQUE, set_by TEXT)')
         db.commit()
     except:
         return False
@@ -66,7 +66,7 @@ def GetAna(name:str,group:str)->str:
     except:
         cur.execute(f'alter table AnaList add group_{group} INTEGER default 0')
         db.commit() #为新群创建访问字段
-    cur.execute(f'select * from _{name}')
+    cur.execute(f'select * from "_{name}"')
     All_anas = cur.fetchall()
     try:
         i = random.randint(0,len(All_anas))
@@ -87,10 +87,10 @@ def IsAdded(name:str,ana:str,by:str)->bool:
     cur = db.cursor()
     if not Isexisted(name):
         AppendList(name)
-    cur.execute(f'select * from _{name} where ana="{ana}"')
+    cur.execute(f'select * from "_{name}" where ana="{ana}"')
     if cur.fetchall() == []:
         try:
-            cur.execute(f'insert into _{name} values("{ana}","{by}")')
+            cur.execute(f'insert into "_{name}" values("{ana}","{by}")')
             db.commit()
             cur.close()
             db.close()
@@ -110,18 +110,18 @@ def IsDel(name:str,ana:str)->bool:
     if not Isexisted(name):
         return False
     try:
-        cur.execute(f'select * from _{name} where ana="{ana}"')
+        cur.execute(f'select * from "_{name}" where ana="{ana}"')
         if cur.fetchall() == []:
             return False
-        cur.execute(f'delete from _{name} where ana="{ana}"')
+        cur.execute(f'delete from "_{name}" where ana="{ana}"')
         db.commit()
         # 语录为空，全清
-        cur.execute(f'select * from _{name}')
+        cur.execute(f'select * from "_{name}"')
         All_anas = cur.fetchall()
         if len(All_anas) == 0:
             cur.execute(f'delete from AnaList where ana_name="{name}"')
             db.commit()
-            cur.execute(f'DROP TABLE _{name}')
+            cur.execute(f'DROP TABLE "_{name}"')
             db.commit()
     except:
         cur.close()
@@ -144,7 +144,7 @@ def Merge(name1:str,name2:str)->bool:
     for ana in n2_anas:
         cur.execute(f'insert into _{name1} values{ana}')
     cur.execute(f'delete from AnaList where ana_name="{name2}"')
-    cur.execute(f'DROP TABLE _{name2}')
+    cur.execute(f'DROP TABLE "_{name2}"')
     try:
         db.commit()
         return True
@@ -204,7 +204,7 @@ def UpdateReRule(name:str)->bool:
     '''
     更新 超级语录的规则列表
     '''
-    if not Isexisted(name+"迫害"):
+    if not Isexisted(name+"<高级>"):
         return False
     db = sqlite3.connect('anas.db')
     cur = db.cursor()
@@ -229,12 +229,25 @@ def Inf(ana:str):
     inf_list = []
     print(ana)
     for name in names:
-        cur.execute(f'select * from _{name} where ana="{ana}"')
+        cur.execute(f'''select * from "_{name}" where ana like "%{ana}%"''')
         inf = cur.fetchall()
         if inf:
-            inf_list.append((name,inf[0][1]))
+            inf_list.append((name,inf[0][0],inf[0][1]))
     if inf_list == []:
         return False
     return inf_list
 
-
+def DropAna(name:str)->bool:
+    '''
+    删除整个语录
+    '''
+    db = sqlite3.connect('anas.db')
+    cur = db.cursor()
+    try:
+        cur.execute(f'delete from AnaList where ana_name="{name}"')
+        db.commit()
+        cur.execute(f'DROP table "_{name}"')
+        db.commit()
+        return True
+    except:
+        return False

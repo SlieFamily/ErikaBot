@@ -14,13 +14,13 @@ import datetime
 global time_task
 
 time_task = []
-time_task.append(('N1等级考试',datetime.date(2021,12,5)))
 time_task.append(('2022考研',datetime.date(2021,12,25)))
 time_task.append(('2021下英语六级',datetime.date(2021,12,18)))
 time_task.append(('科A复兴祭CP29',datetime.date(2021,12,11)))
 time_task.append(('大年夜/春假',datetime.date(2022,1,31)))
 time_task.append(('亲戚催婚',datetime.date(2022,2,1)))
 time_task.append(('2022高考',datetime.date(2022,6,7)))
+time_task.append(('2023考研',datetime.date(2022,12,25)))
 groups = ["904517835","729901771","318573830"]
 
 async def CallDays()->str:
@@ -54,15 +54,6 @@ async def AutoCallDays():
                     			'message':msg,
                         		'group_id':group
                 				})
-
-@scheduler.scheduled_job('interval',days=6,id='call_renewVPS')
-async def CallRenew():
-	msg = "如果你看见这条消息，请告诉我的主人，服务器快到期了，请他赶紧续费！\n小胶布不想离开大家！"
-	(schedBot,) = nonebot.get_bots().values()
-	await schedBot.call_api('send_msg',**{
-                			'message':msg,
-                    		'group_id':"904517835"
-            				})
 
 AddDays = on_command("add 倒计时",priority=2)
 @AddDays.handle()
