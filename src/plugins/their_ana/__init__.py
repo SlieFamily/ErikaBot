@@ -28,16 +28,17 @@ global_config = nonebot.get_driver().config
 plugin_config = Config(**global_config.dict())
 
 # 响应命令
-theirAna = on_regex("([\s\S]+)语录", priority=3) # [\u4E00-\u9FA5A-Za-z0-9_]+
-AddAna = on_regex("add ([\s\S]+)语录 '([\s\S]+)'", priority=2)
-Addabuse = on_regex("add Erika嘴臭 '([\s\S]+)'", priority=2)
-AddReRule = on_regex("update rule ([\s\S]+)", priority=1,permission=SUPERUSER)
-DelAna = on_regex("del ([\u4E00-\u9FA5A-Za-z0-9_]+)语录 '([\s\S]+)'",priority=2)
-Delabuse = on_regex("del Erika嘴臭 '([\s\S]+)'", priority=2)
-MergeAna = on_regex("merge ([\u4E00-\u9FA5A-Za-z0-9_]+)语录 ([\u4E00-\u9FA5A-Za-z0-9_]+)语录",priority=1,permission=SUPERUSER)
+theirAna = on_regex("([\w\W]+)语录", priority=3) # [\u4E00-\u9FA5A-Za-z0-9_]+
+AddAna = on_regex("add ([\w\W]+)语录：([\s\S]+)", priority=2)
+Addabuse = on_regex("add Erika嘴臭：([\s\S]+)", priority=2)
+AddReRule = on_regex("update rule ([\w\W]+)", priority=1,permission=SUPERUSER)
+DelAna = on_regex("del ([\w\W]+)语录：([\s\S]+)",priority=2)
+Delabuse = on_regex("del Erika嘴臭：([\s\S]+)", priority=2)
+MergeAna = on_regex("merge ([\w\W]+)语录，([\w\W]+)语录",priority=1,permission=SUPERUSER)
 LockAna = on_command("lock",priority=1,permission=SUPERUSER)
 UnlockAna = on_command("unlock",priority=1,permission=SUPERUSER)
-FindAna = on_regex("find '([\s\S]+)'",priority=1)
+DelAllAna = on_command("drop",priority=1,permission=SUPERUSER)
+FindAna = on_regex("find：([\s\S]+)",priority=1)
 
 
 AnaList = on_command("语录清单",priority=3)
@@ -68,10 +69,13 @@ async def handle(bot: Bot, event: Event, state: T_State):
     AutoAna = Matcher.new(temp=True,priority=4,default_state=state)
     @AutoAna.handle()
     async def handle(bot: Bot, event: Event, state: T_State):
-        ana = event.get_message()
-        if event.get_user_id() == "2450509502":
-            if model.IsAdded(state["auto_name"],ana,"Auto"):
-                await AutoAna.finish(Message(random.choice(rsp)))
+        try:
+            ana = event.get_message()
+            if event.get_user_id() == "2450509502":
+                if model.IsAdded(state["auto_name"],ana,"Auto"):
+                    await AutoAna.finish(Message(random.choice(rsp)))
+        except:
+            pass
     if my_ana:
         await theirAna.finish(Message(my_ana))
     await theirAna.finish() 
@@ -131,7 +135,7 @@ async def handle(bot: Bot,event: Event, state: T_State):
 
 @LockAna.got("name", prompt="该限制什么语录呢？")
 async def got_name(bot: Bot,event: Event, state: T_State):
-    name = re.findall("to ([\s\S]+)语录",state["name"])[0]
+    name = re.findall("to ([\w\W]+)语录",state["name"])[0]
     flag = model.SetLock(name,state["group"])
     if flag:
         await LockAna.finish(Message(f"本群已限制访问{name}语录~"))
@@ -149,12 +153,31 @@ async def handle(bot: Bot,event: Event, state: T_State):
 
 @UnlockAna.got("name", prompt="该解除什么语录呢？")
 async def got_name(bot: Bot,event: Event, state: T_State):
-    name = re.findall("to ([\s\S]+)语录",state["name"])[0]
+    name = re.findall("to ([\w\W]+)语录",state["name"])[0]
     print(name)
     flag = model.SetUnlock(name,state["group"])
     if flag:
         await UnlockAna.finish(Message(f"本群访问{name}语录限制解除~"))
     await UnlockAna.finish(Message("解除访问失败~"))
+
+@DelAllAna.handle()
+async def handle(bot: Bot,event: Event, state: T_State):
+    group = event.get_session_id()
+    if not group.isdigit():
+        group = group.split('_')[1]
+    state["group"] = group
+    name = str(event.get_message()).strip()
+    if name:
+        state["name"] = name
+
+@DelAllAna.got("name", prompt="啊~全都要摧毁！全都要！")
+async def got_name(bot: Bot,event: Event, state: T_State):
+    name = re.findall("([\w\W]+)语录",state["name"])[0]
+    print(name)
+    flag = model.DropAna(name)
+    if flag:
+        await DelAllAna.finish(Message(f"果然{name}，就是应该狼狈退场呢~"))
+    await DelAllAna.finish(Message("嘁，让他侥幸存活了"))
 
 @FindAna.handle()
 async def handle(bot: Bot, event: Event, state: T_State):
@@ -168,9 +191,10 @@ async def handle(bot: Bot, event: Event, state: T_State):
             msg += f'---From: {infs[i][0]}语录\n'
             msg += '---By: '
             if infs[i][1] == "Auto":
-                msg += 'Auto'
+                msg += 'Auto\n'
             else:
-                msg += f'[QQ:{infs[i][1]}]'
+                msg += f'[QQ:{infs[i][2]}]\n'
+            msg += '---text:\n'+infs[i][1]
             if i < len(infs)-1:
                 msg += '\n\n'
         await FindAna.send(Message(msg))
@@ -189,7 +213,7 @@ async def handle(bot: Bot, event: GroupMessageEvent, state: T_State):
 
 @abuse2.handle()
 async def handle(bot: Bot, event: Event, state: T_State):
-    name = state["_matched"]+"迫害"
+    name = state["_matched"]+"<高级>"
     group = event.get_session_id()
     if not group.isdigit():
         group = group.split('_')[1]
@@ -202,5 +226,5 @@ async def handle(bot: Bot, event: Event, state: T_State):
 async def handle(bot: Bot, event: Event, state: T_State):
     name = state["_matched_groups"][0]
     if model.UpdateReRule(name):
-        await AddReRule.finish(Message("迫害库更新成功，将在下次重启后生效"))
+        await AddReRule.finish(Message("Super语录库更新成功，将在下次重启后生效"))
     await AddReRule.finish(Message("胶布不想迫害大家~"))
