@@ -1,7 +1,7 @@
 [tool.poetry]
-name = "bdg-bot"
-version = "0.1.0"
-description = "bdg-bot"
+name = "erikabot"
+version = "1.4.0"
+description = "erikabot"
 authors = []
 readme = "README.md"
 
@@ -14,7 +14,6 @@ nb-cli = "^0.1.0"
 nonebot-test = "^0.1.0"
 
 [nonebot.plugins]
-plugins = ["nonebot_plugin_songpicker2", "nonebot_plugin_biliav", "nonebot_plugin_apscheduler"]
 plugin_dirs = ["src/plugins"]
 
 [build-system]
