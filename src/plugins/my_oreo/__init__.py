@@ -23,7 +23,7 @@ async def got_msg(bot: Bot,event: Event, state: T_State):
 	if msg:
 		path = CreateImg(msg)
 		if path:
-			path = 'file:///home/bdg-bot/'+path
+			path = 'file:///home/erikabot/'+path
 			await Oreo.send(MessageSegment.image(file=path))
 		# os.remove(path) 
 		else:

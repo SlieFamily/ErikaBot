@@ -87,6 +87,8 @@ def IsAdded(name:str,ana:str,by:str)->bool:
     cur = db.cursor()
     if not Isexisted(name):
         AppendList(name)
+        if name[-4:-1]+name[-1] == "<高级>":
+            UpdateReRule(name[0:-4])
     cur.execute(f'select * from "_{name}" where ana="{ana}"')
     if cur.fetchall() == []:
         try:
@@ -204,8 +206,6 @@ def UpdateReRule(name:str)->bool:
     '''
     更新 超级语录的规则列表
     '''
-    if not Isexisted(name+"<高级>"):
-        return False
     db = sqlite3.connect('anas.db')
     cur = db.cursor()
     rule = GetReRule()
