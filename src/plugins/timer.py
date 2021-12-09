@@ -55,6 +55,16 @@ async def AutoCallDays():
                         		'group_id':group
                 				})
 
+@scheduler.scheduled_job('cron',hour=19, minute=00, second=0,
+						timezone='Asia/Shanghai',id='call_umiko')
+async def CallUmiko():
+	msg = "[CQ:at,qq=1366108600] 该海猫了"
+	(schedBot,) = nonebot.get_bots().values()
+	await schedBot.call_api('send_msg',**{
+                			'message':msg,
+                    		'group_id':"757530435"
+            				})
+
 AddDays = on_command("add 倒计时",priority=2)
 @AddDays.handle()
 async def handle(bot: Bot, event: Event, state: T_State):
