@@ -58,17 +58,14 @@ async def handle(bot: Bot, event: PokeNotifyEvent, state: T_State):
         await pick.finish(Message("贱民也想戳一戳我？"))
     await pick.finish()
 
-@suanle.handle()
-async def handle_first_receive(bot: Bot,event: Event, state: T_State):
-    await suanle.finish(Message("要算卦了？"))
+# @suanle.handle()
+# async def handle_first_receive(bot: Bot,event: Event, state: T_State):
+#     await suanle.finish(Message("要算卦了？"))
 
 @ping.handle()
 async def handle(bot: Bot, event: Event, state: T_State):
-    # await ping.send(Message("正在 Ping github.com/ErikaBot [220.181.38.148] 具有 32 字节的数据:"))
-    # await ping.send(Message("220.181.38.148 的 Ping 统计信息:\n数据包: 已发送 = 4，已接收 = 4，丢失 = 0 (0% 丢失)"))
-    # await ping.send(Message("往返行程的估计时间(以毫秒为单位):\n最短 = 31ms，最长 = 32ms，平均 = 31ms"))
     msg = [{'type':'xml','data':{}}]
-    data = '''<?xml version='1.0' encoding='UTF-8' standalone='yes' ?><msg serviceID="1" templateID="2" action="web" brief="[QQ频道]通行证" sourceMsgId="2" url="https://qun.qq.com/qqweb/qunpro/share?_wv=3&_wwv=128&inviteCode=H094H&from=246610&biz=ka" flag="3" adverSign="0" multiMsgFlag="0"><item layout="5" advertiser_id="0" aid="0"><picture cover="https://gchat.qpic.cn/gchatpic_new/1269416542/729901771-3068461129-D39946C4CA84A50A7FE9E5B688AB52E8/0?term=2" w="0" h="0" /></item><item layout="6" bg="-1" advertiser_id="0" aid="0"><summary size="27" style="1">☞点击这里☜
+    data = '''<?xml version='1.0' encoding='UTF-8' standalone='yes' ?><msg serviceID="1" templateID="2" action="web" brief="[QQ频道]通行证" sourceMsgId="2" url="https://qun.qq.com/qqweb/qunpro/share?_wv=3&_wwv=128&inviteCode=BS7Tt&from=246610&biz=ka" flag="3" adverSign="0" multiMsgFlag="0"><item layout="5" advertiser_id="0" aid="0"><picture cover="https://gchat.qpic.cn/gchatpic_new/1269416542/729901771-3068461129-D39946C4CA84A50A7FE9E5B688AB52E8/0?term=2" w="0" h="0" /></item><item layout="6" bg="-1" advertiser_id="0" aid="0"><summary size="27" style="1">☞点击这里☜
 
 进入石头门QQ频道~ ٩(๑ᵒ̴̶̷͈᷄ᗨᵒ̴̶̷͈᷅)و</summary></item><source name="" icon="" action="" appid="-1" /></msg>'''
     msg[0]['data']['data'] = data
@@ -89,9 +86,9 @@ async def handle_first_receive(bot: Bot, event: Event, state: T_State):
 [奥利奥]：发送'来点 奥利'
 
 [语录]：   
-    -添加[add xx语录：zzzzzz]
-    -查找[find：zzzzz](支持模糊查找)
-    -删除[del xx语录：zzzzzz]
+    -添加 add xx语录：zzzzzz
+    -查找 find：zzzzz (支持模糊查找)
+    -删除 del xx语录：zzzzzz
 
 [倒计时]：每天8点自动发送
 
