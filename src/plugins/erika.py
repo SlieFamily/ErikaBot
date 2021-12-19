@@ -18,7 +18,7 @@ suanle = on_regex("算了",priority=5)
 ping = on_command("QQ通行证",priority=5)
 poke = on_notice(priority=5)
 helper = on_command("/help", aliases=set(['帮助']), priority=2)
-red_true = on_command("红色真实",priority=3)
+red_true = on_regex("((#[0-9,a-f,A-F]{6})真实|(虚妄)真实|(红色)真实|(蓝色)真实|(金色)真实)：([\w\W]+)",priority=3)
 
 @sarcasm.handle()
 async def handle(bot: Bot, event: Event, state: T_State):
@@ -63,15 +63,17 @@ async def handle(bot: Bot, event: Event, state: T_State):
 async def handle_first_receive(bot: Bot, event: Event, state: T_State):
     help_msg = [{'type':'xml','data':{}}]
     data = '''<?xml version='1.0' encoding='UTF-8' standalone='yes' ?><msg serviceID="1" templateID="-1" action="" brief="[胶布bot]帮助菜单" sourceMsgId="0" url="" flag="3" adverSign="0" multiMsgFlag="0"><item layout="2" mode="1" bg="-18751" advertiser_id="0" aid="0"><picture cover="https://gchat.qpic.cn/gchatpic_new/1364374624/3808573830-2554273412-B8EDB73485FB0C183EBB095ECF4BAE54/0?term=3" w="0" h="0" /><title>绘梨花Bot</title><summary>帮助菜单</summary></item><item layout="6" advertiser_id="0" aid="0"><summary size="28" color="#ff69b4">
-[嘲讽]：发送'嘲讽 aaaa，bbbb'
+[嘲讽]：使用 嘲讽 aaaa，bbbb 以触发
 
 [互动]：请@，或者戳一戳
 
+[真实]：发送 xx真实：zzzz 以触发
+
 [美图]：
-    发送'涩图'、'来点涩图'等
+    发送'涩图'、'来点涩图'等触发
         (回复'不够色'有惊喜)
 
-[奥利奥]：发送'来点 奥利'
+[奥利奥]：来点 奥利*
 
 [语录]：   
     -添加 add xx语录：zzzzzz
@@ -89,15 +91,21 @@ async def handle_first_receive(bot: Bot, event: Event, state: T_State):
 
 @red_true.handle()
 async def handle(bot: Bot, event: Event, state: T_State):
-    msg = str(event.get_message()).strip()
-    if msg:
-        state["msg"] = msg
-
-@red_true.got("msg", prompt="真实的魔女向你保证!")
-async def got_msg(bot: Bot,event: Event, state: T_State):
-    msg = str(state["msg"])
+    msg = state["_matched_groups"]
+    rgb_dirc = {'虚妄':'#ffffff','红色':'#ff6347','蓝色':'#7f00ff','金色':'#d9d919'}
+    color = rgb_dirc['虚妄']
+    for i in msg:
+        if i in ['虚妄','红色','蓝色','金色']:
+            color = rgb_dirc[i]
+            pass
+        elif i != None and i != msg[-1]:
+            color = i
+            pass
+    msg = msg[-1]
+    if event.get_user_id() not in ['1364374624','2450509502'] and color == '#d9d919':
+        await red_true.finish(Message('GameMaster岂是你能冒充的？'))
     send_msg = [{'type':'xml','data':{}}]
-    data = f'''<?xml version='1.0' encoding='UTF-8' standalone='yes' ?><msg serviceID="1" templateID="-1" action="plugin" a_actionData="mqqapi://card/show_pslcard?src_type=internal&amp;source=sharecard&amp;version=1&amp;uin=2308355210" brief="[红色真实]{msg}" sourceMsgId="0" url="" flag="2" adverSign="3" multiMsgFlag="0"><item layout="9" bg="2" advertiser_id="0" aid="0"><picture cover="https://gchat.qpic.cn/gchatpic_new/1364374624/3808573830-2554273412-B8EDB73485FB0C183EBB095ECF4BAE54/0?term=3" w="0" h="0" /></item><item layout="6" advertiser_id="0" aid="0">
-<summary size="100" color="#ff6347">{msg}</summary></item><source name="" icon="" action="" appid="-1" /></msg>'''
+    data = f'''<?xml version='1.0' encoding='UTF-8' standalone='yes' ?><msg serviceID="1" templateID="-1" action="plugin" a_actionData="" brief="[红色真实]{msg}" sourceMsgId="0" url="" flag="2" adverSign="3" multiMsgFlag="0"><item layout="9" bg="2" advertiser_id="0" aid="0"><picture cover="https://gchat.qpic.cn/gchatpic_new/1364374624/3808573830-2554273412-B8EDB73485FB0C183EBB095ECF4BAE54/0?term=3" w="0" h="0" /></item><item layout="6" advertiser_id="0" aid="0">
+<summary size="100" color="{color}">{msg}</summary></item><source name="" icon="" action="" appid="-1" /></msg>'''
     send_msg[0]['data']['data'] = data
     await red_true.finish(Message(send_msg))
