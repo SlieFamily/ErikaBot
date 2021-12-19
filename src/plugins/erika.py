@@ -13,12 +13,12 @@ from nonebot.matcher import Matcher
 import random
 
 sarcasm = on_command("嘲讽",priority=3)
-circle = on_command("专属时间",priority=5)
 welcom = on_notice(priority=4)
 suanle = on_regex("算了",priority=5)
 ping = on_command("QQ通行证",priority=5)
-pick = on_notice(priority=5)
+poke = on_notice(priority=5)
 helper = on_command("/help", aliases=set(['帮助']), priority=2)
+red_true = on_command("红色真实",priority=3)
 
 @sarcasm.handle()
 async def handle(bot: Bot, event: Event, state: T_State):
@@ -28,19 +28,10 @@ async def handle(bot: Bot, event: Event, state: T_State):
 
 @sarcasm.got("msg", prompt="？")
 async def got_msg(bot: Bot,event: Event, state: T_State):
-    msg = re.findall("([\w\W]+)，([\w\W]+)",str(state["msg"]))[0]
+    msg = re.findall("([\s\S]+)，([\s\S]+)",str(state["msg"]))[0]
     # print(msg)
     send_msg = f"仅凭借{msg[0]}，古户绘梨花便能{msg[1]}到这种程度，如何呀，诸位~"
     await sarcasm.finish(Message(send_msg))
-
-@circle.handle()
-async def handle(bot: Bot, event: Event, state: T_State):
-    localtime = datetime.now()
-    localtime += timedelta(hours=7)
-    logger.info(str(localtime.hour))
-    if localtime.hour == 16 and localtime.minute < 10:
-        # logger.info(str(localtime.hour))
-        await circle.finish(Message("现在，瓦达西，是，是属于你一个人的……"))
 
 @welcom.handle()
 async def handle(bot: Bot, event: GroupIncreaseNoticeEvent, state: T_State):
@@ -50,22 +41,19 @@ async def handle(bot: Bot, event: GroupIncreaseNoticeEvent, state: T_State):
     msg = at_+'欢迎新人进裙~'
     await welcom.finish(Message(msg))
 
-@pick.handle()
+@poke.handle()
 async def handle(bot: Bot, event: PokeNotifyEvent, state: T_State):
     msg = event.get_log_string()
     check = re.search("'target_id': 2523899329",msg)
+    rsp = [f'[CQ:poke,type=1,id=-1,name="戳一戳",qq={event.get_user_id()}]','贱民也想戳一戳我？','再戳？']
     if check:
-        await pick.finish(Message("贱民也想戳一戳我？"))
-    await pick.finish()
-
-# @suanle.handle()
-# async def handle_first_receive(bot: Bot,event: Event, state: T_State):
-#     await suanle.finish(Message("要算卦了？"))
+        await poke.finish(Message(random.choice(rsp)))
+    await poke.finish()
 
 @ping.handle()
 async def handle(bot: Bot, event: Event, state: T_State):
     msg = [{'type':'xml','data':{}}]
-    data = '''<?xml version='1.0' encoding='UTF-8' standalone='yes' ?><msg serviceID="1" templateID="2" action="web" brief="[QQ频道]通行证" sourceMsgId="2" url="https://qun.qq.com/qqweb/qunpro/share?_wv=3&_wwv=128&inviteCode=BS7Tt&from=246610&biz=ka" flag="3" adverSign="0" multiMsgFlag="0"><item layout="5" advertiser_id="0" aid="0"><picture cover="https://gchat.qpic.cn/gchatpic_new/1269416542/729901771-3068461129-D39946C4CA84A50A7FE9E5B688AB52E8/0?term=2" w="0" h="0" /></item><item layout="6" bg="-1" advertiser_id="0" aid="0"><summary size="27" style="1">☞点击这里☜
+    data = '''<?xml version='1.0' encoding='UTF-8' standalone='yes' ?><msg serviceID="1" templateID="2" action="web" brief="[QQ频道]通行证" sourceMsgId="2" url="https://qun.qq.com/qqweb/qunpro/share?_wv=3&_wwv=128&inviteCode=BS7Tt&from=246610&biz=ka" flag="0" adverSign="0" multiMsgFlag="0"><item layout="5" advertiser_id="0" aid="0"><picture cover="https://gchat.qpic.cn/gchatpic_new/1269416542/729901771-3068461129-D39946C4CA84A50A7FE9E5B688AB52E8/0?term=2" w="0" h="0" /></item><item layout="6" bg="-1" advertiser_id="0" aid="0"><summary size="27" style="1">☞点击这里☜
 
 进入石头门QQ频道~ ٩(๑ᵒ̴̶̷͈᷄ᗨᵒ̴̶̷͈᷅)و</summary></item><source name="" icon="" action="" appid="-1" /></msg>'''
     msg[0]['data']['data'] = data
@@ -74,7 +62,7 @@ async def handle(bot: Bot, event: Event, state: T_State):
 @helper.handle()
 async def handle_first_receive(bot: Bot, event: Event, state: T_State):
     help_msg = [{'type':'xml','data':{}}]
-    data = '''<?xml version='1.0' encoding='UTF-8' standalone='yes' ?><msg serviceID="1" templateID="-1" action="" brief="绘梨花|ErikaBot" sourceMsgId="0" url="" flag="3" adverSign="0" multiMsgFlag="0"><item layout="2" mode="1" bg="-18751" advertiser_id="0" aid="0"><picture cover="https://gchat.qpic.cn/gchatpic_new/1364374624/3808573830-2554273412-B8EDB73485FB0C183EBB095ECF4BAE54/0?term=3" w="0" h="0" /><title>绘梨花Bot</title><summary>帮助菜单</summary></item><item layout="6" advertiser_id="0" aid="0"><summary size="28" color="#ff69b4">
+    data = '''<?xml version='1.0' encoding='UTF-8' standalone='yes' ?><msg serviceID="1" templateID="-1" action="" brief="[胶布bot]帮助菜单" sourceMsgId="0" url="" flag="3" adverSign="0" multiMsgFlag="0"><item layout="2" mode="1" bg="-18751" advertiser_id="0" aid="0"><picture cover="https://gchat.qpic.cn/gchatpic_new/1364374624/3808573830-2554273412-B8EDB73485FB0C183EBB095ECF4BAE54/0?term=3" w="0" h="0" /><title>绘梨花Bot</title><summary>帮助菜单</summary></item><item layout="6" advertiser_id="0" aid="0"><summary size="28" color="#ff69b4">
 [嘲讽]：发送'嘲讽 aaaa，bbbb'
 
 [互动]：请@，或者戳一戳
@@ -98,3 +86,18 @@ async def handle_first_receive(bot: Bot, event: Event, state: T_State):
     发送'twitter帮助'查看更多</summary><hr hidden="false" style="0" /></item><source name="by-Slie" icon="http://t.cn/RVIeaZK" url="http://github.com/sliefamily/erikabot" action="" appid="0" /></msg>'''
     help_msg[0]['data']['data'] = data
     await helper.finish(Message(help_msg))
+
+@red_true.handle()
+async def handle(bot: Bot, event: Event, state: T_State):
+    msg = str(event.get_message()).strip()
+    if msg:
+        state["msg"] = msg
+
+@red_true.got("msg", prompt="真实的魔女向你保证!")
+async def got_msg(bot: Bot,event: Event, state: T_State):
+    msg = str(state["msg"])
+    send_msg = [{'type':'xml','data':{}}]
+    data = f'''<?xml version='1.0' encoding='UTF-8' standalone='yes' ?><msg serviceID="1" templateID="-1" action="plugin" a_actionData="mqqapi://card/show_pslcard?src_type=internal&amp;source=sharecard&amp;version=1&amp;uin=2308355210" brief="[红色真实]{msg}" sourceMsgId="0" url="" flag="2" adverSign="3" multiMsgFlag="0"><item layout="9" bg="2" advertiser_id="0" aid="0"><picture cover="https://gchat.qpic.cn/gchatpic_new/1364374624/3808573830-2554273412-B8EDB73485FB0C183EBB095ECF4BAE54/0?term=3" w="0" h="0" /></item><item layout="6" advertiser_id="0" aid="0">
+<summary size="100" color="#ff6347">{msg}</summary></item><source name="" icon="" action="" appid="-1" /></msg>'''
+    send_msg[0]['data']['data'] = data
+    await red_true.finish(Message(send_msg))
