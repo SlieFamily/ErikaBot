@@ -3,7 +3,7 @@
 <p align="center">
   <img src="https://i.loli.net/2021/11/28/AsUmeoSyqzjNCZr.png" width="200" height="200"/>
 </p>
-<div align="center">
+
 
 # 绘梨花(胶布)Bot|<sub>ErikaBot</sub>
 <!-- markdownlint-disable-next-line MD036 -->
@@ -35,6 +35,27 @@ _✨ 基于NoneBot2的绘梨花多功能 Bot ，自用 ✨_
 ```
 仅凭借[语句A]，古户绘梨花便能[语句B]到这种程度，如何呀，诸位~
 ```
+
+#### 红字真实
+
+命令（注意是**中文冒号**`：`）：
+
+```bash
+红色真实：[需要发送的真实]
+蓝色真实：[需要发送的真实]
+金色真实：[需要发送的真实]
+虚妄真实：[需要发送的真实]
+#ff00ff真实：[需要发送的真实]
+```
+
+- 颜色可以用16进制RGB码任意选取，如上述演示的`#ff00ff`
+- 金色真实只有被设置为`Game Master`的用户可以触发，设置方式见下文
+
+**效果展示**：
+
+<p align="center">
+  <img src="https://cdn.jsdelivr.net/gh/SlieFamily/TempImages@1.0.2/ErikaTest/TheTruth.jpg" width="400"/>
+</p>
 
 #### 互动
 
@@ -106,19 +127,13 @@ lock to [语录名称]语录
 unlock to [语录名称]语录
 ```
 
-#### 设置*宏观触发*
+#### 设置*超级触发*
 
-> 只对`SUPERUSERS`的命令进行响应
+开启该功能后可以不用加上**后缀** `语录`，并且只要一句话中**含有**`[语录名称]`即可触发，如：
 
-```bash
-update rule [语录名称]语录
-```
+发送一句话`我真的好喜欢战人呀~`，机器人检索到`战人`二字后，会随机发送一句隶属于`战人<高级>语录`中的一句话。
 
-开启该功能后可以不用加上后缀`语录`，并且只要一句话中**含有**`[语录名称]`即可触发，如：
-
-发送一句话`我真的好喜欢战人呀~`，机器人检索到`战人`二字后，会随机发送一句隶属于`战人迫害语录`中的一句话。
-
-**由此可见，对于宏观触发的语录，需要在创建时使用`[语录名称]迫害语录`进行追加**
+**由此可见，对于宏观触发的语录，需要在创建时使用`[语录名称]<高级>语录`进行追加**
 
 ### 2.推特更新推送
 
@@ -155,8 +170,9 @@ update rule [语录名称]语录
 效果展示：
 
 <p align="center">
-  <img src="https://i.loli.net/2021/11/28/hDW5YtjEMBX6lxK.jpg" width="400"/>
+  <img src="https://cdn.jsdelivr.net/gh/SlieFamily/TempImages@1.0.2/ErikaTest/Oreoooo.jpg" width="400"/>
 </p>
+
 
 
 注：输入`奥利给`或者字串超过50字有**彩蛋**
