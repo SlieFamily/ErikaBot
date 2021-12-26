@@ -1,5 +1,6 @@
 import nonebot
 import re
+import time
 from datetime import datetime,timedelta
 from nonebot import on_command,on_regex,on_notice
 from nonebot.rule import to_me
@@ -14,7 +15,8 @@ import random
 
 sarcasm = on_command("嘲讽",priority=3)
 welcom = on_notice(priority=4)
-suanle = on_regex("算了",priority=5)
+# suanle = on_regex("算了",priority=5)
+selfIntro = on_command("来点自我介绍",priority=4)
 ping = on_command("QQ通行证",priority=5)
 poke = on_notice(priority=5)
 helper = on_command("/help", aliases=set(['帮助']), priority=2)
@@ -49,6 +51,31 @@ async def handle(bot: Bot, event: PokeNotifyEvent, state: T_State):
     if check:
         await poke.finish(Message(random.choice(rsp)))
     await poke.finish()
+
+@selfIntro.handle()
+async def handle(bot: Bot, event: Event, state: T_State):
+    await selfIntro.send(Message("初次见面，你好"))
+    time.sleep(1)
+    await selfIntro.send(Message("我的名字叫做 古户绘梨花"))
+    time.sleep(1)
+    await selfIntro.send(Message("虽然是位不速之客，还请多加欢迎"))
+    time.sleep(1)
+    msg = str(event.get_message()).strip()
+    if msg:
+        state["msg"] = msg
+
+@selfIntro.got("msg", prompt="我乃来访者，六轩岛上的，第18名人类！！")
+async def got_msg(bot: Bot,event: Event, state: T_State):
+    msg = re.findall("17人",str(state["msg"]))[0]
+    print(msg)
+    if msg:
+        send_msg = [{'type':'json','data':{}}]
+        data = '''{"app":"com.tencent.structmsg","desc":"音乐","view":"music","ver":"0.0.0.1","prompt":"[分享]birth of a new witch","appID":"","sourceName":"","actionData":"","actionData_A":"","sourceUrl":"","meta":{"music":{"action":"","android_pkg_name":"","app_type":1,"appid":100495085,"ctime":1640524762,"desc":"M.Graveyard","jumpUrl":"https:\/\/y.music.163.com\/m\/song\/786015","musicUrl":"http:\/\/music.163.com\/song\/media\/outer\/url?id=786015","preview":"http:\/\/p2.music.126.net\/GYmSqgsY-zRU8tTFr7C-2Q==\/792747883626755.jpg","sourceMsgId":"0","source_icon":"","source_url":"","tag":"网易云音乐","title":"birth of a new witch","uin":2450509502}},"config":{"autosize":true,"ctime":1640524762,"forward":true,"token":"6a80c60781e34fe213283e1e71ec3ecd","type":"normal"},"text":"","extra":"{\"app_type\":1,\"appid\":100495085,\"msg_seq\":2639423547603752953,\"uin\":2450509502}"}'''
+        send_msg[0]['data']['data'] = data
+        await selfIntro.finish(Message(send_msg))
+    else:
+        await selfIntro.finish()
+
 
 @ping.handle()
 async def handle(bot: Bot, event: Event, state: T_State):

@@ -232,7 +232,7 @@ async def handle(bot: Bot, event: MessageEvent, state: T_State):
     await offtranslate.finish(Msg)
 
 #启动动态推送
-help = on_command('twitter帮助',priority=1,permission=GROUP_ADMIN|GROUP_OWNER|PRIVATE_FRIEND|SUPERUSER,)
+help = on_command('twitter帮助',priority=1)
 @help.handle()
 async def handle(bot: Bot, event: MessageEvent, state: T_State):
     menu='绘梨花twitter小助手 目前支持的功能：\n(请将ID替换为需操作的推特ID，即@后面的名称)\n给爷关注 ID\n取关 ID\n关注列表\n开启翻译 ID\n关闭翻译 ID\n帮助\n'
