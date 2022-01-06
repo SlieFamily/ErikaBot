@@ -24,7 +24,7 @@ time_task.append(('2022高考',datetime.date(2022,6,7)))
 time_task.append(('2022上英语六级',datetime.date(2022,6,12)))
 time_task.append(('2023考研',datetime.date(2022,12,25)))
 
-groups = ["904517835","729901771","757530435"]
+groups = ["904517835","151969411","757530435"]
 
 async def CallDays()->str:
 	msg = '小胶布提醒你，你剩下的时间不多了~\n-----------\n'
@@ -68,7 +68,7 @@ async def CallUmiko():
                     		'group_id':"757530435"
             				})
 
-AddDays = on_command("add 倒计时",priority=2)
+AddDays = on_command("add 倒计时：",priority=2)
 @AddDays.handle()
 async def handle(bot: Bot, event: Event, state: T_State):
 	args = str(event.get_message()).strip()

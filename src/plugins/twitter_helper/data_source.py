@@ -27,9 +27,10 @@ def init():
     driver.close()
     driver.quit()
     if data == None:
-        logger.error('token初始化失败，请检查网络/代理是否正常！')
-        raise Exception('Twitter插件加载失败！请检查代理')
-    token=data['value']
+        logger.error('token初始化失败,已使用默认token.可能存在致命问题,请检查代理!')
+        token='1479123623671521282'
+        return token
+    token = data['value']
     return token
 
 # 获取用户信息    
@@ -76,7 +77,7 @@ async def get_latest_tweet(user_id,token):
             logger.error('twitter.com访问超时，请检查代理/网络设置！')
             logger.error('获取推文失败！')
             return '',{}
-    logger.info('刷新推文成功！')
+    logger.success('刷新推文成功！')
     dict_word = response.json()
     data = dict_word['data']['user']['result']['timeline']['timeline']['instructions'][0]['entries']
     return data[0]['sortIndex'],data
