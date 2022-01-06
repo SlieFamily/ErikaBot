@@ -122,17 +122,17 @@ async def handle(bot: Bot, event: MessageEvent, state: T_State):
         if len(user) != 0:
                 status = model.AddCard(args,id,is_group)
                 if status == 0:
-                    msg='吾主，{}({})已经关注成功！\n[CQ:image,file=0c897acd0b6f7f8c9720bfc42314d4f0.image,url=https://c2cpicdw.qpic.cn/offpic_new/1364374624//1364374624-2452449164-0C897ACD0B6F7F8C9720BFC42314D4F0/0?term=3]'.format(user[1],args) #待测试
+                    msg='吾主，{}({})已经关注成功！\n[CQ:image,file=https://cdn.jsdelivr.net/gh/SlieFamily/TempImages@main//Auto/erika_ok.jpeg]'.format(user[1],args) #待测试
                 else:
-                    msg='{}({})棋子早已就绪！\n[CQ:image,file=78b486ef9731fb9897d1c0dc1f45eb23.image,url=https://c2cpicdw.qpic.cn/offpic_new/1364374624//1364374624-2662510851-78B486EF9731FB9897D1C0DC1F45EB23/0?term=3]'.format(user[1],args) #待测试
+                    msg='{}({})棋子早已就绪！\n[CQ:image,file=https://cdn.jsdelivr.net/gh/SlieFamily/TempImages@main//Auto/erika_ok.jpeg]'.format(user[1],args) #待测试
         else: #否则联网获取信息
             user_name,user_id = await data_source.get_user_info(args,config.token)
             if(user_id != ''):
                 model.AddNewUser(args,user_name,user_id)
                 model.AddCard(args,id,is_group)
-                msg = '吾主，{}({})已经关注成功！\n[CQ:image,file=0c897acd0b6f7f8c9720bfc42314d4f0.image,url=https://c2cpicdw.qpic.cn/offpic_new/1364374624//1364374624-2452449164-0C897ACD0B6F7F8C9720BFC42314D4F0/0?term=3]'.format(user_name,args) #待测试
+                msg = '吾主，{}({})已经关注成功！\n[CQ:image,file=https://cdn.jsdelivr.net/gh/SlieFamily/TempImages@main//Auto/erika_ok.jpeg]'.format(user_name,args) #待测试
             else:
-                msg = '{} 推特ID不存在或网络错误！\n[CQ:image,file=dc545a2c2a542af27b4f043e18911e2f.image,url=https://c2cpicdw.qpic.cn/offpic_new/1364374624//1364374624-3409814783-DC545A2C2A542AF27B4F043E18911E2F/0?term=3]'.format(args)
+                msg = '{} 推特ID不存在或网络错误！\n'.format(args)
     Msg = Message(msg)
     await adduser.finish(Msg)
 
@@ -155,12 +155,12 @@ async def handle(bot: Bot, event: MessageEvent, state: T_State):
             if status != 0:
                 msg = '吾主，{}({})不在本群的关注列表'.format(user[1],args)
             else:
-                msg = '{}({})删除成功！\n[CQ:image,file=0c897acd0b6f7f8c9720bfc42314d4f0.image,url=https://c2cpicdw.qpic.cn/offpic_new/1364374624//1364374624-2452449164-0C897ACD0B6F7F8C9720BFC42314D4F0/0?term=3]'.format(user[1],args)
+                msg = '{}({})删除成功！\nhttps://cdn.jsdelivr.net/gh/SlieFamily/TempImages@main//Auto/erika_ok.jpeg'.format(user[1],args)
     Msg = Message(msg)
     await adduser.finish(Msg)
 
 #显示本群中的关注列表(仅允许管理员操作)  
-alllist = on_command('关注列表',rule=to_me(),priority=1,permission=GROUP_ADMIN|GROUP_OWNER|PRIVATE_FRIEND|SUPERUSER,)
+alllist = on_command('关注列表',priority=1,permission=GROUP_ADMIN|GROUP_OWNER|PRIVATE_FRIEND|SUPERUSER,)
 @alllist.handle()
 async def handle(bot: Bot, event: MessageEvent, state: T_State):
     is_group = int(isinstance(event,GroupMessageEvent))
