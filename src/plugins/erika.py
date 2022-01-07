@@ -100,7 +100,7 @@ async def handle(bot: Bot, event: Event, state: T_State):
 @helper.handle()
 async def handle_first_receive(bot: Bot, event: Event, state: T_State):
     help_msg = [{'type':'xml','data':{}}]
-    data = '''<?xml version='1.0' encoding='UTF-8' standalone='yes' ?><msg serviceID="1" templateID="-1" action="" brief="[胶布bot]帮助菜单" sourceMsgId="0" url="" flag="3" adverSign="0" multiMsgFlag="0"><item layout="2" mode="1" bg="-18751" advertiser_id="0" aid="0"><picture cover="https://gchat.qpic.cn/gchatpic_new/1364374624/3808573830-2554273412-B8EDB73485FB0C183EBB095ECF4BAE54/0?term=3" w="0" h="0" /><title>绘梨花Bot</title><summary>帮助菜单</summary></item><item layout="6" advertiser_id="0" aid="0"><summary size="28" color="#ff69b4">
+    data = '''<?xml version='1.0' encoding='UTF-8' standalone='yes' ?><msg serviceID="1" templateID="-1" action="" brief="[胶布bot]帮助菜单" sourceMsgId="0" url="" flag="3" adverSign="0" multiMsgFlag="0"><item layout="2" mode="1" bg="-18751" advertiser_id="0" aid="0"><picture cover="https://cdn.jsdelivr.net/gh/SlieFamily/TempImages@main//Auto/erika_logo.png" w="0" h="0" /><title>绘梨花Bot</title><summary>帮助菜单</summary></item><item layout="6" advertiser_id="0" aid="0"><summary size="28" color="#ff69b4">
 [嘲讽]：使用 嘲讽 aaaa，bbbb 以触发
 
 [互动]：请@，或者戳一戳
@@ -143,7 +143,7 @@ async def handle(bot: Bot, event: Event, state: T_State):
     if event.get_user_id() not in ['1364374624','2450509502'] and color == '#d9d919':
         await red_true.finish(Message('GameMaster岂是你能冒充的？'))
     send_msg = [{'type':'xml','data':{}}]
-    data = f'''<?xml version='1.0' encoding='UTF-8' standalone='yes' ?><msg serviceID="1" templateID="-1" action="plugin" a_actionData="" brief="[红色真实]{msg}" sourceMsgId="0" url="" flag="2" adverSign="3" multiMsgFlag="0"><item layout="9" bg="2" advertiser_id="0" aid="0"><picture cover="https://gchat.qpic.cn/gchatpic_new/1364374624/3808573830-2554273412-B8EDB73485FB0C183EBB095ECF4BAE54/0?term=3" w="0" h="0" /></item><item layout="6" advertiser_id="0" aid="0">
+    data = f'''<?xml version='1.0' encoding='UTF-8' standalone='yes' ?><msg serviceID="1" templateID="-1" action="plugin" a_actionData="" brief="[真实]{msg}" sourceMsgId="0" url="" flag="2" adverSign="3" multiMsgFlag="0"><item layout="9" bg="2" advertiser_id="0" aid="0"><picture cover="https://cdn.jsdelivr.net/gh/SlieFamily/TempImages@main//Auto/erika_logo.png" w="0" h="0" /></item><item layout="6" advertiser_id="0" aid="0">
 <summary size="100" color="{color}">{msg}</summary></item><source name="" icon="" action="" appid="-1" /></msg>'''
     send_msg[0]['data']['data'] = data
     await red_true.finish(Message(send_msg))

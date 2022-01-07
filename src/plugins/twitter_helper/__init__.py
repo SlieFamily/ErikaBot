@@ -14,7 +14,7 @@ from nonebot.adapters.cqhttp.message import MessageSegment
 from nonebot import require
 from nonebot.log import logger
 from selenium import webdriver
-from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
+from selenium.webdriver.chrome.options import Options
 from . import data_source
 from . import model
 from . import config
@@ -30,12 +30,13 @@ tweet_index = 0
 
 # 更新token操作函数
 def flush_token():
-    dcap = dict(DesiredCapabilities.PHANTOMJS)
-    dcap["phantomjs.page.settings.userAgent"] = ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.71 Safari/537.36 Edg/94.0.992.38') #设置user-agent请求头
-    dcap["phantomjs.page.settings.loadImages"] = False #禁止加载图片
-    driver = webdriver.PhantomJS(desired_capabilities=dcap)
-    driver.set_page_load_timeout(20)
-    driver.set_script_timeout(20)
+    option = Options()
+    option.add_argument('--headless') #指定参数选项，创建无界面浏览器
+    option.add_argument('--no-sandbox')
+    option.add_argument('--disable-dev-shm-usage')
+    driver = webdriver.Chrome(options=option)
+    # driver.set_page_load_timeout(20)
+    # driver.set_script_timeout(20)
     try:
         driver.get('https://mobile.twitter.com/Twitter')
     except:

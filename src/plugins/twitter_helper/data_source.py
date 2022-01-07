@@ -3,7 +3,7 @@ import random
 import hashlib
 import os
 from selenium import webdriver
-from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
+from selenium.webdriver.chrome.options import Options
 from nonebot.log import logger
 
 # 初始化
@@ -12,12 +12,11 @@ def init():
     if not os.path.exists('phantomjs.exe') and not os.path.exists('phantomjs'):
         logger.error('查找phantomjs失败，twitter插件加载失败！')
         raise Exception('查找phantomjs失败，twitter插件加载失败！')
-    dcap = dict(DesiredCapabilities.PHANTOMJS)
-    dcap["phantomjs.page.settings.userAgent"] = ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.71 Safari/537.36 Edg/94.0.992.38') #设置user-agent请求头
-    dcap["phantomjs.page.settings.loadImages"] = False #禁止加载图片
-    driver=webdriver.PhantomJS(desired_capabilities=dcap)
-    driver.set_page_load_timeout(20)
-    driver.set_script_timeout(20)
+    option = Options()
+    option.add_argument('--headless') #指定参数选项，创建无界面浏览器
+    option.add_argument('--no-sandbox')
+    option.add_argument('--disable-dev-shm-usage')
+    driver = webdriver.Chrome(options=option)
     try:
         driver.get('https://mobile.twitter.com/Twitter')
     except:
@@ -28,7 +27,7 @@ def init():
     driver.quit()
     if data == None:
         logger.error('token初始化失败,已使用默认token.可能存在致命问题,请检查代理!')
-        token='1479123623671521282'
+        token='1479467704943849475'
         return token
     token = data['value']
     return token
@@ -47,7 +46,7 @@ async def get_user_info(name:str,token:str):
     )
     async with httpx.AsyncClient() as client:
         try:
-            response =await client.get('https://mobile.twitter.com/i/api/graphql/B-dCk4ph5BZ0UReWK590tw/UserByScreenName', headers=headers, params=params)
+            response = await client.get('https://mobile.twitter.com/i/api/graphql/B-dCk4ph5BZ0UReWK590tw/UserByScreenName', headers=headers, params=params)
         except:
             logger.error('twitter.com访问超时，请检查代理/网络设置！')
             logger.error('获取用户信息失败')
