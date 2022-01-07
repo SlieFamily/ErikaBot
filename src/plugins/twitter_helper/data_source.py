@@ -9,9 +9,6 @@ from nonebot.log import logger
 # 初始化
 def init():
     token=''
-    if not os.path.exists('phantomjs.exe') and not os.path.exists('phantomjs'):
-        logger.error('查找phantomjs失败，twitter插件加载失败！')
-        raise Exception('查找phantomjs失败，twitter插件加载失败！')
     option = Options()
     option.add_argument('--headless') #指定参数选项，创建无界面浏览器
     option.add_argument('--no-sandbox')
