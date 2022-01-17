@@ -9,13 +9,19 @@ from nonebot.log import logger
 # 初始化
 def init():
     token=''
-    option = Options()
-    option.add_argument('--headless') #指定参数选项，创建无界面浏览器
-    option.add_argument('--no-sandbox')
-    option.add_argument('--disable-dev-shm-usage')
-    driver = webdriver.Chrome(options=option)
+    chrome_options = Options()
+    chrome_options.add_argument('--no-sandbox')#解决DevToolsActivePort文件不存在的报错
+    chrome_options.add_argument('window-size=1920x3000') #指定浏览器分辨率
+    chrome_options.add_argument('--disable-gpu') #谷歌文档提到需要加上这个属性来规避bug
+    chrome_options.add_argument('--hide-scrollbars') #隐藏滚动条, 应对一些特殊页面
+    chrome_options.add_argument('blink-settings=imagesEnabled=false') #不加载图片, 提升速度
+    chrome_options.add_argument('--headless') #浏览器不提供可视化页面. linux下如果系统不支持可视化不加这条会启动失败
+    driver = webdriver.Chrome(options=chrome_options)
+    driver.delete_all_cookies()
     try:
         driver.get('https://mobile.twitter.com/Twitter')
+        driver.execute_script("window.scrollTo(0,document.body.scrollHeight)")
+        time.sleep(10)
     except:
         logger.error('twitter.com请求超时！')
         driver.execute_script("window.stop()")
@@ -23,8 +29,7 @@ def init():
     driver.close()
     driver.quit()
     if data == None:
-        logger.error('token初始化失败,已使用默认token.可能存在致命问题,请检查代理!')
-        token='1479467704943849475'
+        raise Exception('token初始化失败，请检查网络设置或API地址是否正确！')
         return token
     token = data['value']
     return token
