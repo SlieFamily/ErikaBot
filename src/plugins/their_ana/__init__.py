@@ -84,6 +84,13 @@ async def handle(bot: Bot,event: Event, state: T_State):
     name = state["_matched_groups"]
     name = name[1] if name[1] else name[2]
     ana = state["_matched_groups"][3]
+    res = re.findall("([CQ:image,[\w\W]+,url=([a-zA-z]+://[^\s]*),[\w\W]+])",ana)
+    if not res:
+        res = re.findall("([CQ:image,[\w\W]+,url=([a-zA-z]+://[^\s]*)])",ana)
+    if not res:
+        # print("----没有图片|跳过-----")
+        pass
+    ana = ana.replace(res[0][0],f"[CQ:image,file={res[0][1]}]")
     by = event.get_user_id()
     if model.IsAdded(name,ana,by):
         await AddAna.finish(Message(random.choice(rsp)))
