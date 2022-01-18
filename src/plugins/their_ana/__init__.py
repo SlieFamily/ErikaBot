@@ -60,8 +60,6 @@ async def handle(bot: Bot, event: Event, state: T_State):
     group = event.get_session_id()
     if not group.isdigit():
         group = group.split('_')[1]
-    if name == "Erika":
-        await theirAna.finish()
     my_ana = model.GetAna(name,group) #获取随机语录
     state["auto_name"] = name
     AutoAna = Matcher.new(temp=True,priority=4,default_state=state)
@@ -69,7 +67,7 @@ async def handle(bot: Bot, event: Event, state: T_State):
     async def handle(bot: Bot, event: Event, state: T_State):
         try:
             ana = event.get_message()
-            if event.get_user_id() == "2450509502":
+            if event.get_user_id() == "2450509502" and name != "爆点":
                 if model.IsAdded(state["auto_name"],ana,"Auto"):
                     # await AutoAna.finish(Message(random.choice(rsp)))
                     pass
@@ -84,13 +82,9 @@ async def handle(bot: Bot,event: Event, state: T_State):
     name = state["_matched_groups"]
     name = name[1] if name[1] else name[2]
     ana = state["_matched_groups"][3]
-    res = re.findall("([CQ:image,[\w\W]+,url=([a-zA-z]+://[^\s]*),[\w\W]+])",ana)
-    if not res:
-        res = re.findall("([CQ:image,[\w\W]+,url=([a-zA-z]+://[^\s]*)])",ana)
-    if not res:
-        # print("----没有图片|跳过-----")
-        pass
-    ana = ana.replace(res[0][0],f"[CQ:image,file={res[0][1]}]")
+    res = re.findall(",url=([a-zA-z]+://[^\s]*)[,]*\]",ana)
+    if res:
+        ana = re.sub("\[CQ:image,[\w\W]+,url=[a-zA-z]+://[^\s]*[,]*[\w\W]*\]","[CQ:image,file="+res[0]+"]",ana)
     by = event.get_user_id()
     if model.IsAdded(name,ana,by):
         await AddAna.finish(Message(random.choice(rsp)))
@@ -184,7 +178,7 @@ async def got_name(bot: Bot,event: Event, state: T_State):
     name = re.findall("([\w\W]+)语录",state["name"])[0]
     flag = model.DropAna(name)
     if flag:
-        await DelAllAna.finish(Message(f"果然{name}，就是应该狼狈退场呢~"))
+        await DelAllAna.finish(Message(f"果然{name}语录，就是应该狼狈退场呢~"))
     await DelAllAna.finish(Message("嘁，让他侥幸存活了"))
 
 @FindAna.handle()
@@ -192,14 +186,12 @@ async def handle(bot: Bot, event: Event, state: T_State):
     ana = state["_matched_groups"][0]
     infs = model.Inf(ana)
     if infs:
-        await FindAna.send(Message("[CQ:image,file=91356418a33db6e251c28fae1911a1e9.image,url=https://c2cpicdw.qpic.cn/offpic_new/1364374624//1364374624-735706666-91356418A33DB6E251C28FAE1911A1E9/0?term=3]"))
         msg = f"发现{len(infs)}条相关语录\n"
         for i in range(len(infs)):
             msg += f"第{i+1}条：\n"
-            msg += f'From: {infs[i][0]}语录\n'
-            msg += 'By: '
-            msg += f'QQ:{infs[i][2]}\n'
-            msg += 'text:\n'+infs[i][1]
+            msg += f'来自: {infs[i][0]}语录\n'
+            msg += f'添加者QQ:{infs[i][2]}\n'
+            msg += '内容:\n'+infs[i][1]
             if i < len(infs)-1:
                 msg += '\n\n'
         await FindAna.send(Message(msg))

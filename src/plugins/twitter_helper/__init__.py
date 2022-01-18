@@ -30,27 +30,29 @@ tweet_index = 0
 
 # 更新token操作函数
 def flush_token():
-    option = Options()
-    option.add_argument('--headless') #指定参数选项，创建无界面浏览器
-    option.add_argument('--no-sandbox')
-    option.add_argument('--disable-dev-shm-usage')
-    driver = webdriver.Chrome(options=option)
-    # driver.set_page_load_timeout(20)
-    # driver.set_script_timeout(20)
+    chrome_options = Options()
+    chrome_options.add_argument('--no-sandbox')#解决DevToolsActivePort文件不存在的报错
+    chrome_options.add_argument('window-size=1920x3000') #指定浏览器分辨率
+    chrome_options.add_argument('--disable-gpu') #谷歌文档提到需要加上这个属性来规避bug
+    chrome_options.add_argument('--hide-scrollbars') #隐藏滚动条, 应对一些特殊页面
+    chrome_options.add_argument('blink-settings=imagesEnabled=false') #不加载图片, 提升速度
+    chrome_options.add_argument('--headless') #浏览器不提供可视化页面. linux下如果系统不支持可视化不加这条会启动失败
+    driver = webdriver.Chrome(options=chrome_options)
+    driver.delete_all_cookies()
     try:
         driver.get('https://mobile.twitter.com/Twitter')
+        driver.execute_script("window.scrollTo(0,document.body.scrollHeight)")
+        time.sleep(10)
     except:
         logger.error('twitter.com请求超时！')
         driver.execute_script("window.stop()")
-    data=driver.get_cookie('gt') 
+    data = driver.get_cookie('gt') 
     driver.close()
     driver.quit()
     if data == None:
-        logger.error('token更新失败，请检查网络/代理是否正常！')
+        logger.error('token初始化失败，请检查网络设置或API地址是否正确！')
         return
-    token = data['value']
-    logger.success('token更新成功！')
-    config.token=token
+    config.token = data['value']
 
 # 请求定时任务对象scheduler   
 scheduler = require('nonebot_plugin_apscheduler').scheduler
@@ -77,7 +79,7 @@ async def tweet():
         return #最新推文id和上次收录的一致(说明并未更新)
     logger.info('检测到 %s 的推特已更新'%(users[tweet_index][1]))
     model.UpdateTweet(users[tweet_index][0],tweet_id) #更新数据库的最新推文id
-    text,translate,media_list,url=data_source.get_tweet_details(data) #读取tweet详情
+    text,translate,media_list=data_source.get_tweet_details(data) #读取tweet详情
     translate=await data_source.baidu_translate(config.appid,translate,config.baidu_token) #翻译
     media = ''
     for item in media_list:
@@ -87,23 +89,23 @@ async def tweet():
         if card[1] == 1:#是群聊
             if card[2] == 1:#需要翻译
                 await schedBot.call_api('send_msg',**{
-                    'message':text+translate+media+url,
+                    'message':text+translate+media,
                         'group_id':card[0]
                 })
             else:#不需要翻译
                 await schedBot.call_api('send_msg',**{
-                        'message':text+media+url,
+                        'message':text+media,
                         'group_id':card[0]
                 })
         else:#私聊
             if card[2] == 1:#需要翻译
                 await schedBot.call_api('send_msg',**{
-                    'message':text+translate+media+url,
+                    'message':text+translate+media,
                     'user_id':card[0]
                 })
             else:
                 await schedBot.call_api('send_msg',**{
-                    'message':text+media+url,
+                    'message':text+media,
                     'user_id':card[0]
                 })
     tweet_index += 1
@@ -201,7 +203,7 @@ async def handle(bot: Bot, event: MessageEvent, state: T_State):
         else:
             card=model.GetCard(args,id,is_group)
             if len(card)==0:
-                msg = '{}({})不在当前群组/私聊关注列表！'.format(user[1],args)
+                msg = '{}({})不在当前关注列表！'.format(user[1],args)
             else:
                 model.TranslateON(args,id,is_group)
                 msg = '{}({})开启推文翻译！'.format(user[1],args)
@@ -236,7 +238,7 @@ async def handle(bot: Bot, event: MessageEvent, state: T_State):
 help = on_command('twitter帮助',priority=1)
 @help.handle()
 async def handle(bot: Bot, event: MessageEvent, state: T_State):
-    menu='绘梨花twitter小助手 目前支持的功能：\n(请将ID替换为需操作的推特ID，即@后面的名称)\n给爷关注 ID\n取关 ID\n关注列表\n开启翻译 ID\n关闭翻译 ID\n帮助\n'
+    menu='绘梨花twitter小助手 目前支持的功能：\n(请将ID替换为需操作的推特ID，即@后面的名称)\n给爷关注 ID\n取关 ID\n关注列表\n开启翻译 ID\n关闭翻译 ID\n'
     info='当前版本：v1.04\n作者：Slie\n原作：鹿乃ちゃんの猫'
     msg=menu+info
     Msg=Message(msg)
