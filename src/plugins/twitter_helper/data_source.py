@@ -93,7 +93,6 @@ def get_tweet_details(data):
     is_retweet = False
     text=''
     translate=''
-    url=''
     tweet_id=data['id_str']
     media=[]
     if quote.get('quoted_status_result') != None:
@@ -114,7 +113,6 @@ def get_tweet_details(data):
         text+='引用了 {} 的推文：\n'.format(quote_name)
         quote_text=quote['legacy']['full_text']
         text+=quote_text+'\n'
-        url='推文地址：\nhttps://twitter.com/'+screen_name+'/status/'+tweet_id+'\n'
         translate+=quote_text+'\n'
         media_data=quote['legacy']['entities']
         if media_data.get('media')!=None:
@@ -128,7 +126,6 @@ def get_tweet_details(data):
         text+='转发了 {} 的推文：\n'.format(retweet_name)
         retweet_text=retweet['legacy']['full_text']
         text+=retweet_text+'\n'
-        url='推文地址：\nhttps://twitter.com/'+screen_name+'/status/'+tweet_id+'\n'
         translate=retweet_text+'\n'
         media_data=retweet['legacy']['entities']
         if media_data.get('media')!=None:
@@ -138,13 +135,12 @@ def get_tweet_details(data):
     else:
         text='您关注的 {} 推特更新了：\n'.format(name)+data['full_text']+'\n'
         translate=data['full_text']+'\n'
-        url='推文地址：\nhttps://twitter.com/'+screen_name+'/status/'+tweet_id+'\n'
         media_data=data['entities']
         if media_data.get('media')!=None:
             media_data=media_data['media']
             for img in media_data:
                 media.append(img['media_url_https'])
-    return text,translate,media,url
+    return text,translate,media,is_retweet
     
 # 百度翻译
 async def baidu_translate(appid,query,token):

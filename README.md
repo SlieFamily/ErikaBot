@@ -1,8 +1,9 @@
 <!-- markdownlint-disable MD033 MD041-->
 
 <p align="center">
-  <img src="https://i.loli.net/2021/11/28/AsUmeoSyqzjNCZr.png" width="200" height="200"/>
+  <img src="https://cdn.jsdelivr.net/gh/SlieFamily/TempImages@main//Auto/erika_logo.png" width="200" height="200"/>
 </p>
+
 
 
 # 绘梨花(胶布)Bot|<sub>ErikaBot</sub>
@@ -137,11 +138,11 @@ unlock to [语录名称]语录
 
 ### 2.推特更新推送
 
-> 基于`phantomjs`进行爬虫实现
+> 基于`Selenium`自动化爬虫实现
 >
-> 原项目地址：[nonebot-twitter](https://github.com/kanomahoro/nonebot-twitter)
+> **参考**项目地址：[nonebot-twitter](https://github.com/kanomahoro/nonebot-twitter)
 
-本功能可实现对关注列表中的对象进行实时监控，一旦发送推文立刻到指定群里进行转发提醒（每个群可独立设置关注名单）
+本功能可实现对关注列表中的对象进行实时监控，一旦发送推文立刻到指定群里进行转发提醒（每个群可**独立设置**关注名单）
 
 > 只对`SUPERUSERS`和`ADMIN`的命令进行响应
 
