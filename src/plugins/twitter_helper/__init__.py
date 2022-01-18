@@ -79,7 +79,7 @@ async def tweet():
         return #最新推文id和上次收录的一致(说明并未更新)
     logger.info('检测到 %s 的推特已更新'%(users[tweet_index][1]))
     model.UpdateTweet(users[tweet_index][0],tweet_id) #更新数据库的最新推文id
-    text,translate,media_list=data_source.get_tweet_details(data) #读取tweet详情
+    text,translate,media_list,retweet_name=data_source.get_tweet_details(data) #读取tweet详情
     translate=await data_source.baidu_translate(config.appid,translate,config.baidu_token) #翻译
     media = ''
     for item in media_list:
@@ -87,27 +87,34 @@ async def tweet():
     cards = model.GetALLCard(users[tweet_index][0])
     for card in cards:
         if card[1] == 1:#是群聊
-            if card[2] == 1:#需要翻译
-                await schedBot.call_api('send_msg',**{
-                    'message':text+translate+media,
-                        'group_id':card[0]
-                })
-            else:#不需要翻译
-                await schedBot.call_api('send_msg',**{
-                        'message':text+media,
-                        'group_id':card[0]
-                })
-        else:#私聊
-            if card[2] == 1:#需要翻译
-                await schedBot.call_api('send_msg',**{
-                    'message':text+translate+media,
-                    'user_id':card[0]
-                })
+            if model.IsNotInCard(retweet_name,card[0]): #如果是转推，已经推送过则不再推送
+                if card[2] == 1:#需要翻译
+                    await schedBot.call_api('send_msg',**{
+                        'message':text+translate+media,
+                            'group_id':card[0]
+                    })
+                else:#不需要翻译
+                    await schedBot.call_api('send_msg',**{
+                            'message':text+media,
+                            'group_id':card[0]
+                    })
             else:
-                await schedBot.call_api('send_msg',**{
-                    'message':text+media,
-                    'user_id':card[0]
-                })
+                logger.info(f'QQ群({card[0]})重复推文过滤')
+        else:#私聊
+            if model.IsNotInCard(retweet_name,card[0]):
+                if card[2] == 1:#需要翻译
+                    await schedBot.call_api('send_msg',**{
+                        'message':text+translate+media,
+                        'user_id':card[0]
+                    })
+                else:
+                    await schedBot.call_api('send_msg',**{
+                        'message':text+media,
+                        'user_id':card[0]
+                    })
+            else:
+                logger.info(f'QQ群({card[0]})重复推文过滤')
+                
     tweet_index += 1
     
 # 关注推特命令(仅允许管理员操作)
@@ -152,13 +159,13 @@ async def handle(bot: Bot, event: MessageEvent, state: T_State):
     if args != '':
         user=model.GetUserInfo(args)
         if len(user) == 0:
-            msg = '吾主，{} 这样的棋子，好……好像不存在！\n[CQ:image,file=dc545a2c2a542af27b4f043e18911e2f.image,url=https://c2cpicdw.qpic.cn/offpic_new/1364374624//1364374624-3409814783-DC545A2C2A542AF27B4F043E18911E2F/0?term=3]'.format(args)
+            msg = '吾主，{} 这样的棋子，好……好像不存在！\n[CQ:image,file=https://c2cpicdw.qpic.cn/offpic_new/1364374624//1364374624-3409814783-DC545A2C2A542AF27B4F043E18911E2F/0?term=3]'.format(args)
         else:
             status = model.DeleteCard(args,id,is_group)
             if status != 0:
                 msg = '吾主，{}({})不在本群的关注列表'.format(user[1],args)
             else:
-                msg = '{}({})删除成功！\nhttps://cdn.jsdelivr.net/gh/SlieFamily/TempImages@main//Auto/erika_ok.jpeg'.format(user[1],args)
+                msg = '{}({})删除成功！\n[CQ:image,file=https://cdn.jsdelivr.net/gh/SlieFamily/TempImages@main//Auto/erika_ok.jpeg]'.format(user[1],args)
     Msg = Message(msg)
     await adduser.finish(Msg)
 

@@ -78,7 +78,7 @@ async def get_latest_tweet(user_id,token):
             logger.error('twitter.com访问超时，请检查代理/网络设置！')
             logger.error('获取推文失败！')
             return '',{}
-    logger.success('刷新推文成功！')
+    # logger.success('推文刷新成功！')
     dict_word = response.json()
     data = dict_word['data']['user']['result']['timeline']['timeline']['instructions'][0]['entries']
     return data[0]['sortIndex'],data
@@ -93,6 +93,7 @@ def get_tweet_details(data):
     is_retweet = False
     text=''
     translate=''
+    retweet_name=''
     tweet_id=data['id_str']
     media=[]
     if quote.get('quoted_status_result') != None:
@@ -140,7 +141,7 @@ def get_tweet_details(data):
             media_data=media_data['media']
             for img in media_data:
                 media.append(img['media_url_https'])
-    return text,translate,media,is_retweet
+    return text,translate,media,retweet_name
     
 # 百度翻译
 async def baidu_translate(appid,query,token):
