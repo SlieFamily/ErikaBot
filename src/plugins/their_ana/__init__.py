@@ -36,11 +36,11 @@ LockAna = on_command("lock",priority=1,permission=SUPERUSER)
 UnlockAna = on_command("unlock",priority=1,permission=SUPERUSER)
 DelAllAna = on_command("drop",priority=1,permission=SUPERUSER)
 FindAna = on_regex("find：([\s\S]+)",priority=1)
-
+SuperAna = on_regex("[\w\W]+",priority=5)
 
 AnaList = on_command("语录清单",priority=3)
 abuse = on_regex("[\s\S]*",rule=to_me(),priority=5)
-abuse2 = on_regex("[\w\W]+",priority=5)
+say = on_command("请说：",priority=3)
 
 @AnaList.handle()
 async def handle(bot: Bot, event: Event, state: T_State):
@@ -68,6 +68,9 @@ async def handle(bot: Bot, event: Event, state: T_State):
         try:
             ana = event.get_message()
             if event.get_user_id() == "2450509502" and name != "爆点":
+                res = re.findall(",url=([a-zA-z]+://[^\s]*)[,]*\]",ana)
+                if res:
+                    ana = re.sub("\[CQ:image,[\w\W]+,url=[a-zA-z]+://[^\s]*[,]*[\w\W]*\]","[CQ:image,file="+res[0]+"]",ana)
                 if model.IsAdded(state["auto_name"],ana,"Auto"):
                     # await AutoAna.finish(Message(random.choice(rsp)))
                     pass
@@ -104,7 +107,7 @@ async def handle(bot: Bot,event: Event, state: T_State):
     ana = state["_matched_groups"][1]
     del_msg = model.IsDel(name,ana)
     if del_msg:
-        await DelAna.finish(Message("[CQ:image,file=78b486ef9731fb9897d1c0dc1f45eb23.image,url=https://c2cpicdw.qpic.cn/offpic_new/1364374624//1364374624-2662510851-78B486EF9731FB9897D1C0DC1F45EB23/0?term=3]\n这种垃圾语录没有存在的必要！"))
+        await DelAna.finish(Message("这种垃圾语录没有存在的必要！"))
     await DelAna.finish(Message("失败了失败了失败了……"))
 
 @Delabuse.handle()
@@ -124,7 +127,7 @@ async def handle(bot: Bot,event: Event, state: T_State):
     print(name1,name2)
     flag = model.Merge(name1,name2)
     if flag:
-        await MergeAna.finish(Message("[CQ:image,file=78b486ef9731fb9897d1c0dc1f45eb23.image,url=https://c2cpicdw.qpic.cn/offpic_new/1364374624//1364374624-2662510851-78B486EF9731FB9897D1C0DC1F45EB23/0?term=3]\n语录合并成功，多余的棋子就应该抛弃，是吧嘉音！"))
+        await MergeAna.finish(Message("语录合并成功，多余的棋子就应该抛弃，是吧嘉音！"))
     await MergeAna.finish(Message("家具就是家具，无法成为人！"))
 
 @LockAna.handle()
@@ -186,7 +189,7 @@ async def handle(bot: Bot, event: Event, state: T_State):
     ana = state["_matched_groups"][0]
     infs = model.Inf(ana)
     if infs:
-        msg = f"发现{len(infs)}条相关语录\n"
+        msg = f"发现{len(infs)}条相关语录\n\n"
         for i in range(len(infs)):
             msg += f"第{i+1}条：\n"
             msg += f'来自: {infs[i][0]}语录\n'
@@ -208,8 +211,8 @@ async def handle(bot: Bot, event: GroupMessageEvent, state: T_State):
         await abuse.finish(Message(my_ana))
     await abuse.finish()
 
-@abuse2.handle()
-async def handle(bot: Bot, event: Event, state: T_State):
+@SuperAna.handle()
+async def handle(bot: Bot, event: GroupMessageEvent, state: T_State):
     name = re.findall(model.GetReRule(),str(event.get_message()))
     if name:
         name = name[0]+"<高级>"
@@ -218,5 +221,20 @@ async def handle(bot: Bot, event: Event, state: T_State):
         group = group.split('_')[1]
     ana = model.GetAna(name,group)
     if ana:
-        await abuse2.finish(Message(ana))
-    await abuse2.finish()
+        await SuperAna.finish(Message(ana))
+    await SuperAna.finish()
+
+@say.handle()
+async def handle(bot: Bot, event: GroupMessageEvent, state: T_State):
+    # msg_id = re.findall("Message ([0-9,-]+) ",event.get_log_string())[0]
+    # print(await bot.get_msg(message_id=msg_id))
+    text = str(event.get_message()).strip()
+    if text:
+        state["text"] = text
+
+@say.got("text", prompt="无论说什么我都会照做的~")
+async def got_name(bot: Bot,event: Event, state: T_State):
+    text = state["text"]
+    if text:
+        await say.finish(Message(f"[CQ:tts,text={text}]"))
+    await say.finish()

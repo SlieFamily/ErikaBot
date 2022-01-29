@@ -46,6 +46,7 @@ async def handle(bot: Bot, event: GroupIncreaseNoticeEvent, state: T_State):
 @poke.handle()
 async def handle(bot: Bot, event: PokeNotifyEvent, state: T_State):
     msg = event.get_log_string()
+    print(str(bot.self_id()))
     check = re.search("'target_id': 2523899329",msg)
     rsp = [f'[CQ:poke,type=1,id=-1,name="戳一戳",qq={event.get_user_id()}]','贱民也想戳一戳我？','再戳？']
     if check:
@@ -85,12 +86,6 @@ async def got_msg(bot: Bot,event: Event, state: T_State):
 
 @ping.handle()
 async def handle(bot: Bot, event: Event, state: T_State):
-#     msg = [{'type':'xml','data':{}}]
-#     data = '''<?xml version='1.0' encoding='UTF-8' standalone='yes' ?><msg serviceID="1" templateID="2" action="web" brief="[QQ频道]通行证" sourceMsgId="2" url="https://qun.qq.com/qqweb/qunpro/share?_wv=3&_wwv=128&inviteCode=BS7Tt&from=246610&biz=ka" flag="0" adverSign="0" multiMsgFlag="0"><item layout="5" advertiser_id="0" aid="0"><picture cover="https://gchat.qpic.cn/gchatpic_new/1269416542/729901771-3068461129-D39946C4CA84A50A7FE9E5B688AB52E8/0?term=2" w="0" h="0" /></item><item layout="6" bg="-1" advertiser_id="0" aid="0"><summary size="27" style="1">☞点击这里☜
-
-# 进入石头门QQ频道~ ٩(๑ᵒ̴̶̷͈᷄ᗨᵒ̴̶̷͈᷅)و</summary></item><source name="" icon="" action="" appid="-1" /></msg>'''
-#     msg[0]['data']['data'] = data
-
     msg = [{'type':'json','data':{}}]
     data = '''{"app":"com.tencent.qun.pro","desc":"","view":"contact","ver":"1.0.0.0","prompt":"邀请你加入QQ频道","appID":"","sourceName":"","actionData":"","actionData_A":"","sourceUrl":"","meta":{"contact":{"appId":"xxx","biz":"ka","desc":"The End of Messenger邀请你加入QQ频道“命运石之门 Steins;Gate”，进入可查看详情。","jumpUrl":"https:\/\/qun.qq.com\/qqweb\/qunpro\/share?_wv=3&_wwv=128&inviteCode=BS7Tt&from=246610&biz=ka","preview":"https:\/\/groupprohead-76292.picgzc.qpic.cn\/28505721637064109\/0?t=1637755895495","tag":"QQ频道","title":"邀请你加入QQ频道"}},"config":{"autosize":1,"ctime":1639742137,"token":"5adb393f140035b5413626b0604570ec"},"text":"","extra":""}
 '''
