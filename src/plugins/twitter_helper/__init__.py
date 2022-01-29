@@ -11,6 +11,7 @@ from nonebot.permission import SUPERUSER
 from nonebot.typing import T_State
 from nonebot.adapters.cqhttp import Bot,Message,GroupMessageEvent,bot,FriendRequestEvent,GroupRequestEvent,GroupDecreaseNoticeEvent
 from nonebot.adapters.cqhttp.message import MessageSegment
+from nonebot_plugin_guild_patch import GuildMessageEvent
 from nonebot import require
 from nonebot.log import logger
 from selenium import webdriver
@@ -114,7 +115,11 @@ async def tweet():
                     })
             else:
                 logger.info(f'QQ群({card[0]})重复推文过滤')
-
+    await schedBot.call_api("send_guild_channel_msg",**{
+        'guild_id':54880161636523193,
+        'channel_id':2841279,
+        'message':text+media
+        })
     tweet_index += 1
     
 # 关注推特命令(仅允许管理员操作)
@@ -241,7 +246,7 @@ async def handle(bot: Bot, event: MessageEvent, state: T_State):
     Msg=Message(msg)
     await offtranslate.finish(Msg)
 
-#启动动态推送
+#帮助
 help = on_command('twitter帮助',priority=1)
 @help.handle()
 async def handle(bot: Bot, event: MessageEvent, state: T_State):
