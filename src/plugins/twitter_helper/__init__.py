@@ -114,7 +114,7 @@ async def tweet():
                     })
             else:
                 logger.info(f'QQ群({card[0]})重复推文过滤')
-                
+
     tweet_index += 1
     
 # 关注推特命令(仅允许管理员操作)
@@ -159,13 +159,13 @@ async def handle(bot: Bot, event: MessageEvent, state: T_State):
     if args != '':
         user=model.GetUserInfo(args)
         if len(user) == 0:
-            msg = '吾主，{} 这样的棋子，好……好像不存在！\n[CQ:image,file=https://c2cpicdw.qpic.cn/offpic_new/1364374624//1364374624-3409814783-DC545A2C2A542AF27B4F043E18911E2F/0?term=3]'.format(args)
+            msg = '吾主，{} 这样的棋子，好……好像不存在！'.format(args)
         else:
             status = model.DeleteCard(args,id,is_group)
             if status != 0:
                 msg = '吾主，{}({})不在本群的关注列表'.format(user[1],args)
             else:
-                msg = '{}({})删除成功！\n[CQ:image,file=https://cdn.jsdelivr.net/gh/SlieFamily/TempImages@main//Auto/erika_ok.jpeg]'.format(user[1],args)
+                msg = '{}({})删除成功！\n[CQ:image,file=https://cdn.jsdelivr.net/gh/SlieFamily/TempImages@main/Auto/erika_ok.jpeg]'.format(user[1],args)
     Msg = Message(msg)
     await adduser.finish(Msg)
 
