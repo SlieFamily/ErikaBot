@@ -78,7 +78,7 @@ async def get_latest_tweet(user_id,token):
             logger.error('twitter.com访问超时，请检查代理/网络设置！')
             logger.error('获取推文失败！')
             return '',{}
-    # logger.success('推文刷新成功！')
+    logger.success('推文刷新成功！')
     dict_word = response.json()
     data = dict_word['data']['user']['result']['timeline']['timeline']['instructions'][0]['entries']
     return data[0]['sortIndex'],data

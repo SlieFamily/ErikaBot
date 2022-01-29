@@ -9,11 +9,22 @@ def Init():
     '''
     db = sqlite3.connect('anas.db')
     cur = db.cursor()
+    cur.execute('select count(*) from sqlite_master where type="table" and name = "UserList"')
+    if cur.fetchall()[0][0] == 0:
+        cur.execute('create table UserList (QQ TEXT,name TEXT,root INT,pick_cnt INT)') #用户清单
+        db.commit()
     cur.execute('select count(*) from sqlite_master where type="table" and name = "AnaList"')
     if cur.fetchall()[0][0] == 0:
-        cur.execute('create table AnaList (ana_name TEXT)')
-        cur.execute('create table ruleList (re_str TEXT)')
+        cur.execute('create table AnaList (ana_name TEXT)') #语录清单
         db.commit()
+    cur.execute('select count(*) from sqlite_master where type="table" and name = "ruleList"')
+    if cur.fetchall()[0][0] == 0:
+        cur.execute('create table ruleList (re_str TEXT)') #高级语录匹配
+        db.commit()
+    cur.execute('select count(*) from sqlite_master where type="table" and name = "PhotoList"')
+    if cur.fetchall()[0][0] == 0:
+        cur.execute('create table PhotoList (ph_name TEXT, url TEXT)') #图库映射表
+        db.commit()    
     cur.close()
     db.close()
 
@@ -175,7 +186,7 @@ def GetList():
     '''
     db = sqlite3.connect('anas.db')
     cur = db.cursor()
-    cur.execute('select * from AnaList')
+    cur.execute('select * from AnaList where ana_name not like "%<高级>%"')
     return [name[0] for name in cur.fetchall()]
 
 def SetUnlock(name:str,group:str)->bool:
