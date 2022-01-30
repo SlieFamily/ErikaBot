@@ -192,9 +192,9 @@ async def handle(bot: Bot, event: Event, state: T_State):
         msg = f"发现{len(infs)}条相关语录\n\n"
         for i in range(len(infs)):
             msg += f"第{i+1}条：\n"
-            msg += f'来自: {infs[i][0]}语录\n'
-            msg += f'添加者QQ:{infs[i][2]}\n'
-            msg += '内容:\n'+infs[i][1]
+            msg += f'来自：{infs[i][0]}语录\n'
+            msg += f'添加者(QQ)：{infs[i][2]}\n'
+            msg += '内容：\n'+infs[i][1]
             if i < len(infs)-1:
                 msg += '\n\n'
         await FindAna.send(Message(msg))
@@ -212,10 +212,14 @@ async def handle(bot: Bot, event: GroupMessageEvent, state: T_State):
     await abuse.finish()
 
 @SuperAna.handle()
-async def handle(bot: Bot, event: GroupMessageEvent, state: T_State):
+async def handle(bot: Bot, event: Event, state: T_State):
     name = re.findall(model.GetReRule(),str(event.get_message()))
-    if name:
-        name = name[0]+"<高级>"
+    if not name:
+        await SuperAna.finish()
+    name = name[0]+"<高级>"
+    isSelf = re.findall("\'user_id\': 144115218677564699",str(event.get_log_string()))
+    if isSelf:
+        await SuperAna.finish()
     group = event.get_session_id()
     if not group.isdigit():
         group = group.split('_')[1]
@@ -236,5 +240,5 @@ async def handle(bot: Bot, event: GroupMessageEvent, state: T_State):
 async def got_name(bot: Bot,event: Event, state: T_State):
     text = state["text"]
     if text:
-        await say.finish(Message(f"[CQ:tts,text={text}]"))
+        await say.finish(Message(f'[CQ:tts,text="{text}"]'))
     await say.finish()
