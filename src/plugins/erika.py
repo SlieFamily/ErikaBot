@@ -46,7 +46,6 @@ async def handle(bot: Bot, event: GroupIncreaseNoticeEvent, state: T_State):
 @poke.handle()
 async def handle(bot: Bot, event: PokeNotifyEvent, state: T_State):
     msg = event.get_log_string()
-    print(str(bot.self_id()))
     check = re.search("'target_id': 2523899329",msg)
     rsp = [f'[CQ:poke,type=1,id=-1,name="戳一戳",qq={event.get_user_id()}]','贱民也想戳一戳我？','再戳？']
     if check:
