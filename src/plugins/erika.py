@@ -153,11 +153,11 @@ async def handle(bot: Bot, event: GroupMessageEvent, state: T_State):
 async def got_name(bot: Bot,event: Event, state: T_State):
     text = state["text"]
     if text:
-    	if len(text) < 35:
-    		try:
-        		await say.finish(Message(f'[CQ:tts,text={text}]'))
-        	except:
-        		await say.finish(Message('说匿🐎'))
+        if len(text) < 35:
+            try:
+                await say.finish(Message(f'[CQ:tts,text={text}]'))
+            except:
+                await say.finish(Message('说匿🐎'))
         else:
-        	await say.finish(Message('说匿🐎，太长了！'))
+            await say.finish(Message('说匿🐎，太长了！'))
     await say.finish()
