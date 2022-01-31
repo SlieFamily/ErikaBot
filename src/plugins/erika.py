@@ -6,7 +6,7 @@ from nonebot import on_command,on_regex,on_notice
 from nonebot.rule import to_me
 from nonebot.typing import T_State
 from nonebot.adapters import Bot, Event
-from nonebot.adapters.cqhttp import Message,MessageSegment,GroupIncreaseNoticeEvent,PokeNotifyEvent
+from nonebot.adapters.cqhttp import Message,MessageSegment,GroupIncreaseNoticeEvent,PokeNotifyEvent,GroupMessageEvent
 from nonebot.permission import SUPERUSER
 from nonebot.log import logger
 from nonebot.message import run_postprocessor
@@ -19,6 +19,7 @@ welcom = on_notice(priority=4)
 selfIntro = on_command("来点自我介绍",priority=4)
 ping = on_command("QQ通行证",priority=5)
 poke = on_notice(priority=5)
+say = on_command("请说：",priority=3)
 helper = on_command("/help", aliases=set(['帮助']), priority=2)
 red_true = on_regex("((#[0-9,a-f,A-F]{6})真实|(虚妄)真实|(红色)真实|(蓝色)真实|(金色)真实)：([\w\W]+)",priority=3)
 
@@ -141,3 +142,22 @@ async def handle(bot: Bot, event: Event, state: T_State):
 <summary size="100" color="{color}">{msg}</summary></item><source name="" icon="" action="" appid="-1" /></msg>'''
     send_msg[0]['data']['data'] = data
     await red_true.finish(Message(send_msg))
+
+@say.handle()
+async def handle(bot: Bot, event: GroupMessageEvent, state: T_State):
+    text = str(event.get_message()).strip()
+    if text:
+        state["text"] = text
+
+@say.got("text", prompt="无论说什么我都会照做的~")
+async def got_name(bot: Bot,event: Event, state: T_State):
+    text = state["text"]
+    if text:
+    	if len(text) < 35:
+    		try:
+        		await say.finish(Message(f'[CQ:tts,text={text}]'))
+        	except:
+        		await say.finish(Message('说匿🐎'))
+        else:
+        	await say.finish(Message('说匿🐎，太长了！'))
+    await say.finish()

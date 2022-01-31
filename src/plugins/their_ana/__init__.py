@@ -40,7 +40,7 @@ SuperAna = on_regex("[\w\W]+",priority=5)
 
 AnaList = on_command("语录清单",priority=3)
 abuse = on_regex("[\s\S]*",rule=to_me(),priority=5)
-say = on_command("请说：",priority=3)
+
 
 @AnaList.handle()
 async def handle(bot: Bot, event: Event, state: T_State):
@@ -228,17 +228,3 @@ async def handle(bot: Bot, event: Event, state: T_State):
         await SuperAna.finish(Message(ana))
     await SuperAna.finish()
 
-@say.handle()
-async def handle(bot: Bot, event: GroupMessageEvent, state: T_State):
-    # msg_id = re.findall("Message ([0-9,-]+) ",event.get_log_string())[0]
-    # print(await bot.get_msg(message_id=msg_id))
-    text = str(event.get_message()).strip()
-    if text:
-        state["text"] = text
-
-@say.got("text", prompt="无论说什么我都会照做的~")
-async def got_name(bot: Bot,event: Event, state: T_State):
-    text = state["text"]
-    if text:
-        await say.finish(Message(f'[CQ:tts,text="{text}"]'))
-    await say.finish()
