@@ -38,7 +38,7 @@ DelAllAna = on_command("drop",priority=1,permission=SUPERUSER)
 FindAna = on_regex("find：([\s\S]+)",priority=1)
 SuperAna = on_regex("[\w\W]+",priority=5)
 AnaList = on_command("语录清单",priority=3)
-SuperAnaList = on_command("语录清单",priority=3)
+SuperAnaList = on_command("高级语录清单",priority=3)
 abuse = on_regex("[\s\S]*",rule=to_me(),priority=5)
 
 
