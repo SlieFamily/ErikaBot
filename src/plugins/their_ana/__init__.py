@@ -37,14 +37,25 @@ UnlockAna = on_command("unlock",priority=1,permission=SUPERUSER)
 DelAllAna = on_command("drop",priority=1,permission=SUPERUSER)
 FindAna = on_regex("find：([\s\S]+)",priority=1)
 SuperAna = on_regex("[\w\W]+",priority=5)
-
 AnaList = on_command("语录清单",priority=3)
+SuperAnaList = on_command("语录清单",priority=3)
 abuse = on_regex("[\s\S]*",rule=to_me(),priority=5)
 
 
 @AnaList.handle()
 async def handle(bot: Bot, event: Event, state: T_State):
     names = model.GetList()
+    msg = ''
+    for name in names:
+        msg += name+'语录\n'
+    if msg:
+        await AnaList.finish(Message(msg))
+    else:
+        await AnaList.finish()
+
+@SuperAnaList.handle()
+async def handle(bot: Bot, event: Event, state: T_State):
+    names = model.GetSuperList()
     msg = ''
     for name in names:
         msg += name+'\n'
@@ -62,20 +73,20 @@ async def handle(bot: Bot, event: Event, state: T_State):
         group = group.split('_')[1]
     my_ana = model.GetAna(name,group) #获取随机语录
     state["auto_name"] = name
-    AutoAna = Matcher.new(temp=True,priority=4,default_state=state)
-    @AutoAna.handle()
-    async def handle(bot: Bot, event: Event, state: T_State):
-        try:
-            ana = event.get_message()
-            if event.get_user_id() == "2450509502" and name != "爆点":
-                res = re.findall(",url=([a-zA-z]+://[^\s]*)[,]*\]",ana)
-                if res:
-                    ana = re.sub("\[CQ:image,[\w\W]+,url=[a-zA-z]+://[^\s]*[,]*[\w\W]*\]","[CQ:image,file="+res[0]+"]",ana)
-                if model.IsAdded(state["auto_name"],ana,"Auto"):
-                    # await AutoAna.finish(Message(random.choice(rsp)))
-                    pass
-        except:
-            pass
+    # AutoAna = Matcher.new(temp=True,priority=4,default_state=state)
+    # @AutoAna.handle()
+    # async def handle(bot: Bot, event: Event, state: T_State):
+    #     try:
+    #         ana = event.get_message()
+    #         if event.get_user_id() == "2450509502" and name != "爆点":
+    #             res = re.findall(",url=([a-zA-z]+://[^\s]*)[,]*\]",ana)
+    #             if res:
+    #                 ana = re.sub("\[CQ:image,[\w\W]+,url=[a-zA-z]+://[^\s]*[,]*[\w\W]*\]","[CQ:image,file="+res[0]+"]",ana)
+    #             if model.IsAdded(state["auto_name"],ana,"Auto"):
+    #                 # await AutoAna.finish(Message(random.choice(rsp)))
+    #                 pass
+    #     except:
+    #         pass
     if my_ana:
         await theirAna.finish(Message(my_ana))
     await theirAna.finish() 

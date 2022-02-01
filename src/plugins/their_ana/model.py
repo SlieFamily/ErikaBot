@@ -189,6 +189,15 @@ def GetList():
     cur.execute('select * from AnaList where ana_name not like "%<高级>%"')
     return [name[0] for name in cur.fetchall()]
 
+def GetSuperList():
+    '''
+    获取高级语录清单
+    '''
+    db = sqlite3.connect('anas.db')
+    cur = db.cursor()
+    cur.execute('select * from AnaList where ana_name like "%<高级>%"')
+    return [name[0] for name in cur.fetchall()]
+
 def SetUnlock(name:str,group:str)->bool:
     '''
     设置对群限制访问解除
