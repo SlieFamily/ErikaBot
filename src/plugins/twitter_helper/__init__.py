@@ -120,6 +120,11 @@ async def tweet():
         'channel_id':2841279,
         'message':text+media
         })
+    await schedBot.call_api("send_guild_channel_msg",**{
+        'guild_id':28505721637064109,
+        'channel_id':2871978,
+        'message':text+media
+        })
     tweet_index += 1
     
 # 关注推特命令(仅允许管理员操作)
