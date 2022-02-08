@@ -245,7 +245,7 @@ def Inf(ana:str):
     '''
     db = sqlite3.connect('anas.db')
     cur = db.cursor()
-    names = GetList()
+    names = GetList()+GetSuperList()
     inf_list = []
     print(ana)
     for name in names:
