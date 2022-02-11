@@ -208,6 +208,7 @@ async def handle(bot: Bot, event: Event, state: T_State):
             msg += '内容：\n'+infs[i][1]
             if i < len(infs)-1:
                 msg += '\n\n'
+        print(msg)
         await FindAna.send(Message(msg))
     await FindAna.finish()
 
