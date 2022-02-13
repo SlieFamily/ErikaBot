@@ -4,18 +4,11 @@
   <img src="https://cdn.jsdelivr.net/gh/SlieFamily/TempImages@main//Auto/erika_logo.png" width="200" height="200"/>
 </p>
 <div align="center">
-<<<<<<< HEAD
 
 # 绘梨花(胶布)Bot|<sub>ErikaBot</sub>
 <!-- markdownlint-disable-next-line MD036 -->
 _✨ 基于NoneBot2的绘梨花多功能Bot，自用 ✨_
 
-=======
-# 绘梨花(胶布)Bot|<sub>ErikaBot</sub>
-<!-- markdownlint-disable-next-line MD036 -->
-<br>
-_✨ 基于NoneBot2的绘梨花多功能 Bot ，自用 ✨_
->>>>>>> f1a59ea107fbd8902b279bec09647318205490a0
 </div>
 
 
