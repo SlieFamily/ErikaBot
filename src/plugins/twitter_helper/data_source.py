@@ -40,15 +40,16 @@ async def get_user_info(name:str,token:str):
     user_id=''
     headers = {
     'authorization': 'Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA',
-    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.71 Safari/537.36 Edg/94.0.992.38',
-    'x-guest-token': '%s'%token,
+	'content-type': 'application/json',
+    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/98.0.4758.80 Safari/537.36 Edg/98.0.1108.43',
+	'x-guest-token': '%s'%token,
     }
     params = (
-    ('variables','{"screen_name":"%s","withSafetyModeUserFields":true,"withSuperFollowsUserFields":false}'%(name)),
+    ('variables', '{"screen_name":"%s","withSafetyModeUserFields":true,"withSuperFollowsUserFields":true}'%(name)),
     )
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.get('https://mobile.twitter.com/i/api/graphql/B-dCk4ph5BZ0UReWK590tw/UserByScreenName', headers=headers, params=params)
+            response = await client.get('https://mobile.twitter.com/i/api/graphql/7mjxD3-C6BxitPMVQ6w0-Q/UserByScreenName', headers=headers, params=params)
         except:
             logger.error('twitter.com访问超时，请检查代理/网络设置！')
             logger.error('获取用户信息失败')
@@ -65,22 +66,23 @@ async def get_user_info(name:str,token:str):
 async def get_latest_tweet(user_id,token):
     headers = {
     'authorization': 'Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA',
-    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.71 Safari/537.36 Edg/94.0.992.38',
+    'content-type': 'application/json',
+    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/98.0.4758.80 Safari/537.36 Edg/98.0.1108.43',
     'x-guest-token': '%s'%token,
     }
     params = (
-    ('variables', '{"userId":"%s","count":2,"withTweetQuoteCount":true,"includePromotedContent":true,"withSuperFollowsUserFields":false,"withUserResults":true,"withBirdwatchPivots":false,"withReactionsMetadata":false,"withReactionsPerspective":false,"withSuperFollowsTweetFields":false,"withVoice":true}'%user_id),
+    	('variables', '{"userId":"%s","count":2,"includePromotedContent":true,"withQuickPromoteEligibilityTweetFields":true,"withSuperFollowsUserFields":true,"withDownvotePerspective":false,"withReactionsMetadata":false,"withReactionsPerspective":false,"withSuperFollowsTweetFields":true,"withVoice":true,"withV2Timeline":false,"__fs_dont_mention_me_view_api_enabled":false,"__fs_interactive_text_enabled":false,"__fs_responsive_web_uc_gql_enabled":false}'%(user_id)),
     )
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.get('https://mobile.twitter.com/i/api/graphql/OMMpfG9VCdQAK0KHaU1RSQ/UserTweets', headers=headers, params=params)
+            response = await client.get('https://mobile.twitter.com/i/api/graphql/tjfcKCXTbbiLmzwXteRe3Q/UserTweets', headers=headers, params=params)
         except:
             logger.error('twitter.com访问超时，请检查代理/网络设置！')
             logger.error('获取推文失败！')
             return '',{}
     logger.success('推文刷新成功！')
     dict_word = response.json()
-    data = dict_word['data']['user']['result']['timeline']['timeline']['instructions'][0]['entries']
+    data = dict_word['data']['user']['result']['timeline']['timeline']['instructions'][1]['entries']
     return data[0]['sortIndex'],data
 
 # 获取tweet详情    
