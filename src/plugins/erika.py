@@ -20,7 +20,7 @@ selfIntro = on_command("来点自我介绍",priority=4)
 ping = on_command("QQ通行证",priority=5)
 poke = on_notice(priority=5)
 say = on_command("请说：",priority=3)
-helper = on_command("/help", aliases=set(['帮助']), priority=2)
+helper = on_command("/help", priority=2)
 red_true = on_regex("((#[0-9,a-f,A-F]{6})真实|(虚妄)真实|(红色)真实|(蓝色)真实|(金色)真实)：([\w\W]+)",priority=3)
 
 @sarcasm.handle()
