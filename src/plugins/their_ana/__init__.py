@@ -28,9 +28,7 @@ plugin_config = Config(**global_config.dict())
 # 响应命令
 theirAna = on_regex("("+anas_rule+")", priority=3) 
 AddAna = on_regex("add ("+anas_rule+")：([\s\S]+)", priority=2)
-Addabuse = on_regex("add Erika嘴臭：([\s\S]+)", priority=2)
 DelAna = on_regex("del ([\w\W]+)语录：([\s\S]+)",priority=2)
-Delabuse = on_regex("del Erika嘴臭：([\s\S]+)", priority=2)
 MergeAna = on_regex("merge ("+anas_rule+")，("+anas_rule+")",priority=1,permission=SUPERUSER)
 LockAna = on_command("lock",priority=1,permission=SUPERUSER)
 UnlockAna = on_command("unlock",priority=1,permission=SUPERUSER)
@@ -44,10 +42,10 @@ abuse = on_regex("[\s\S]*",rule=to_me(),priority=5)
 
 @AnaList.handle()
 async def handle(bot: Bot, event: Event, state: T_State):
-    names = model.GetList()
+    names,cnts = model.GetList()
     msg = ''
-    for name in names:
-        msg += name+'语录\n'
+    for i in range(len(cnts)):
+        msg += names[i]+'语录 ('+ cnts[i] +')\n'
     if msg:
         await AnaList.finish(Message(msg))
     else:
@@ -55,10 +53,10 @@ async def handle(bot: Bot, event: Event, state: T_State):
 
 @SuperAnaList.handle()
 async def handle(bot: Bot, event: Event, state: T_State):
-    names = model.GetSuperList()
+    names,cnts = model.GetSuperList()
     msg = ''
-    for name in names:
-        msg += name+'\n'
+    for i in range(len(cnts)):
+        msg += names[i]+'语录 ('+ cnts[i] +')\n'
     if msg:
         await AnaList.finish(Message(msg))
     else:
@@ -104,14 +102,6 @@ async def handle(bot: Bot,event: Event, state: T_State):
         await AddAna.finish(Message(random.choice(rsp)))
     await AddAna.finish(Message("苦撸西，失败了失败了！"))
 
-@Addabuse.handle()
-async def handle(bot: Bot,event: Event, state: T_State):
-    ana = state["_matched_groups"][0]
-    by = event.get_user_id()
-    if model.IsAdded("Erika",ana,by):
-        await AddAna.finish(Message(random.choice(rsp)))
-    await AddAna.finish(Message("苦撸西，失败了失败了！"))
-
 @DelAna.handle()
 async def handle(bot: Bot,event: Event, state: T_State):
     name = state["_matched_groups"][0]
@@ -119,14 +109,6 @@ async def handle(bot: Bot,event: Event, state: T_State):
     del_msg = model.IsDel(name,ana)
     if del_msg:
         await DelAna.finish(Message("这种垃圾语录没有存在的必要！"))
-    await DelAna.finish(Message("失败了失败了失败了……"))
-
-@Delabuse.handle()
-async def handle(bot: Bot,event: Event, state: T_State):
-    ana = state["_matched_groups"][0]
-    del_msg = model.IsDel("Erika",ana)
-    if del_msg:
-        await DelAna.finish(Message("本来还能继续骂的"))
     await DelAna.finish(Message("失败了失败了失败了……"))
 
 @MergeAna.handle()
