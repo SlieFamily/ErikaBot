@@ -133,6 +133,8 @@ def IsDel(name:str,ana:str)->bool:
             db.commit()
             cur.execute(f'DROP TABLE "_{name}"')
             db.commit()
+        if name[-4:-1]+name[-1] == "<高级>":
+            CleanReRule(name[:-4])
     except:
         cur.close()
         db.close()
@@ -155,6 +157,8 @@ def Merge(name1:str,name2:str)->bool:
         cur.execute(f'insert into "_{name1}" values{ana}')
     cur.execute(f'delete from AnaList where ana_name="{name2}"')
     cur.execute(f'DROP TABLE "_{name2}"')
+    if name[-4:-1]+name[-1] == "<高级>":
+        CleanReRule(name[:-4])
     try:
         db.commit()
         return True
@@ -184,7 +188,12 @@ def GetList():
     db = sqlite3.connect('anas.db')
     cur = db.cursor()
     cur.execute('select * from AnaList where ana_name not like "%<高级>%"')
-    return [name[0] for name in cur.fetchall()]
+    names = [name[0] for name in cur.fetchall()]
+    cnts = []
+    for name in names:
+        cur.execute(f'select count(*) from "_{name}"')
+        cnts.append(cur.fetchall()[0][0])
+    return names,cnts
 
 def GetSuperList():
     '''
@@ -193,7 +202,12 @@ def GetSuperList():
     db = sqlite3.connect('anas.db')
     cur = db.cursor()
     cur.execute('select * from AnaList where ana_name like "%<高级>%"')
-    return [name[0] for name in cur.fetchall()]
+    names = [name[0] for name in cur.fetchall()]
+    cnts = []
+    for name in names:
+        cur.execute(f'select count(*) from "_{name}"')
+        cnts.append(cur.fetchall()[0][0])
+    return names,cnts
 
 def SetUnlock(name:str,group:str)->bool:
     '''
@@ -245,11 +259,11 @@ def CleanReRule(name:str)->bool:
     rule = GetReRule()
     if not rule:
         return False
-    try:
-        a,b = rule.split(f"|{name}")
-    except:
+    new_rule = ''
+    for k in rule.split(f"|{name}"):
+        new_rule += k
+    if not new_rule:
         return False
-    new_rule = a+b
     try:
         cur.execute(f'update ruleList set re_str="{new_rule}" where re_str="{rule}"')
         db.commit()
@@ -286,6 +300,8 @@ def DropAna(name:str)->bool:
         db.commit()
         cur.execute(f'DROP table "_{name}"')
         db.commit()
+        if name[-4:-1]+name[-1] == "<高级>":
+            CleanReRule(name[:-4])
         return True
     except:
         return False

@@ -45,7 +45,7 @@ async def handle(bot: Bot, event: Event, state: T_State):
     names,cnts = model.GetList()
     msg = ''
     for i in range(len(cnts)):
-        msg += names[i]+'语录 ('+ cnts[i] +')\n'
+        msg += names[i]+'语录 ('+ str(cnts[i]) +')\n'
     if msg:
         await AnaList.finish(Message(msg))
     else:
@@ -56,7 +56,7 @@ async def handle(bot: Bot, event: Event, state: T_State):
     names,cnts = model.GetSuperList()
     msg = ''
     for i in range(len(cnts)):
-        msg += names[i]+'语录 ('+ cnts[i] +')\n'
+        msg += names[i]+'语录 ('+ str(cnts[i]) +')\n'
     if msg:
         await AnaList.finish(Message(msg))
     else:
