@@ -2,6 +2,7 @@ import httpx
 import json
 import sqlite3
 import random
+import re
 
 def Init():
     '''
@@ -9,10 +10,6 @@ def Init():
     '''
     db = sqlite3.connect('anas.db')
     cur = db.cursor()
-    cur.execute('select count(*) from sqlite_master where type="table" and name = "UserList"')
-    if cur.fetchall()[0][0] == 0:
-        cur.execute('create table UserList (QQ TEXT,name TEXT,root INT,pick_cnt INT)') #用户清单
-        db.commit()
     cur.execute('select count(*) from sqlite_master where type="table" and name = "AnaList"')
     if cur.fetchall()[0][0] == 0:
         cur.execute('create table AnaList (ana_name TEXT)') #语录清单
@@ -224,7 +221,7 @@ def GetReRule():
 
 def UpdateReRule(name:str)->bool:
     '''
-    更新 超级语录的规则列表
+    更新 高级语录的规则列表
     '''
     db = sqlite3.connect('anas.db')
     cur = db.cursor()
@@ -232,6 +229,27 @@ def UpdateReRule(name:str)->bool:
     if not rule:
         return False
     new_rule = rule+'|'+name
+    try:
+        cur.execute(f'update ruleList set re_str="{new_rule}" where re_str="{rule}"')
+        db.commit()
+    except:
+        return False
+    return True
+
+def CleanReRule(name:str)->bool:
+    '''
+    在高级语录的规则列表中清除指定语录
+    '''
+    db = sqlite3.connect('anas.db')
+    cur = db.cursor()
+    rule = GetReRule()
+    if not rule:
+        return False
+    try:
+        a,b = rule.split(f"|{name}")
+    except:
+        return False
+    new_rule = a+b
     try:
         cur.execute(f'update ruleList set re_str="{new_rule}" where re_str="{rule}"')
         db.commit()
