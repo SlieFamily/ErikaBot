@@ -1,5 +1,6 @@
 import nonebot
 import re
+import math
 from .config import Config
 from nonebot import on_command,on_regex,on_notice
 from nonebot.rule import to_me
@@ -28,39 +29,57 @@ plugin_config = Config(**global_config.dict())
 # 响应命令
 theirAna = on_regex("("+anas_rule+")", priority=3) 
 AddAna = on_regex("add ("+anas_rule+")：([\s\S]+)", priority=2)
-DelAna = on_regex("del ([\w\W]+)语录：([\s\S]+)",priority=2)
+DelAna = on_regex("del ("+anas_rule+")：([\s\S]+)",priority=2)
 MergeAna = on_regex("merge ("+anas_rule+")，("+anas_rule+")",priority=1,permission=SUPERUSER)
 LockAna = on_command("lock",priority=1,permission=SUPERUSER)
 UnlockAna = on_command("unlock",priority=1,permission=SUPERUSER)
 DelAllAna = on_command("drop",priority=1,permission=SUPERUSER)
+Rename = on_regex("rename ("+anas_rule+") to ("+anas_rule+")",priority=1,permission=SUPERUSER)
 FindAna = on_regex("find：([\s\S]+)",priority=1)
 SuperAna = on_regex("[\w\W]+",priority=5)
 AnaList = on_command("语录清单",priority=3)
-SuperAnaList = on_command("高级语录清单",priority=3)
 abuse = on_regex("[\s\S]*",rule=to_me(),priority=5)
 
 
 @AnaList.handle()
 async def handle(bot: Bot, event: Event, state: T_State):
-    names,cnts = model.GetList()
+    names1,cnts1 = model.GetList()
+    names2,cnts2 = model.GetSuperList()
+    names = names1+names2; cnts = cnts1+cnts2
     msg = ''
-    for i in range(len(cnts)):
-        msg += names[i]+'语录 ('+ str(cnts[i]) +')\n'
-    if msg:
-        await AnaList.finish(Message(msg))
+    if len(names) <= 20:
+        for i in range(len(cnts)):
+            msg += names[i]+'语录 ('+ str(cnts[i]) +'条)\n'
+        if msg:
+            await AnaList.finish(Message(msg))
+        else:
+            await AnaList.finish()
     else:
-        await AnaList.finish()
+        page = str(event.get_message()).strip()
+        res = re.findall("-(\d+)",page)
+        if res:
+            state['page'] = int(res[0])-1
+        else:
+            await AnaList.send(Message(f"由于当前语录清单内容过长，胶布已将其分为{math.ceil(len(names)/20)}页。\n\n请发送：语录清单-x 来查看。\n[x为页码]"))
 
-@SuperAnaList.handle()
-async def handle(bot: Bot, event: Event, state: T_State):
-    names,cnts = model.GetSuperList()
-    msg = ''
-    for i in range(len(cnts)):
-        msg += names[i]+'语录 ('+ str(cnts[i]) +')\n'
+@AnaList.got("page")
+async def got_page(bot: Bot,event: Event, state: T_State):
+    names1,cnts1 = model.GetList()
+    names2,cnts2 = model.GetSuperList()
+    names = names1+names2; cnts = cnts1+cnts2
+    gp_names = []; gp_cnts = []; msg = '';page = state['page']
+
+    for i in range(0,len(names),20):
+        gp_names.append(names[i:i+20])
+        gp_cnts.append(cnts[i:i+20])
+
+    if page > math.ceil(len(names)/20):
+        await AnaList.finish(Message("告诉你有这么多页了？"))
+    for i in range(len(gp_names[page])):
+        msg += gp_names[page][i]+'语录 ('+ str(gp_cnts[page][i]) +'条)\n'
     if msg:
         await AnaList.finish(Message(msg))
-    else:
-        await AnaList.finish()
+    await AnaList.finish()
 
 @theirAna.handle()
 async def handle(bot: Bot, event: Event, state: T_State):
@@ -117,7 +136,6 @@ async def handle(bot: Bot,event: Event, state: T_State):
     name1 = name1[1] if name1[1] else name1[2]
     name2 = state["_matched_groups"]
     name2 = name2[4] if name2[4] else name2[5]
-    print(name1,name2)
     flag = model.Merge(name1,name2)
     if flag:
         await MergeAna.finish(Message("语录合并成功，多余的棋子就应该抛弃，是吧嘉音！"))
@@ -190,7 +208,6 @@ async def handle(bot: Bot, event: Event, state: T_State):
             msg += '内容：\n'+infs[i][1]
             if i < len(infs)-1:
                 msg += '\n\n'
-        print(msg)
         await FindAna.send(Message(msg))
     await FindAna.finish()
 
@@ -211,7 +228,7 @@ async def handle(bot: Bot, event: Event, state: T_State):
     if not name:
         await SuperAna.finish()
     name = name[0]+"<高级>"
-    isSelf = re.findall("\'user_id\': 144115218677564699",str(event.get_log_string()))
+    isSelf = re.findall("'nickname': '古都艾丽卡'",str(event.get_log_string()))
     if isSelf:
         await SuperAna.finish()
     group = event.get_session_id()
@@ -222,3 +239,12 @@ async def handle(bot: Bot, event: Event, state: T_State):
         await SuperAna.finish(Message(ana))
     await SuperAna.finish()
 
+@Rename.handle()
+async def handle(bot: Bot, event: Event, state: T_State):
+    name1 = state["_matched_groups"]
+    name1 = name1[1] if name1[1] else name1[2]
+    name2 = state["_matched_groups"]
+    name2 = name2[4] if name2[4] else name2[5]
+    if model.RenameAna(name1,name2):
+        await Rename.finish(Message("*进行Psync成功*"))
+    await Rename.finish(Message("还是好好呆着吧~"))
