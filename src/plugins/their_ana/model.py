@@ -157,8 +157,8 @@ def Merge(name1:str,name2:str)->bool:
         cur.execute(f'insert into "_{name1}" values{ana}')
     cur.execute(f'delete from AnaList where ana_name="{name2}"')
     cur.execute(f'DROP TABLE "_{name2}"')
-    if name[-4:-1]+name[-1] == "<高级>":
-        CleanReRule(name[:-4])
+    if name2[-4:-1]+name2[-1] == "<高级>":
+        CleanReRule(name2[:-4])
     try:
         db.commit()
         return True
@@ -277,9 +277,10 @@ def Inf(ana:str):
     '''
     db = sqlite3.connect('anas.db')
     cur = db.cursor()
-    names = GetList()+GetSuperList()
+    names1,cnts1 = GetList()
+    names2,cnts2 = GetSuperList()
+    names = names1+names2
     inf_list = []
-    print(ana)
     for name in names:
         cur.execute(f'''select * from "_{name}" where ana like "%{ana}%"''')
         inf = cur.fetchall()
@@ -302,6 +303,31 @@ def DropAna(name:str)->bool:
         db.commit()
         if name[-4:-1]+name[-1] == "<高级>":
             CleanReRule(name[:-4])
+        return True
+    except:
+        return False
+
+def RenameAna(name1:str,name2:str)->bool:
+    if not Isexisted(name1):
+        print(name1,"不存在")
+        return False
+    if Isexisted(name2):
+        print(name2,"存在")
+        return False
+    if name1 == name2:
+        print(name1,name2,"相同")
+        return False
+    if name1[-4:-1]+name1[-1] == "<高级>":
+        CleanReRule(name1[:-4])
+    if name2[-4:-1]+name2[-1] == "<高级>":
+        UpdateReRule(name2[:-4])
+    db = sqlite3.connect('anas.db')
+    cur = db.cursor()
+    try:
+        cur.execute(f'update AnaList set ana_name = "{name2}" where ana_name="{name1}"')
+        db.commit()
+        cur.execute(f'ALTER table "_{name1}" rename to "_{name2}"')
+        db.commit()
         return True
     except:
         return False
