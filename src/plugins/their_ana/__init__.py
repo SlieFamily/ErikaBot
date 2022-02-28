@@ -46,10 +46,10 @@ async def handle(bot: Bot, event: Event, state: T_State):
     names1,cnts1 = model.GetList()
     names2,cnts2 = model.GetSuperList()
     names = names1+names2; cnts = cnts1+cnts2
-    msg = ''
+    msg = '\n'
     if len(names) <= 20:
         for i in range(len(cnts)):
-            msg += names[i]+'语录 ('+ str(cnts[i]) +'条)\n'
+            msg += names[i]+'语录 \t('+ str(cnts[i]) +'条)\n'
         if msg:
             await AnaList.finish(Message(msg))
         else:
@@ -67,7 +67,7 @@ async def got_page(bot: Bot,event: Event, state: T_State):
     names1,cnts1 = model.GetList()
     names2,cnts2 = model.GetSuperList()
     names = names1+names2; cnts = cnts1+cnts2
-    gp_names = []; gp_cnts = []; msg = '';page = state['page']
+    gp_names = []; gp_cnts = []; msg = '\n';page = state['page']
 
     for i in range(0,len(names),20):
         gp_names.append(names[i:i+20])
@@ -76,7 +76,7 @@ async def got_page(bot: Bot,event: Event, state: T_State):
     if page > math.ceil(len(names)/20):
         await AnaList.finish(Message("告诉你有这么多页了？"))
     for i in range(len(gp_names[page])):
-        msg += gp_names[page][i]+'语录 ('+ str(gp_cnts[page][i]) +'条)\n'
+        msg += gp_names[page][i]+'语录 \t('+ str(gp_cnts[page][i]) +'条)\n'
     if msg:
         await AnaList.finish(Message(msg))
     await AnaList.finish()
@@ -123,8 +123,9 @@ async def handle(bot: Bot,event: Event, state: T_State):
 
 @DelAna.handle()
 async def handle(bot: Bot,event: Event, state: T_State):
-    name = state["_matched_groups"][0]
-    ana = state["_matched_groups"][1]
+    name = state["_matched_groups"]
+    name = name[1] if name[1] else name[2]
+    ana = state["_matched_groups"][3]
     del_msg = model.IsDel(name,ana)
     if del_msg:
         await DelAna.finish(Message("这种垃圾语录没有存在的必要！"))
