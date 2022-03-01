@@ -15,11 +15,6 @@ global time_task
 
 time_task = []
 
-# time_task.append(('科A复兴祭CP29',datetime.date(2021,12,11)))
-# time_task.append(('大年夜/春假',datetime.date(2022,1,31)))
-# time_task.append(('亲戚催婚',datetime.date(2022,2,1)))
-time_task.append(('CH&CC合集发售',datetime.date(2022,2,24)))
-time_task.append(('老头环',datetime.date(2022,2,25)))
 time_task.append(('FF14 6.0',datetime.date(2022,3,16)))
 time_task.append(('SG0 BD发售',datetime.date(2022,3,30)))
 time_task.append(('2022高考',datetime.date(2022,6,7)))
