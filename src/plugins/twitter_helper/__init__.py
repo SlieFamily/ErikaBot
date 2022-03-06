@@ -129,15 +129,15 @@ async def tweet():
     tweet_index += 1
     
 # 关注推特命令(仅允许管理员操作)
-adduser = on_command('给爷关注',rule=to_me(),priority=1,permission=GROUP_ADMIN|GROUP_OWNER|PRIVATE_FRIEND|SUPERUSER,)
+adduser = on_command('给爷关注',priority=1,permission=GROUP_ADMIN|GROUP_OWNER|PRIVATE_FRIEND|SUPERUSER,)
 @adduser.handle()
-async def handle(bot: Bot, event: MessageEvent, state: T_State = State()):
+async def handle(bot: Bot, event: MessageEvent, state: T_State = State(), args: Message = CommandArg()):
     is_group = int(isinstance(event,GroupMessageEvent))
     id = event.get_session_id()
     if not id.isdigit():
         id = id.split('_')[1]
-    args = str(event.get_message()).strip()
     msg = '命令格式Error哒，吾主！'
+    print("---",args)
     if args!='':
         user = model.GetUserInfo(args)# 如果该用户已存在数据库中，直接拉取
         if len(user) != 0:
@@ -158,15 +158,15 @@ async def handle(bot: Bot, event: MessageEvent, state: T_State = State()):
     await adduser.finish(Msg)
 
 #取关用户(仅允许管理员操作)    
-removeuser = on_command('取关',rule=to_me(),priority=1,permission=GROUP_ADMIN|GROUP_OWNER|PRIVATE_FRIEND|SUPERUSER,)
+removeuser = on_command('取关',priority=1,permission=GROUP_ADMIN|GROUP_OWNER|PRIVATE_FRIEND|SUPERUSER,)
 @removeuser.handle()
-async def handle(bot: Bot, event: MessageEvent, state: T_State = State()):
+async def handle(bot: Bot, event: MessageEvent, state: T_State = State(), args: Message = CommandArg()):
     is_group = int(isinstance(event,GroupMessageEvent))
     id = event.get_session_id() #注意
     if not id.isdigit():
         id = id.split('_')[1]
-    args = str(event.get_message()).strip()
     msg = '命令格式Error哒，吾主'
+    print("---",str(args))
     if args != '':
         user=model.GetUserInfo(args)
         if len(user) == 0:
