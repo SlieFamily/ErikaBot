@@ -49,7 +49,7 @@ async def AutoCallDays():
 	if not msg:
 		return
 	msg += '\n本消息自动发送，当前时间为：8:00 AM'
-	(schedBot,) = nonebot.get_bots().values()
+	schedBot = nonebot.get_bot()
 	for group in groups:
 		await schedBot.call_api('send_msg',**{
                     			'message':msg,

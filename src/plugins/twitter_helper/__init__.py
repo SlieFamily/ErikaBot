@@ -71,7 +71,7 @@ async def flush():
 async def tweet():
     if model.Empty():
         return #数据库关注列表为空，无事发生
-    schedBot = nonebot.get_bots()
+    schedBot = nonebot.get_bot()
     global tweet_index
     users = model.GetUserList()
     tweet_index %= len(users) #注意
