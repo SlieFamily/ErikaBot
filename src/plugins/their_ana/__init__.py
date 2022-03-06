@@ -156,7 +156,7 @@ async def handle(bot: Bot,event: Event, state: T_State = State(), name: Message 
 @LockAna.got("name", prompt="该限制什么语录呢？")
 async def got_name(bot: Bot,event: Event, state: T_State = State(), name: Message = Arg("name"), group: str = Arg("group")):
     print("---",name,group)
-    name = re.findall("to ([\w\W]+)语录",name)[0]
+    name = re.findall("to ([\w\W]+)语录",str(name))[0]
     flag = model.SetLock(name,group)
     if flag:
         await LockAna.finish(Message(f"本群已限制访问{name}语录~"))
@@ -174,7 +174,7 @@ async def handle(bot: Bot,event: Event, state: T_State = State() ,name: Message 
 @UnlockAna.got("name", prompt="该解除什么语录呢？")
 async def got_name(bot: Bot,event: Event, state: T_State = State(), name: Message = Arg("name"), group: str = Arg("group")):
     print("---",name,group)
-    name = re.findall("to ([\w\W]+)语录",name)[0]
+    name = re.findall("to ([\w\W]+)语录",str(name))[0]
     flag = model.SetUnlock(name,group)
     if flag:
         await UnlockAna.finish(Message(f"本群访问{name}语录限制解除~"))
@@ -183,11 +183,12 @@ async def got_name(bot: Bot,event: Event, state: T_State = State(), name: Messag
 @DelAllAna.handle()
 async def handle(bot: Bot,event: Event, state: T_State = State(), name: Message = CommandArg()):
     if name:
-        state["name"] = str(name)
+        state["name"] = name
 
 @DelAllAna.got("name", prompt="啊~全都要摧毁！全都要！")
-async def got_name(bot: Bot,event: Event, state: T_State = State(), name: str = Arg("name")):
-    name = re.findall("([\w\W]+)语录",name)[0]
+async def got_name(bot: Bot,event: Event, state: T_State = State(), name: Message = Arg("name")):
+    print(name)
+    name = re.findall("([\w\W]+)语录",str(name))[0]
     flag = model.DropAna(name)
     if flag:
         await DelAllAna.finish(Message(f"果然{name}语录，就是应该狼狈退场呢~"))

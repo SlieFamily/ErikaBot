@@ -13,6 +13,10 @@ nb-cli = "^0.1.0"
 [tool.poetry.dev-dependencies]
 nonebot-test = "^0.1.0"
 
+
+[tool.nonebot]
+plugins = ["nonebot_plugin_guild_patch"]
+plugin_dirs = ["src/plugins"]
 [nonebot.plugins]
 plugin_dirs = ["src/plugins"]
 
