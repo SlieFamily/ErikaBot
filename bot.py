@@ -3,8 +3,8 @@
 
 # 导入nonebot
 import nonebot
-# 导入cqhttp协议配置类
-from nonebot.adapters.cqhttp import Bot as CQHTTPBot
+# 导入cqhttp协议配置类/最新版已经转化为onebot11
+from nonebot.adapters.onebot.v11 import Adapter as ONEBOT_V11Adapter
 
 # Custom your logger
 # 
@@ -22,7 +22,8 @@ app = nonebot.get_asgi()
 driver = nonebot.get_driver()
 
 # 使用协议
-driver.register_adapter("cqhttp", CQHTTPBot)
+# driver.register_adapter("cqhttp", CQHTTPBot)
+driver.register_adapter(ONEBOT_V11Adapter)
 
 # 加载插件
 # nonebot.load_plugin("nonebot_plugin_songpicker2")

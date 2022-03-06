@@ -6,9 +6,11 @@ from nonebot import on_command,on_regex,on_notice
 from nonebot.rule import to_me
 from nonebot.typing import T_State
 from nonebot.adapters import Bot,Event
-from nonebot.adapters.cqhttp import Message,MessageSegment,GroupIncreaseNoticeEvent,GroupMessageEvent
+from nonebot.params import State, ArgPlainText, Arg, CommandArg
+from nonebot.adapters.onebot.v11 import Message,MessageSegment,GroupIncreaseNoticeEvent,PokeNotifyEvent
+from nonebot.adapters.onebot.v11 import Message,MessageSegment,GroupIncreaseNoticeEvent,GroupMessageEvent
 from nonebot.permission import SUPERUSER
-from nonebot.adapters.cqhttp.permission import GROUP_ADMIN, GROUP_OWNER, PRIVATE_FRIEND
+from nonebot.adapters.onebot.v11.permission import GROUP_ADMIN, GROUP_OWNER, PRIVATE_FRIEND
 from nonebot.log import logger
 from nonebot.message import run_postprocessor
 from nonebot.matcher import Matcher
@@ -42,7 +44,7 @@ abuse = on_regex("[\s\S]*",rule=to_me(),priority=5)
 
 
 @AnaList.handle()
-async def handle(bot: Bot, event: Event, state: T_State):
+async def handle(bot: Bot, event: Event, state: T_State = State()):
     names1,cnts1 = model.GetList()
     names2,cnts2 = model.GetSuperList()
     names = names1+names2; cnts = cnts1+cnts2
@@ -63,7 +65,7 @@ async def handle(bot: Bot, event: Event, state: T_State):
             await AnaList.send(Message(f"由于当前语录清单内容过长，胶布已将其分为{math.ceil(len(names)/20)}页。\n\n请发送：语录清单-x 来查看。\n[x为页码]"))
 
 @AnaList.got("page")
-async def got_page(bot: Bot,event: Event, state: T_State):
+async def got_page(bot: Bot,event: Event, state: T_State = State()):
     names1,cnts1 = model.GetList()
     names2,cnts2 = model.GetSuperList()
     names = names1+names2; cnts = cnts1+cnts2
@@ -82,7 +84,7 @@ async def got_page(bot: Bot,event: Event, state: T_State):
     await AnaList.finish()
 
 @theirAna.handle()
-async def handle(bot: Bot, event: Event, state: T_State):
+async def handle(bot: Bot, event: Event, state: T_State = State()):
     name = state["_matched_groups"]
     name = name[1] if name[1] else name[2]
     group = event.get_session_id()
@@ -109,7 +111,7 @@ async def handle(bot: Bot, event: Event, state: T_State):
     await theirAna.finish() 
 
 @AddAna.handle()
-async def handle(bot: Bot,event: Event, state: T_State):
+async def handle(bot: Bot,event: Event, state: T_State = State()):
     name = state["_matched_groups"]
     name = name[1] if name[1] else name[2]
     ana = state["_matched_groups"][3]
@@ -122,7 +124,7 @@ async def handle(bot: Bot,event: Event, state: T_State):
     await AddAna.finish(Message("苦撸西，失败了失败了！"))
 
 @DelAna.handle()
-async def handle(bot: Bot,event: Event, state: T_State):
+async def handle(bot: Bot,event: Event, state: T_State = State()):
     name = state["_matched_groups"]
     name = name[1] if name[1] else name[2]
     ana = state["_matched_groups"][3]
@@ -132,7 +134,7 @@ async def handle(bot: Bot,event: Event, state: T_State):
     await DelAna.finish(Message("失败了失败了失败了……"))
 
 @MergeAna.handle()
-async def handle(bot: Bot,event: Event, state: T_State):
+async def handle(bot: Bot,event: Event, state: T_State = State()):
     name1 = state["_matched_groups"]
     name1 = name1[1] if name1[1] else name1[2]
     name2 = state["_matched_groups"]
@@ -143,61 +145,58 @@ async def handle(bot: Bot,event: Event, state: T_State):
     await MergeAna.finish(Message("家具就是家具，无法成为人！"))
 
 @LockAna.handle()
-async def handle(bot: Bot,event: Event, state: T_State):
+async def handle(bot: Bot,event: Event, state: T_State = State(), name: Message = CommandArg()):
     group = event.get_session_id()
     if not group.isdigit():
         group = group.split('_')[1]
     state["group"] = group
-    name = str(event.get_message()).strip()
     if name:
         state["name"] = name
 
 @LockAna.got("name", prompt="该限制什么语录呢？")
-async def got_name(bot: Bot,event: Event, state: T_State):
-    name = re.findall("to ([\w\W]+)语录",state["name"])[0]
-    flag = model.SetLock(name,state["group"])
+async def got_name(bot: Bot,event: Event, state: T_State = State(), name: Message = Arg("name"), group: str = ArgPlainText("group")):
+    name = re.findall("to ([\w\W]+)语录",name)[0]
+    flag = model.SetLock(name,group)
     if flag:
         await LockAna.finish(Message(f"本群已限制访问{name}语录~"))
     await LockAna.finish(Message("禁止访问失败~"))
 
 @UnlockAna.handle()
-async def handle(bot: Bot,event: Event, state: T_State):
+async def handle(bot: Bot,event: Event, state: T_State = State() ,name: Message = CommandArg()):
     group = event.get_session_id()
     if not group.isdigit():
         group = group.split('_')[1]
     state["group"] = group
-    name = str(event.get_message()).strip()
     if name:
         state["name"] = name
 
 @UnlockAna.got("name", prompt="该解除什么语录呢？")
-async def got_name(bot: Bot,event: Event, state: T_State):
-    name = re.findall("to ([\w\W]+)语录",state["name"])[0]
-    flag = model.SetUnlock(name,state["group"])
+async def got_name(bot: Bot,event: Event, state: T_State = State(), name: Message = Arg("name"), group: str = ArgPlainText("group")):
+    name = re.findall("to ([\w\W]+)语录",name)[0]
+    flag = model.SetUnlock(name,group)
     if flag:
         await UnlockAna.finish(Message(f"本群访问{name}语录限制解除~"))
     await UnlockAna.finish(Message("解除访问失败~"))
 
 @DelAllAna.handle()
-async def handle(bot: Bot,event: Event, state: T_State):
+async def handle(bot: Bot,event: Event, state: T_State = State(), name: Message = CommandArg()):
     group = event.get_session_id()
     if not group.isdigit():
         group = group.split('_')[1]
     state["group"] = group
-    name = str(event.get_message()).strip()
     if name:
         state["name"] = name
 
 @DelAllAna.got("name", prompt="啊~全都要摧毁！全都要！")
-async def got_name(bot: Bot,event: Event, state: T_State):
-    name = re.findall("([\w\W]+)语录",state["name"])[0]
+async def got_name(bot: Bot,event: Event, state: T_State = State(), name: Message = Arg("name"), group: str = ArgPlainText("group")):
+    name = re.findall("([\w\W]+)语录",name)[0]
     flag = model.DropAna(name)
     if flag:
         await DelAllAna.finish(Message(f"果然{name}语录，就是应该狼狈退场呢~"))
     await DelAllAna.finish(Message("嘁，让他侥幸存活了"))
 
 @FindAna.handle()
-async def handle(bot: Bot, event: Event, state: T_State):
+async def handle(bot: Bot, event: Event, state: T_State = State()):
     ana = state["_matched_groups"][0]
     infs = model.Inf(ana)
     if infs:
@@ -213,7 +212,7 @@ async def handle(bot: Bot, event: Event, state: T_State):
     await FindAna.finish()
 
 @abuse.handle()
-async def handle(bot: Bot, event: GroupMessageEvent, state: T_State):
+async def handle(bot: Bot, event: GroupMessageEvent, state: T_State = State()):
     name = "Erika"
     group = event.get_session_id()
     if not group.isdigit():
@@ -224,7 +223,7 @@ async def handle(bot: Bot, event: GroupMessageEvent, state: T_State):
     await abuse.finish()
 
 @SuperAna.handle()
-async def handle(bot: Bot, event: Event, state: T_State):
+async def handle(bot: Bot, event: Event, state: T_State = State()):
     name = re.findall(model.GetReRule(),str(event.get_message()))
     if not name:
         await SuperAna.finish()
@@ -241,7 +240,7 @@ async def handle(bot: Bot, event: Event, state: T_State):
     await SuperAna.finish()
 
 @Rename.handle()
-async def handle(bot: Bot, event: Event, state: T_State):
+async def handle(bot: Bot, event: Event, state: T_State = State()):
     name1 = state["_matched_groups"]
     name1 = name1[1] if name1[1] else name1[2]
     name2 = state["_matched_groups"]

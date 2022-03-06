@@ -4,7 +4,8 @@ from nonebot import on_command,on_regex,on_notice
 from nonebot.rule import to_me
 from nonebot.typing import T_State
 from nonebot.adapters import Bot, Event
-from nonebot.adapters.cqhttp import Message,MessageSegment,GroupIncreaseNoticeEvent
+from nonebot.params import State, ArgPlainText, Arg, CommandArg
+from nonebot.adapters.onebot.v11 import Message,MessageSegment,GroupIncreaseNoticeEvent
 from nonebot.permission import SUPERUSER
 from nonebot.log import logger
 from nonebot import require
@@ -67,13 +68,12 @@ async def CallUmiko():
 
 AddDays = on_command("add 倒计时：",priority=2)
 @AddDays.handle()
-async def handle(bot: Bot, event: Event, state: T_State):
-	args = str(event.get_message()).strip()
+async def handle(bot: Bot, event: Event, state: T_State = State(), args: Message = CommandArg()):
 	if args:
 		state["args"] = args
 @AddDays.got("args",prompt="？")
-async def got(bot: Bot, event: Event, state: T_State):
-	args = re.findall("([\u4E00-\u9FA5A-Za-z0-9_]+)，(\d{4}-\d{1,2}-\d{1,2})",state["args"])[0]
+async def got(bot: Bot, event: Event, state: T_State = State(), args: Message = Arg("args")):
+	args = re.findall("([\u4E00-\u9FA5A-Za-z0-9_]+)，(\d{4}-\d{1,2}-\d{1,2})",args)[0]
 	name = args[0]
 	date = args[1]
 	# print(args)

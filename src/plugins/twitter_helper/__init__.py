@@ -4,13 +4,14 @@ from nonebot import rule
 from nonebot import on_request
 from nonebot import on_notice
 from nonebot.adapters import Bot,Event
-from nonebot.adapters.cqhttp.event import MessageEvent, Status
+from nonebot.params import State, ArgPlainText, Arg, CommandArg
+from nonebot.adapters.onebot.v11 import Message,MessageSegment,GroupIncreaseNoticeEvent,PokeNotifyEvent
+from nonebot.adapters.onebot.v11.event import MessageEvent, Status
 from nonebot.rule import to_me
-from nonebot.adapters.cqhttp.permission import GROUP_ADMIN, GROUP_OWNER, PRIVATE_FRIEND
+from nonebot.adapters.onebot.v11.permission import GROUP_ADMIN, GROUP_OWNER, PRIVATE_FRIEND
 from nonebot.permission import SUPERUSER
 from nonebot.typing import T_State
-from nonebot.adapters.cqhttp import Bot,Message,GroupMessageEvent,bot,FriendRequestEvent,GroupRequestEvent,GroupDecreaseNoticeEvent
-from nonebot.adapters.cqhttp.message import MessageSegment
+from nonebot.adapters.onebot.v11 import Bot,Message,GroupMessageEvent,bot,FriendRequestEvent,GroupRequestEvent,GroupDecreaseNoticeEvent
 from nonebot_plugin_guild_patch import GuildMessageEvent
 from nonebot import require
 from nonebot.log import logger
@@ -70,7 +71,7 @@ async def flush():
 async def tweet():
     if model.Empty():
         return #数据库关注列表为空，无事发生
-    (schedBot,) = nonebot.get_bots().values()
+    schedBot = nonebot.get_bots()
     global tweet_index
     users = model.GetUserList()
     tweet_index %= len(users) #注意
@@ -130,7 +131,7 @@ async def tweet():
 # 关注推特命令(仅允许管理员操作)
 adduser = on_command('给爷关注',rule=to_me(),priority=1,permission=GROUP_ADMIN|GROUP_OWNER|PRIVATE_FRIEND|SUPERUSER,)
 @adduser.handle()
-async def handle(bot: Bot, event: MessageEvent, state: T_State):
+async def handle(bot: Bot, event: MessageEvent, state: T_State = State()):
     is_group = int(isinstance(event,GroupMessageEvent))
     id = event.get_session_id()
     if not id.isdigit():
@@ -159,7 +160,7 @@ async def handle(bot: Bot, event: MessageEvent, state: T_State):
 #取关用户(仅允许管理员操作)    
 removeuser = on_command('取关',rule=to_me(),priority=1,permission=GROUP_ADMIN|GROUP_OWNER|PRIVATE_FRIEND|SUPERUSER,)
 @removeuser.handle()
-async def handle(bot: Bot, event: MessageEvent, state: T_State):
+async def handle(bot: Bot, event: MessageEvent, state: T_State = State()):
     is_group = int(isinstance(event,GroupMessageEvent))
     id = event.get_session_id() #注意
     if not id.isdigit():
@@ -182,7 +183,7 @@ async def handle(bot: Bot, event: MessageEvent, state: T_State):
 #显示本群中的关注列表(仅允许管理员操作)  
 alllist = on_command('关注列表',priority=1,permission=GROUP_ADMIN|GROUP_OWNER|PRIVATE_FRIEND|SUPERUSER,)
 @alllist.handle()
-async def handle(bot: Bot, event: MessageEvent, state: T_State):
+async def handle(bot: Bot, event: MessageEvent, state: T_State = State()):
     is_group = int(isinstance(event,GroupMessageEvent))
     id = event.get_session_id()
     if not id.isdigit():
@@ -206,7 +207,7 @@ async def handle(bot: Bot, event: MessageEvent, state: T_State):
 #开启推文翻译(仅允许管理员操作)
 ontranslate = on_command('开启翻译',rule=to_me(),priority=1,permission=GROUP_ADMIN|GROUP_OWNER|PRIVATE_FRIEND|SUPERUSER,)
 @ontranslate.handle()
-async def handle(bot: Bot, event: MessageEvent, state: T_State):
+async def handle(bot: Bot, event: MessageEvent, state: T_State = State()):
     is_group=int(isinstance(event,GroupMessageEvent))
     id=event.get_session_id()
     if not id.isdigit():
@@ -230,7 +231,7 @@ async def handle(bot: Bot, event: MessageEvent, state: T_State):
 #关闭推文翻译(仅允许管理员操作)
 offtranslate = on_command('关闭翻译',rule=to_me(),priority=1,permission=GROUP_ADMIN|GROUP_OWNER|PRIVATE_FRIEND|SUPERUSER,)
 @offtranslate.handle()
-async def handle(bot: Bot, event: MessageEvent, state: T_State):
+async def handle(bot: Bot, event: MessageEvent, state: T_State = State()):
     is_group=int(isinstance(event,GroupMessageEvent))
     id=event.get_session_id()
     if not id.isdigit():
@@ -254,7 +255,7 @@ async def handle(bot: Bot, event: MessageEvent, state: T_State):
 #帮助
 help = on_command('twitter帮助',priority=1)
 @help.handle()
-async def handle(bot: Bot, event: MessageEvent, state: T_State):
+async def handle(bot: Bot, event: MessageEvent, state: T_State = State()):
     menu='绘梨花twitter小助手 目前支持的功能：\n(请将ID替换为需操作的推特ID，即@后面的名称)\n给爷关注 ID\n取关 ID\n关注列表\n开启翻译 ID\n关闭翻译 ID\n'
     info='当前版本：v1.04\n作者：Slie\n原作：鹿乃ちゃんの猫'
     msg=menu+info
@@ -264,7 +265,7 @@ async def handle(bot: Bot, event: MessageEvent, state: T_State):
 # 退群后自动删除该群关注信息
 group_decrease = on_notice(priority=5)
 @group_decrease.handle()
-async def _(bot: Bot, event: GroupDecreaseNoticeEvent, state: T_State):
+async def _(bot: Bot, event: GroupDecreaseNoticeEvent, state: T_State = State()):
     id=event.get_session_id()
     if not id.isdigit():
         id=id.split('_')[1]
