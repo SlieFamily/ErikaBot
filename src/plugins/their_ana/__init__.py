@@ -151,11 +151,11 @@ async def handle(bot: Bot,event: Event, state: T_State = State(), name: Message 
         group = group.split('_')[1]
     state["group"] = group
     if name:
-        state["name"] = str(name)
+        state["name"] = name
 
 @LockAna.got("name", prompt="该限制什么语录呢？")
-async def got_name(bot: Bot,event: Event, state: T_State = State(), name: str = Arg("name"), group: str = Arg("group")):
-    print(name)
+async def got_name(bot: Bot,event: Event, state: T_State = State(), name: Message = Arg("name"), group: str = Arg("group")):
+    print("---",name,group)
     name = re.findall("to ([\w\W]+)语录",name)[0]
     flag = model.SetLock(name,group)
     if flag:
@@ -169,10 +169,11 @@ async def handle(bot: Bot,event: Event, state: T_State = State() ,name: Message 
         group = group.split('_')[1]
     state["group"] = group
     if name:
-        state["name"] = str(name)
+        state["name"] = name
 
 @UnlockAna.got("name", prompt="该解除什么语录呢？")
-async def got_name(bot: Bot,event: Event, state: T_State = State(), name: str = Arg("name"), group: str = Arg("group")):
+async def got_name(bot: Bot,event: Event, state: T_State = State(), name: Message = Arg("name"), group: str = Arg("group")):
+    print("---",name,group)
     name = re.findall("to ([\w\W]+)语录",name)[0]
     flag = model.SetUnlock(name,group)
     if flag:
