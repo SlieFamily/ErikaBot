@@ -4,7 +4,8 @@ import os
 from nonebot import on_command
 from nonebot.typing import T_State
 from nonebot.adapters import Bot, Event
-from nonebot.adapters.cqhttp import Message,MessageSegment,GroupIncreaseNoticeEvent,PokeNotifyEvent
+from nonebot.params import State, ArgPlainText, Arg, CommandArg
+from nonebot.adapters.onebot.v11 import Message,MessageSegment,GroupIncreaseNoticeEvent,PokeNotifyEvent
 from nonebot.permission import SUPERUSER
 from .oreo import CreateImg
 
@@ -12,14 +13,13 @@ from .oreo import CreateImg
 Oreo = on_command("order",aliases=set(['来一份', '点一个', '来点']),priority=3)
 
 @Oreo.handle()
-async def handle(bot: Bot, event: Event, state: T_State):
-	msg = str(event.get_message()).strip()
+async def handle(bot: Bot, event: Event, state: T_State = State(), msg: Message = CommandArg()):
 	if msg:
 		state["msg"] = msg
 
 @Oreo.got("msg", prompt="？")
-async def got_msg(bot: Bot,event: Event, state: T_State):
-	msg = re.findall("[奥,利]+",str(state["msg"]))[0]
+async def got_msg(bot: Bot,event: Event, state: T_State = State(), msg: Message = Arg("msg")):
+	msg = re.findall("[奥,利]+",str(msg))[0]
 	if msg:
 		path = CreateImg(msg)
 		if path:
