@@ -30,8 +30,8 @@ async def handle(bot: Bot, event: Event, state: T_State = State()):
         await setu.send(MessageSegment.image(imgurl))
 
 @setu.got("str")
-async def got(bot: Bot, event: Event, state: T_State= State()):
-	if state['str'] == "不够色":
+async def got(bot: Bot, event: Event, state: T_State= State(), msg: str = ArgPlainText("str")):
+	if msg == "不够色":
 		await setu.finish(Message("要不你来发？贱坯\n"+random.choice(imgs)))
 	await setu.finish()
 

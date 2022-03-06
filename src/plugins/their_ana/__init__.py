@@ -44,7 +44,7 @@ abuse = on_regex("[\s\S]*",rule=to_me(),priority=5)
 
 
 @AnaList.handle()
-async def handle(bot: Bot, event: Event, state: T_State = State()):
+async def handle(bot: Bot, event: Event, state: T_State = State(), page: Message = CommandArg()):
     names1,cnts1 = model.GetList()
     names2,cnts2 = model.GetSuperList()
     names = names1+names2; cnts = cnts1+cnts2
@@ -57,7 +57,7 @@ async def handle(bot: Bot, event: Event, state: T_State = State()):
         else:
             await AnaList.finish()
     else:
-        page = str(event.get_message()).strip()
+        page = str(page)
         res = re.findall("-(\d+)",page)
         if res:
             state['page'] = int(res[0])-1
@@ -65,7 +65,7 @@ async def handle(bot: Bot, event: Event, state: T_State = State()):
             await AnaList.send(Message(f"由于当前语录清单内容过长，胶布已将其分为{math.ceil(len(names)/20)}页。\n\n请发送：语录清单-x 来查看。\n[x为页码]"))
 
 @AnaList.got("page")
-async def got_page(bot: Bot,event: Event, state: T_State = State()):
+async def got_page(bot: Bot,event: Event, state: T_State = State(), page: int = Arg("page")):
     names1,cnts1 = model.GetList()
     names2,cnts2 = model.GetSuperList()
     names = names1+names2; cnts = cnts1+cnts2
@@ -91,7 +91,7 @@ async def handle(bot: Bot, event: Event, state: T_State = State()):
     if not group.isdigit():
         group = group.split('_')[1]
     my_ana = model.GetAna(name,group) #获取随机语录
-    state["auto_name"] = name
+    # state["auto_name"] = name
     # AutoAna = Matcher.new(temp=True,priority=4,default_state=state)
     # @AutoAna.handle()
     # async def handle(bot: Bot, event: Event, state: T_State):
@@ -151,10 +151,11 @@ async def handle(bot: Bot,event: Event, state: T_State = State(), name: Message 
         group = group.split('_')[1]
     state["group"] = group
     if name:
-        state["name"] = name
+        state["name"] = str(name)
 
 @LockAna.got("name", prompt="该限制什么语录呢？")
-async def got_name(bot: Bot,event: Event, state: T_State = State(), name: Message = Arg("name"), group: str = ArgPlainText("group")):
+async def got_name(bot: Bot,event: Event, state: T_State = State(), name: str = Arg("name"), group: str = Arg("group")):
+    print(name)
     name = re.findall("to ([\w\W]+)语录",name)[0]
     flag = model.SetLock(name,group)
     if flag:
@@ -168,10 +169,10 @@ async def handle(bot: Bot,event: Event, state: T_State = State() ,name: Message 
         group = group.split('_')[1]
     state["group"] = group
     if name:
-        state["name"] = name
+        state["name"] = str(name)
 
 @UnlockAna.got("name", prompt="该解除什么语录呢？")
-async def got_name(bot: Bot,event: Event, state: T_State = State(), name: Message = Arg("name"), group: str = ArgPlainText("group")):
+async def got_name(bot: Bot,event: Event, state: T_State = State(), name: str = Arg("name"), group: str = Arg("group")):
     name = re.findall("to ([\w\W]+)语录",name)[0]
     flag = model.SetUnlock(name,group)
     if flag:
@@ -180,15 +181,11 @@ async def got_name(bot: Bot,event: Event, state: T_State = State(), name: Messag
 
 @DelAllAna.handle()
 async def handle(bot: Bot,event: Event, state: T_State = State(), name: Message = CommandArg()):
-    group = event.get_session_id()
-    if not group.isdigit():
-        group = group.split('_')[1]
-    state["group"] = group
     if name:
-        state["name"] = name
+        state["name"] = str(name)
 
 @DelAllAna.got("name", prompt="啊~全都要摧毁！全都要！")
-async def got_name(bot: Bot,event: Event, state: T_State = State(), name: Message = Arg("name"), group: str = ArgPlainText("group")):
+async def got_name(bot: Bot,event: Event, state: T_State = State(), name: str = Arg("name")):
     name = re.findall("([\w\W]+)语录",name)[0]
     flag = model.DropAna(name)
     if flag:
