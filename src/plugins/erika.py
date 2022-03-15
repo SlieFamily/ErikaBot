@@ -31,7 +31,7 @@ async def handle(bot: Bot, event: Event, state: T_State = State(), msg:Message =
 
 @sarcasm.got("msg", prompt="？")
 async def got_msg(bot: Bot,event: Event, msg:Message = Arg("msg")):
-    msg = re.findall("([\s\S]+)，([\s\S]+)",str(state["msg"]))[0]
+    msg = re.findall("([\s\S]+)，([\s\S]+)",str(msg))[0]
     # print(msg)
     send_msg = f"仅凭借{msg[0]}，古户绘梨花便能{msg[1]}到这种程度，如何呀，诸位~"
     await sarcasm.finish(Message(send_msg))
