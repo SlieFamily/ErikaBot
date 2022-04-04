@@ -15,9 +15,7 @@ import datetime
 global time_task
 
 time_task = []
-
-time_task.append(('FF14 6.0',datetime.date(2022,3,16)))
-time_task.append(('SG0 BD发售',datetime.date(2022,3,30)))
+time_task.append(('《匿名代码》发售',datetime.date(2022,7,28)))
 time_task.append(('2022高考',datetime.date(2022,6,7)))
 time_task.append(('2022上英语六级',datetime.date(2022,6,12)))
 time_task.append(('2023考研',datetime.date(2022,12,24)))
@@ -29,7 +27,6 @@ async def CallDays()->str:
 	today = datetime.date.today()
 	for time in time_task:
 		msg += '距离['+time[0]+']还有['+str((time[1]-today).days)+'天]\n'
-	msg += '距离 [匿名代码]第一次宣布发售 过去了['+str((today-datetime.date(2016,9,1)).days)+'天]\n'
 	msg += '-----------'
 	return msg
 
