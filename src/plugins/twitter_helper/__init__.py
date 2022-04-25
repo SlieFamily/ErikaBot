@@ -60,7 +60,7 @@ def flush_token():
 scheduler = require('nonebot_plugin_apscheduler').scheduler
 
 # 创建定时任务：刷新token/每5min更新一次 
-@scheduler.scheduled_job('interval',minutes=5,id='flush_token',timezone='Asia/Shanghai')
+@scheduler.scheduled_job('interval',minutes=1,id='flush_token',timezone='Asia/Shanghai')
 async def flush():
     flush = threading.Thread(target=flush_token)
     flush.start()
