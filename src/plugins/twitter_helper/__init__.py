@@ -41,6 +41,7 @@ def flush_token():
     chrome_options.add_argument('--headless') #浏览器不提供可视化页面. linux下如果系统不支持可视化不加这条会启动失败
     driver = webdriver.Chrome(options=chrome_options)
     driver.delete_all_cookies()
+    logger.info('----开始刷新token----')
     try:
         driver.get('https://mobile.twitter.com/Twitter')
         driver.execute_script("window.scrollTo(0,document.body.scrollHeight)")
@@ -54,17 +55,18 @@ def flush_token():
     if data == None:
         logger.error('token初始化失败，请检查网络设置或API地址是否正确！')
         return
+    logger.info('----刷新token成功----')
     config.token = data['value']
 
 # 请求定时任务对象scheduler   
 scheduler = require('nonebot_plugin_apscheduler').scheduler
 
 # 创建定时任务：刷新token/每5min更新一次 
-@scheduler.scheduled_job('interval',minutes=1,id='flush_token',timezone='Asia/Shanghai')
+@scheduler.scheduled_job('interval',minutes=5,id='flush_token',timezone='Asia/Shanghai')
 async def flush():
     flush = threading.Thread(target=flush_token)
     flush.start()
-    logger.info('开始刷新token')
+    
 
 # 创建定时任务：推送tweet/每15s查询一次
 @scheduler.scheduled_job('interval',seconds=15,id='tweet')
@@ -75,6 +77,7 @@ async def tweet():
     global tweet_index
     users = model.GetUserList()
     tweet_index %= len(users) #注意
+    logger.info(f'查询{users[tweet_index][1]}的推特中……')
     tweet_id,data = await data_source.get_latest_tweet(users[tweet_index][2],config.token)
     if tweet_id == '' or users[tweet_index][3] == tweet_id:
         tweet_index += 1
