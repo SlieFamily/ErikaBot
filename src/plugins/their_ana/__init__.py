@@ -42,8 +42,8 @@ FindAna = on_regex("find：([\s\S]+)",priority=1)
 SuperAna = on_regex("[\w\W]+",priority=5)
 AnaList = on_command("语录清单",priority=3)
 abuse = on_regex("[\s\S]*",rule=to_me(),priority=5)
-abuse_chg = on_regex("([\w\W]+)嘲讽状态",priority=1,permission=SUPERUSER)
-
+abuse_on = on_command("开启嘲讽状态",priority=1,permission=SUPERUSER)
+abuse_off = on_command("关闭嘲讽状态",priority=1,permission=SUPERUSER)
 
 @AnaList.handle()
 async def handle(bot: Bot, event: Event, state: T_State = State(), page: Message = CommandArg()):
@@ -223,20 +223,29 @@ async def handle(bot: Bot, event: GroupMessageEvent, state: T_State = State()):
         await abuse.finish(Message(my_ana))
     await abuse.finish()
 
-@abuse_chg.handle()
+@abuse_off.handle()
 async def handle(bot: Bot, event: Event, state: T_State = State()):
-    status = state["_matched_groups"][0]
     group = event.get_session_id()
+    if not group.isdigit():
+        group = group.split('_')[1]
     name = "Erika"
-    # print(status)
-    if status == '关闭':
-        flag = model.SetLock(name,group)
-        if flag:
-            await abuse_chg.finish(Message(f'嘲讽状态[{status}]，试试@我一下吧~'))
-    elif status == '开启':
-        flag = model.SetUnlock(name,group)
-        if flag:
-            await abuse_chg.finish(Message(f'嘲讽状态[{status}]，试试@我一下吧~'))
+    flag = model.SetLock(name,group)
+    if flag:
+        await abuse_off.finish(Message('已关闭嘲讽状态，你再怎么@我，你看我理你吗？'))
+    else:
+        await abuse_off.finish()
+
+@abuse_on.handle()
+async def handle(bot: Bot, event: Event, state: T_State = State()):
+    group = event.get_session_id()
+    if not group.isdigit():
+        group = group.split('_')[1]
+    name = "Erika"
+    flag = model.SetUnlock(name,group)
+    if flag:
+        await abuse_on.finish(Message('已成功开启嘲讽状态，试试@我一下吧~'))
+    else:
+        await abuse_on.finish()
 
 @SuperAna.handle()
 async def handle(bot: Bot, event: Event, state: T_State = State()):
