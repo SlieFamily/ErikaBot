@@ -24,6 +24,7 @@ rsp = ["用最爱的筷子品味最恶俗的语录才称得上健全~","知性�
 
 anas_rule = "([\w\W]{1,6}<高级>)语录|([\w\W]{1,6})语录"
 
+
 # 默认配置
 global_config = nonebot.get_driver().config
 plugin_config = Config(**global_config.dict())
@@ -41,6 +42,7 @@ FindAna = on_regex("find：([\s\S]+)",priority=1)
 SuperAna = on_regex("[\w\W]+",priority=5)
 AnaList = on_command("语录清单",priority=3)
 abuse = on_regex("[\s\S]*",rule=to_me(),priority=5)
+abuse_chg = on_regex("([\w\W]+)嘲讽状态",priority=1,permission=SUPERUSER)
 
 
 @AnaList.handle()
@@ -220,6 +222,21 @@ async def handle(bot: Bot, event: GroupMessageEvent, state: T_State = State()):
     if my_ana:
         await abuse.finish(Message(my_ana))
     await abuse.finish()
+
+@abuse_chg.handle()
+async def handle(bot: Bot, event: Event, state: T_State = State()):
+    status = state["_matched_groups"][0]
+    group = event.get_session_id()
+    name = "Erika"
+    # print(status)
+    if status == '关闭':
+        flag = model.SetLock(name,group)
+        if flag:
+            await abuse_chg.finish(Message(f'嘲讽状态[{state}]，试试@我一下吧~'))
+    elif status == '开启':
+        flag = model.SetUnlock(name,group)
+        if flag:
+            await abuse_chg.finish(Message(f'嘲讽状态[{state}]，试试@我一下吧~'))
 
 @SuperAna.handle()
 async def handle(bot: Bot, event: Event, state: T_State = State()):

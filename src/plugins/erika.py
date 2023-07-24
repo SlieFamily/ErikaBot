@@ -15,13 +15,10 @@ from nonebot.matcher import Matcher
 import random
 
 sarcasm = on_command("嘲讽",priority=3)
-welcom = on_notice(priority=4)
-# suanle = on_regex("算了",priority=5)
+#welcom = on_notice(priority=4)
 selfIntro = on_command("来点自我介绍",priority=4)
-ping = on_command("QQ通行证",priority=5)
 poke = on_notice(priority=5)
 say = on_command("请说：",priority=3)
-helper = on_command("/help", priority=2)
 red_true = on_regex("((#[0-9,a-f,A-F]{6})真实|(虚妄)真实|(红色)真实|(蓝色)真实|(金色)真实)：([\w\W]+)",priority=3)
 
 @sarcasm.handle()
@@ -36,19 +33,19 @@ async def got_msg(bot: Bot,event: Event, msg:Message = Arg("msg")):
     send_msg = f"仅凭借{msg[0]}，古户绘梨花便能{msg[1]}到这种程度，如何呀，诸位~"
     await sarcasm.finish(Message(send_msg))
 
-@welcom.handle()
-async def handle(bot: Bot, event: GroupIncreaseNoticeEvent, state: T_State = State()):
-    user = event.get_user_id()
-    at_ = "[CQ:at,qq={}]".format(user)
-    # msg = at_+'新人，想学爆点吗？'
-    msg = at_+'欢迎新人进裙~'
-    await welcom.finish(Message(msg))
+# @welcom.handle()
+# async def handle(bot: Bot, event: GroupIncreaseNoticeEvent, state: T_State = State()):
+#     user = event.get_user_id()
+#     at_ = "[CQ:at,qq={}]".format(user)
+#     # msg = at_+'新人，想学爆点吗？'
+#     msg = at_+'欢迎新人进裙~'
+#     await welcom.finish(Message(msg))
 
 @poke.handle()
 async def handle(bot: Bot, event: PokeNotifyEvent, state: T_State = State()):
     msg = event.get_log_string()
     check = re.search("'target_id': 2523899329",msg)
-    rsp = [f'[CQ:poke,type=1,id=-1,name="戳一戳",qq={event.get_user_id()}]','贱民也想戳一戳我？','再戳？']
+    rsp = [f'[CQ:poke,type=1,id=-1,name="戳一戳",qq={event.get_user_id()}]'] #,'贱民也想戳一戳我？','再戳？']
     if check:
         await poke.finish(Message(random.choice(rsp)))
     await poke.finish()
@@ -80,15 +77,6 @@ async def got_msg(bot: Bot,event: Event, state: T_State = State(), msg: Message 
         await selfIntro.finish(Message(songContent))
     else:
         await selfIntro.finish()
-
-
-@ping.handle()
-async def handle(bot: Bot, event: Event, state: T_State = State()):
-    msg = [{'type':'json','data':{}}]
-    data = '''{"app":"com.tencent.qun.pro","desc":"","view":"contact","ver":"1.0.0.0","prompt":"邀请你加入QQ频道","appID":"","sourceName":"","actionData":"","actionData_A":"","sourceUrl":"","meta":{"contact":{"appId":"xxx","biz":"ka","desc":"The End of Messenger邀请你加入QQ频道“命运石之门 Steins;Gate”，进入可查看详情。","jumpUrl":"https:\/\/qun.qq.com\/qqweb\/qunpro\/share?_wv=3&_wwv=128&inviteCode=BS7Tt&from=246610&biz=ka","preview":"https:\/\/groupprohead-76292.picgzc.qpic.cn\/28505721637064109\/0?t=1637755895495","tag":"QQ频道","title":"邀请你加入QQ频道"}},"config":{"autosize":1,"ctime":1639742137,"token":"5adb393f140035b5413626b0604570ec"},"text":"","extra":""}
-'''
-    msg[0]['data']['data'] = data
-    await ping.finish(Message(msg))
 
 
 @red_true.handle()
