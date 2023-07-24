@@ -16,10 +16,7 @@ global time_task
 
 time_task = []
 time_task.append(('《匿名代码》发售',datetime.date(2022,7,28-1)))
-time_task.append(('2022上英语六级-2',datetime.date(2022,9,17-1)))
-time_task.append(('2023考研',datetime.date(2022,12,24-1)))
-time_task.append(('2023高考',datetime.date(2023,6,7-1)))
-time_task.append(('《匿名代码》Steam版本发售',datetime.date(2023,9,9-1)))
+time_task.append(('《匿名代码》Steam版本',datetime.date(2023,9,9-1)))
 time_task.append(('2023英语六级(下半年)',datetime.date(2023,12,12-1)))
 time_task.append(('2024考研',datetime.date(2023,12,24-1)))
 time_task.append(('2024年高考',datetime.date(2024,6,7-1)))

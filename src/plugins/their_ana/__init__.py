@@ -232,11 +232,11 @@ async def handle(bot: Bot, event: Event, state: T_State = State()):
     if status == '关闭':
         flag = model.SetLock(name,group)
         if flag:
-            await abuse_chg.finish(Message(f'嘲讽状态[{state}]，试试@我一下吧~'))
+            await abuse_chg.finish(Message(f'嘲讽状态[{status}]，试试@我一下吧~'))
     elif status == '开启':
         flag = model.SetUnlock(name,group)
         if flag:
-            await abuse_chg.finish(Message(f'嘲讽状态[{state}]，试试@我一下吧~'))
+            await abuse_chg.finish(Message(f'嘲讽状态[{status}]，试试@我一下吧~'))
 
 @SuperAna.handle()
 async def handle(bot: Bot, event: Event, state: T_State = State()):
