@@ -8,7 +8,7 @@ def Init():
     '''
     建立语录列表
     '''
-    db = sqlite3.connect('anas.db')
+    db = sqlite3.connect('db/anas.db')
     cur = db.cursor()
     cur.execute('select count(*) from sqlite_master where type="table" and name = "AnaList"')
     if cur.fetchall()[0][0] == 0:
@@ -29,7 +29,7 @@ def AppendList(name:str)->bool:
     '''
     新增语录成员
     '''
-    db = sqlite3.connect('anas.db')
+    db = sqlite3.connect('db/anas.db')
     cur = db.cursor()
     try:
         cur.execute(f'insert into AnaList (ana_name) values ("{name}")')
@@ -45,7 +45,7 @@ def Isexisted(name:str)->bool:
     '''
     判断语录是否存在于列表
     '''
-    db = sqlite3.connect('anas.db')
+    db = sqlite3.connect('db/anas.db')
     cur = db.cursor()
     cur.execute(f'select * from AnaList where ana_name="{name}"')
     if cur.fetchall() == []:
@@ -63,7 +63,7 @@ def GetAna(name:str,group:str)->str:
     ana = ''
     if not Isexisted(name):
         return ana #不存在该语录
-    db = sqlite3.connect('anas.db')
+    db = sqlite3.connect('db/anas.db')
     cur = db.cursor()
     try:
         cur.execute(f'select * from AnaList where ana_name="{name}" and group_{group}=1')
@@ -91,7 +91,7 @@ def IsAdded(name:str,ana:str,by:str)->bool:
     '''
     追加语录
     '''
-    db = sqlite3.connect('anas.db')
+    db = sqlite3.connect('db/anas.db')
     cur = db.cursor()
     if not Isexisted(name):
         AppendList(name)
@@ -115,7 +115,7 @@ def IsDel(name:str,ana:str)->bool:
     '''
     删除语录
     '''
-    db = sqlite3.connect('anas.db')
+    db = sqlite3.connect('db/anas.db')
     cur = db.cursor()
     if not Isexisted(name):
         return False
@@ -147,11 +147,11 @@ def Merge(name1:str,name2:str)->bool:
     '''
     将语录2 完全迁移到 语录1
     '''
-    db = sqlite3.connect('anas.db')
+    db = sqlite3.connect('db/anas.db')
     cur = db.cursor()
     if not Isexisted(name1) or not Isexisted(name2):
         return False
-    cur.execute(f'select * from _{name2}')
+    cur.execute(f'select * from "_{name2}"')
     n2_anas = cur.fetchall()
     for ana in n2_anas:
         cur.execute(f'insert into "_{name1}" values{ana}')
@@ -172,7 +172,7 @@ def SetLock(name:str,group:str)->bool:
     '''
     if not Isexisted(name):
         return False
-    db = sqlite3.connect('anas.db')
+    db = sqlite3.connect('db/anas.db')
     cur = db.cursor()
     try:
         cur.execute(f'update AnaList set group_{group}=1 where ana_name="{name}"')
@@ -185,7 +185,7 @@ def GetList():
     '''
     获取语录清单
     '''
-    db = sqlite3.connect('anas.db')
+    db = sqlite3.connect('db/anas.db')
     cur = db.cursor()
     cur.execute('select * from AnaList where ana_name not like "%<高级>%"')
     names = [name[0] for name in cur.fetchall()]
@@ -199,7 +199,7 @@ def GetSuperList():
     '''
     获取高级语录清单
     '''
-    db = sqlite3.connect('anas.db')
+    db = sqlite3.connect('db/anas.db')
     cur = db.cursor()
     cur.execute('select * from AnaList where ana_name like "%<高级>%"')
     names = [name[0] for name in cur.fetchall()]
@@ -215,7 +215,7 @@ def SetUnlock(name:str,group:str)->bool:
     '''
     if not Isexisted(name):
         return False
-    db = sqlite3.connect('anas.db')
+    db = sqlite3.connect('db/anas.db')
     cur = db.cursor()
     try:
         cur.execute(f'update AnaList set group_{group}=0 where ana_name="{name}"')
@@ -225,7 +225,7 @@ def SetUnlock(name:str,group:str)->bool:
     return True
 
 def GetReRule():
-    db = sqlite3.connect('anas.db')
+    db = sqlite3.connect('db/anas.db')
     cur = db.cursor()
     cur.execute("select * from ruleList")
     rule = cur.fetchall()
@@ -237,7 +237,7 @@ def UpdateReRule(name:str)->bool:
     '''
     更新 高级语录的规则列表
     '''
-    db = sqlite3.connect('anas.db')
+    db = sqlite3.connect('db/anas.db')
     cur = db.cursor()
     rule = GetReRule()
     if not rule:
@@ -254,7 +254,7 @@ def CleanReRule(name:str)->bool:
     '''
     在高级语录的规则列表中清除指定语录
     '''
-    db = sqlite3.connect('anas.db')
+    db = sqlite3.connect('db/anas.db')
     cur = db.cursor()
     rule = GetReRule()
     if not rule:
@@ -275,7 +275,7 @@ def Inf(ana:str):
     '''
     获取具体语录(string)的信息
     '''
-    db = sqlite3.connect('anas.db')
+    db = sqlite3.connect('db/anas.db')
     cur = db.cursor()
     names1,cnts1 = GetList()
     names2,cnts2 = GetSuperList()
@@ -294,7 +294,7 @@ def DropAna(name:str)->bool:
     '''
     删除整个语录
     '''
-    db = sqlite3.connect('anas.db')
+    db = sqlite3.connect('db/anas.db')
     cur = db.cursor()
     try:
         cur.execute(f'delete from AnaList where ana_name="{name}"')
@@ -321,7 +321,7 @@ def RenameAna(name1:str,name2:str)->bool:
         CleanReRule(name1[:-4])
     if name2[-4:-1]+name2[-1] == "<高级>":
         UpdateReRule(name2[:-4])
-    db = sqlite3.connect('anas.db')
+    db = sqlite3.connect('db/anas.db')
     cur = db.cursor()
     try:
         cur.execute(f'update AnaList set ana_name = "{name2}" where ana_name="{name1}"')

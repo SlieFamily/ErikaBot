@@ -158,7 +158,7 @@ async def handle(bot: Bot,event: Event, state: T_State = State(), name: Message 
 @LockAna.got("name", prompt="该限制什么语录呢？")
 async def got_name(bot: Bot,event: Event, state: T_State = State(), name: Message = Arg("name"), group: str = Arg("group")):
     print("---",name,group)
-    name = re.findall("to ([\w\W]+)语录",str(name))[0]
+    name = re.findall("([\w\W]+)语录",str(name))[0]
     flag = model.SetLock(name,group)
     if flag:
         await LockAna.finish(Message(f"本群已限制访问{name}语录~"))
@@ -176,7 +176,7 @@ async def handle(bot: Bot,event: Event, state: T_State = State() ,name: Message 
 @UnlockAna.got("name", prompt="该解除什么语录呢？")
 async def got_name(bot: Bot,event: Event, state: T_State = State(), name: Message = Arg("name"), group: str = Arg("group")):
     print("---",name,group)
-    name = re.findall("to ([\w\W]+)语录",str(name))[0]
+    name = re.findall("([\w\W]+)语录",str(name))[0]
     flag = model.SetUnlock(name,group)
     if flag:
         await UnlockAna.finish(Message(f"本群访问{name}语录限制解除~"))
