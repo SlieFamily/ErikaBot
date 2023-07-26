@@ -56,7 +56,7 @@ def Isexisted(name:str)->bool:
     db.close()
     return True
 
-def GetAna(name:str,group:str)->str:
+def GetAna(name:str,group:str,num:int=-1)->str:
     '''
     通过语录名称和群号随机提取语录
     '''
@@ -76,13 +76,17 @@ def GetAna(name:str,group:str)->str:
         db.commit() #为新群创建访问字段
     cur.execute(f'select * from "_{name}"')
     All_anas = cur.fetchall()
-    try:
-        i = random.randint(0,len(All_anas))
-        ana = All_anas[i-1][0]
-    except:
-        cur.close()
-        db.close()
-        return ana
+    if num == -1:
+        try:
+            i = random.randint(1,len(All_anas))
+            ana = All_anas[i-1][0]
+        except:
+            pass
+    else:
+        try:
+            ana = All_anas[num-1][0]
+        except:
+            pass
     cur.close()
     db.close()
     return ana

@@ -6,7 +6,7 @@ from nonebot import on_command,on_regex,on_notice
 from nonebot.rule import to_me
 from nonebot.typing import T_State
 from nonebot.adapters import Bot, Event
-from nonebot.params import State, ArgPlainText, Arg, CommandArg
+from nonebot.params import ArgPlainText, Arg, CommandArg
 from nonebot.adapters.onebot.v11 import Message,MessageSegment,GroupIncreaseNoticeEvent,PokeNotifyEvent,GroupMessageEvent
 from nonebot.permission import SUPERUSER
 from nonebot.log import logger
@@ -22,7 +22,7 @@ say = on_command("请说：",priority=3)
 red_true = on_regex("((#[0-9,a-f,A-F]{6})真实|(虚妄)真实|(红色)真实|(蓝色)真实|(金色)真实)：([\w\W]+)",priority=3)
 
 @sarcasm.handle()
-async def handle(bot: Bot, event: Event, state: T_State = State(), msg:Message = CommandArg()):
+async def handle(bot: Bot, event: Event , msg:Message = CommandArg()):
     if msg:
         state["msg"] = msg
 
@@ -34,7 +34,7 @@ async def got_msg(bot: Bot,event: Event, msg:Message = Arg("msg")):
     await sarcasm.finish(Message(send_msg))
 
 # @welcom.handle()
-# async def handle(bot: Bot, event: GroupIncreaseNoticeEvent, state: T_State = State()):
+# async def handle(bot: Bot, event: GroupIncreaseNoticeEvent ):
 #     user = event.get_user_id()
 #     at_ = "[CQ:at,qq={}]".format(user)
 #     # msg = at_+'新人，想学爆点吗？'
@@ -42,7 +42,7 @@ async def got_msg(bot: Bot,event: Event, msg:Message = Arg("msg")):
 #     await welcom.finish(Message(msg))
 
 @poke.handle()
-async def handle(bot: Bot, event: PokeNotifyEvent, state: T_State = State()):
+async def handle(bot: Bot, event: PokeNotifyEvent ):
     msg = event.get_log_string()
     check = re.search("'target_id': 2523899329",msg)
     rsp = [f'[CQ:poke,type=1,id=-1,name="戳一戳",qq={event.get_user_id()}]'] #,'贱民也想戳一戳我？','再戳？']
@@ -51,36 +51,18 @@ async def handle(bot: Bot, event: PokeNotifyEvent, state: T_State = State()):
     await poke.finish()
 
 @selfIntro.handle()
-async def handle(bot: Bot, event: Event, state: T_State = State(), msg: Message = CommandArg()):
+async def handle(bot: Bot, event: Event , msg: Message = CommandArg()):
     await selfIntro.send(Message("初次见面，你好"))
-    time.sleep(1)
+    time.sleep(0.5)
     await selfIntro.send(Message("我的名字叫做 古户绘梨花"))
-    time.sleep(1)
+    time.sleep(0.5)
     await selfIntro.send(Message("虽然是位不速之客，还请多加欢迎"))
-    time.sleep(1)
-    if msg:
-        state["msg"] = msg
-
-@selfIntro.got("msg", prompt="我乃来访者，六轩岛上的，第18名人类！！")
-async def got_msg(bot: Bot,event: Event, state: T_State = State(), msg: Message = Arg("msg")):
-    msg = re.findall("17人",str(msg))[0]
-    if msg:
-        songContent = [
-            {
-                "type": "music",
-                "data": {
-                    "type": 163,
-                    "id": 786015
-                }
-            }
-        ]
-        await selfIntro.finish(Message(songContent))
-    else:
-        await selfIntro.finish()
+    time.sleep(0.5)
+    await selfIntro.finish()
 
 
 @red_true.handle()
-async def handle(bot: Bot, event: Event, state: T_State = State()):
+async def handle(bot: Bot, event: Event ):
     msg = state["_matched_groups"]
     rgb_dirc = {'虚妄':'#ffffff','红色':'#ff6347','蓝色':'#7f00ff','金色':'#d9d919'}
     color = rgb_dirc['虚妄']
@@ -101,12 +83,7 @@ async def handle(bot: Bot, event: Event, state: T_State = State()):
     await red_true.finish(Message(send_msg))
 
 @say.handle()
-async def handle(bot: Bot, event: GroupMessageEvent, state: T_State = State(),text: Message = CommandArg()):
-    if text:
-        state["text"] = text
-
-@say.got("text", prompt="无论说什么我都会照做的~")
-async def got_name(bot: Bot,event: Event, state: T_State = State(),text: Message = Arg("text")):
+async def handle(bot: Bot, event: GroupMessageEvent,text: Message = CommandArg()):
     if text:
         if len(text) <= 100:
             await say.finish(Message(f'[CQ:tts,text={text}]'))
