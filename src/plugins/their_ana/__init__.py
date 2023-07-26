@@ -68,7 +68,7 @@ async def handle(bot: Bot, event: Event):
     for k in range(math.ceil(len(names)/20)):    
         for i in range(len(gp_names[k])):
             string += gp_names[k][i]+'语录 \t('+ str(gp_cnts[k][i]) +'条)\n'
-        msg.append(MessageFactory(string))
+        msg.append(MessageFactory(string[:-1]))
         string = ""
 
     await AggregatedMessageFactory(msg).send_to(TargetQQGroup(group_id=group))
@@ -91,7 +91,7 @@ async def handle(bot: Bot,event: Event ):
     for k in range(math.ceil(len(names)/20)):    
         for i in range(len(gp_names[k])):
             string += gp_names[k][i][:-4]+' \t('+ str(gp_cnts[k][i]) +'条)\n'
-        msg.append(MessageFactory(string))
+        msg.append(MessageFactory(string[:-1]))
         print(string)
         string = ""
 
