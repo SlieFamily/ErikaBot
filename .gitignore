@@ -1,7 +1,5 @@
 ##----------Private settings----------
-/.env
-/.env.dev
-/.env.prod
+/imgs
 /ghostdriver.log
 /db.json
 /docker-compose.yml

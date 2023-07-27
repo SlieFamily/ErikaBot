@@ -3,11 +3,8 @@ import sqlite3
 import os
 from QImage import *
 
-# 获取上级目录
+# 获取Bot主目录
 path = os.path.abspath(os.getcwd())
-# os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
-# os.path.abspath(os.path.dirname(os.getcwd()))
-# path = os.path.abspath(os.path.join(os.getcwd(), ".."))
 
 def transf_anas_image():
     db = sqlite3.connect(path+'/db/anas.db')
@@ -29,6 +26,7 @@ def transf_anas_image():
                 if new_url:
                     print('下载图片：',new_url)
                     new_url = 'file://'+path+'/imgs/'+new_url
+                    print('更换图片存储位置：',new_url)
                     new_ana = cq_image_to(ana,new_url) #转换CQ格式
                     if new_ana: 
                         print('重建语录内容：',new_ana)
@@ -38,11 +36,12 @@ def transf_anas_image():
                         print("[!]语录修改失败")
                 else:
                     print("[!]图片下载失败")
+                    cur.execute(f'delete from "_{name}" where ana="{ana}"')
+                    db.commit()
+                    print("[!]已将该语录删除")
             else:
                 print('[!]当前语录无图片信息')
             print("------END-------")
         print("====================")
 
-# transf_anas_image()
-
-print(path+'/imgs/')
+transf_anas_image()

@@ -126,7 +126,7 @@ def IsDel(name:str,ana:str)->bool:
     try:
         cur.execute(f'select * from "_{name}" where ana="{ana}"')
         if cur.fetchall() == []:
-            return False
+            return False #查无此语录
         cur.execute(f'delete from "_{name}" where ana="{ana}"')
         db.commit()
         # 语录为空，全清

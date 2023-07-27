@@ -11,10 +11,13 @@ def get_image_url(text:str)->str:
     '''
         匹配给定CQ文本中的图片url
     '''
-    res = re.findall(",(url|file)=([a-zA-z]+://[^\s]*)[,]*\]",text)
-    return res[1] if res else ''
+    res = re.findall(",(url|file)=((http|https)+://[^\s]*)[,]*\]",text)
+    if res:
+        return res[0][1].split(',')[0]
+    else:
+        return ''
 
-def cq_image_to(text:str, url:str = '')->str:
+def cq_image_to(text:str, url:str='')->str:
     '''
         将原始CQ消息的image格式修改为file-url形式
     '''
@@ -22,7 +25,7 @@ def cq_image_to(text:str, url:str = '')->str:
     if res : #判断是否为image消息
         if not url:
             url = res #如果没有提供url，直接转换；否则转换为指定url
-        ana = re.sub("\[CQ:image,[\w\W]+,url=[a-zA-z]+://[^\s]*[,]*[\w\W]*\]","[CQ:image,file="+url+"]",text)
+        ana = re.sub("\[CQ:image[\w\W]*,(file|url)=(http|https)://[^\s]*[\w\W]*\]","[CQ:image,file="+url+"]",text)
         return ana
     return ''
 

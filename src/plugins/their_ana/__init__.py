@@ -18,6 +18,7 @@ from nonebot_plugin_saa import MessageFactory, PlatformTarget, AggregatedMessage
 from nonebot_plugin_saa import TargetQQGroup, enable_auto_select_bot
 from . import model
 import random
+from utils.QImage import *
 
 # 初始化数据库
 model.Init()
@@ -26,6 +27,9 @@ rsp = ["用最爱的筷子品味最恶俗的语录才称得上健全~","知性�
 
 anas_rule = "([\w\W]{1,6}<高级>)语录|([\w\W]{1,6})语录"
 
+
+# 获取Bot主目录
+path = os.path.abspath(os.getcwd())
 
 # 默认配置
 global_config = nonebot.get_driver().config
@@ -137,13 +141,19 @@ async def handle(bot: Bot, event: Event , args: Message = CommandArg()):
         ana = name[3][1:]
         by = event.get_user_id()
         name = name[1] if name[1] else name[2]
-        if event.reply:
+
+        if event.reply: #优先回复方式接收的语录
             ana = event.reply.message
-            if model.IsAdded(name,ana,by):
-                await AddAna.finish(Message(random.choice(rsp)))
-        elif ana:
-            if model.IsAdded(name,ana,by):
-                await AddAna.finish(Message(random.choice(rsp)))
+        ana = str(ana)
+
+        if url := get_image_url(ana):
+            if new_url := image_download(url,name): #如果有图片，则下载图片到本地
+                new_url = 'file://'+path+'/imgs/'+new_url
+                if new_ana := cq_image_to(ana,new_url): #转换CQ格式
+                    ana = new_ana
+
+        if model.IsAdded(name,ana,by):
+            await AddAna.finish(Message(random.choice(rsp)))
         await AddAna.finish(Message("苦撸西，失败了失败了！"))
     else:
         await AddAna.finish()

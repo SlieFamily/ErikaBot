@@ -13,6 +13,7 @@ from nonebot.log import logger
 from nonebot.message import run_postprocessor
 from nonebot.matcher import Matcher
 import random
+from utils.QImage import *
 
 sarcasm = on_command("嘲讽",priority=3)
 # welcom = on_notice(priority=4)
@@ -104,6 +105,11 @@ async def handle(bot: Bot, event: Event , msg:Message = CommandArg()):
             msg = contect[1]
     else:
         await anonymous.finish()
+
+    msg = str(msg)
+    if url := get_image_url(msg):
+        if new_ana := cq_image_to(msg,url): #转换CQ格式修复图像显示
+            msg = new_ana
 
     await bot.call_api('send_msg',**{
             'message':"吾主，收到 【匿名消息】~",
