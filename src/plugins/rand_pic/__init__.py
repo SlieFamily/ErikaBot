@@ -14,8 +14,6 @@ from nonebot.log import logger
 global_config = nonebot.get_driver().config
 plugin_config = Config(**global_config.dict())
 
-global inf
-
 imgs = [
     "[CQ:image,file=https://cdn.jsdelivr.net/gh/SlieFamily/TempImages@main//Auto/bugouse.png]",
 
@@ -32,16 +30,13 @@ async def handle(bot: Bot, event: Event ):
         imgurl = resp.json()['data'][0]['urls']['regular']
         pid = resp.json()['data'][0]['pid']
         title = resp.json()['data'][0]['title']
-        inf = title+"|"+str(pid)
         await setu.send(MessageSegment.image(imgurl))
 
 @setu.got("str")
 async def got(bot: Bot, event: Event, msg: str = ArgPlainText("str")):
-    if msg == "pid呢":
-        await setu.send(Message(inf))
     if msg == "加大剂量":
         async with httpx.AsyncClient() as client:
-            resp = await client.get('https://api.lolicon.app/setu/v2?r18=2&size=thumb')
+            resp = await client.get('https://api.lolicon.app/setu/v2?r18=1&size=thumb')
             logger.debug(resp.json())
             print(resp.json())
             imgurl = resp.json()['data'][0]['urls']['thumb']
@@ -49,7 +44,6 @@ async def got(bot: Bot, event: Event, msg: str = ArgPlainText("str")):
     if msg == "不够色" or msg == "不够涩":
         await setu.finish(Message("要不你来发？贱坯\n"+random.choice(imgs)))
     await setu.finish()
-
 
 
 

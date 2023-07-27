@@ -71,7 +71,7 @@ def Img2base64(img_cv2):
 
 def CreateImg(string):
     name = string.strip()
-    if name in "奥利给":
+    if name.find("给") != -1:
     	return img_path+'/oregay.jpg'
     if len(name) > 50:
     	return False

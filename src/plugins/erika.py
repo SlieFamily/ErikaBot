@@ -15,12 +15,12 @@ from nonebot.matcher import Matcher
 import random
 
 sarcasm = on_command("嘲讽",priority=3)
-#welcom = on_notice(priority=4)
+# welcom = on_notice(priority=4)
 selfIntro = on_command("来点自我介绍",priority=4)
 anonymous = on_command("隔空喊话",priority=3)
 poke = on_notice(priority=5)
 say = on_command("请说：",priority=3)
-red_true = on_regex("((#[0-9,a-f,A-F]{6})真实|(虚妄)真实|(红色)真实|(蓝色)真实|(金色)真实)：([\w\W]+)",priority=3)
+# red_true = on_regex("((#[0-9,a-f,A-F]{6})真实|(虚妄)真实|(红色)真实|(蓝色)真实|(金色)真实)：([\w\W]+)",priority=3)
 
 @sarcasm.handle()
 async def handle(bot: Bot, event: Event , msg:Message = CommandArg()):
@@ -60,26 +60,26 @@ async def handle(bot: Bot, event: Event , msg: Message = CommandArg()):
     await selfIntro.finish()
 
 
-@red_true.handle()
-async def handle(bot: Bot, event: Event ):
-    msg = state["_matched_groups"]
-    rgb_dirc = {'虚妄':'#ffffff','红色':'#ff6347','蓝色':'#7f00ff','金色':'#d9d919'}
-    color = rgb_dirc['虚妄']
-    for i in msg:
-        if i in ['虚妄','红色','蓝色','金色']:
-            color = rgb_dirc[i]
-            pass
-        elif i != None and i != msg[-1]:
-            color = i
-            pass
-    msg = msg[-1]
-    if event.get_user_id() not in ['1364374624','2450509502'] and color == '#d9d919':
-        await red_true.finish(Message('GameMaster岂是你能冒充的？'))
-    send_msg = [{'type':'xml','data':{}}]
-    data = f'''<?xml version='1.0' encoding='UTF-8' standalone='yes' ?><msg serviceID="1" templateID="-1" action="plugin" a_actionData="" brief="[真实]{msg}" sourceMsgId="0" url="" flag="2" adverSign="3" multiMsgFlag="0"><item layout="9" bg="2" advertiser_id="0" aid="0"><picture cover="https://cdn.jsdelivr.net/gh/SlieFamily/TempImages@main//Auto/erika_logo.png" w="0" h="0" /></item><item layout="6" advertiser_id="0" aid="0">
-<summary size="100" color="{color}">{msg}</summary></item><source name="" icon="" action="" appid="-1" /></msg>'''
-    send_msg[0]['data']['data'] = data
-    await red_true.finish(Message(send_msg))
+# @red_true.handle()
+# async def handle(bot: Bot, event: Event ):
+#     msg = state["_matched_groups"]
+#     rgb_dirc = {'虚妄':'#ffffff','红色':'#ff6347','蓝色':'#7f00ff','金色':'#d9d919'}
+#     color = rgb_dirc['虚妄']
+#     for i in msg:
+#         if i in ['虚妄','红色','蓝色','金色']:
+#             color = rgb_dirc[i]
+#             pass
+#         elif i != None and i != msg[-1]:
+#             color = i
+#             pass
+#     msg = msg[-1]
+#     if event.get_user_id() not in ['1364374624','2450509502'] and color == '#d9d919':
+#         await red_true.finish(Message('GameMaster岂是你能冒充的？'))
+#     send_msg = [{'type':'xml','data':{}}]
+#     data = f'''<?xml version='1.0' encoding='UTF-8' standalone='yes' ?><msg serviceID="1" templateID="-1" action="plugin" a_actionData="" brief="[真实]{msg}" sourceMsgId="0" url="" flag="2" adverSign="3" multiMsgFlag="0"><item layout="9" bg="2" advertiser_id="0" aid="0"><picture cover="https://cdn.jsdelivr.net/gh/SlieFamily/TempImages@main//Auto/erika_logo.png" w="0" h="0" /></item><item layout="6" advertiser_id="0" aid="0">
+# <summary size="100" color="{color}">{msg}</summary></item><source name="" icon="" action="" appid="-1" /></msg>'''
+#     send_msg[0]['data']['data'] = data
+#     await red_true.finish(Message(send_msg))
 
 @say.handle()
 async def handle(bot: Bot, event: GroupMessageEvent,text: Message = CommandArg()):
@@ -95,21 +95,22 @@ async def handle(bot: Bot, event: Event , msg:Message = CommandArg()):
     # try:
     contect = re.findall("to ([0-9]+)[：]*([\s\S]*)",str(msg))[0]
     group = contect[0]
-    contect = ''
     if event.reply:
-        contect = event.reply.message
+        msg = event.reply.message
+    elif contect[1]:
+        if contect[1][0] == '：':
+            msg = contect[1][1:]
+        else:
+            msg = contect[1]
     else:
-        try:
-            contect = contect[1][1:]
-        except:
-            anonymous.finish()
-    if contect:
-        await bot.call_api('send_msg',**{
-                'message':"本群收到 【匿名消息】 如下：",
-                'group_id':int(group)
-            })
-        await bot.call_api('send_msg',**{
-                'message':contect,
-                'group_id':int(group)
-            })
+        await anonymous.finish()
+
+    await bot.call_api('send_msg',**{
+            'message':"吾主，收到 【匿名消息】~",
+            'group_id':int(group)
+        })
+    await bot.call_api('send_msg',**{
+            'message':msg,
+            'group_id':int(group)
+        })
     await anonymous.finish()
