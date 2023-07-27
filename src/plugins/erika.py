@@ -17,21 +17,20 @@ import random
 sarcasm = on_command("嘲讽",priority=3)
 #welcom = on_notice(priority=4)
 selfIntro = on_command("来点自我介绍",priority=4)
+anonymous = on_command("隔空喊话",priority=3)
 poke = on_notice(priority=5)
 say = on_command("请说：",priority=3)
 red_true = on_regex("((#[0-9,a-f,A-F]{6})真实|(虚妄)真实|(红色)真实|(蓝色)真实|(金色)真实)：([\w\W]+)",priority=3)
 
 @sarcasm.handle()
 async def handle(bot: Bot, event: Event , msg:Message = CommandArg()):
-    if msg:
-        state["msg"] = msg
-
-@sarcasm.got("msg", prompt="？")
-async def got_msg(bot: Bot,event: Event, msg:Message = Arg("msg")):
-    msg = re.findall("([\s\S]+)，([\s\S]+)",str(msg))[0]
-    # print(msg)
-    send_msg = f"仅凭借{msg[0]}，古户绘梨花便能{msg[1]}到这种程度，如何呀，诸位~"
-    await sarcasm.finish(Message(send_msg))
+    try:
+        msg = re.findall("([\s\S]+)，([\s\S]+)",str(msg))[0]
+        # print(msg)
+        send_msg = f"仅凭借{msg[0]}，古户绘梨花便能{msg[1]}到这种程度，如何呀，诸位~"
+        await sarcasm.finish(Message(send_msg))
+    except:
+        await sarcasm.finish()
 
 # @welcom.handle()
 # async def handle(bot: Bot, event: GroupIncreaseNoticeEvent ):
@@ -84,9 +83,33 @@ async def handle(bot: Bot, event: Event ):
 
 @say.handle()
 async def handle(bot: Bot, event: GroupMessageEvent,text: Message = CommandArg()):
-    if text:
-        if len(text) <= 100:
-            await say.finish(Message(f'[CQ:tts,text={text}]'))
-        else:
-            await say.finish(Message('说匿🐎，太长了！'))
-    await say.finish()
+    text = re.findall('[\w\W]+',str(text))[0]
+    print("tts语音接收字符长度：",len(text))
+    if len(text)<=100:
+        await say.finish(Message(f'[CQ:tts,text={text}]'))
+    else:
+        await say.finish(Message('你这个我说匿🐎！'))
+
+@anonymous.handle()
+async def handle(bot: Bot, event: Event , msg:Message = CommandArg()):
+    # try:
+    contect = re.findall("to ([0-9]+)[：]*([\s\S]*)",str(msg))[0]
+    group = contect[0]
+    contect = ''
+    if event.reply:
+        contect = event.reply.message
+    else:
+        try:
+            contect = contect[1][1:]
+        except:
+            anonymous.finish()
+    if contect:
+        await bot.call_api('send_msg',**{
+                'message':"本群收到 【匿名消息】 如下：",
+                'group_id':int(group)
+            })
+        await bot.call_api('send_msg',**{
+                'message':contect,
+                'group_id':int(group)
+            })
+    await anonymous.finish()

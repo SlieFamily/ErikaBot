@@ -6,7 +6,7 @@ from nonebot import on_command,on_regex,on_notice
 from nonebot.rule import to_me
 from nonebot.typing import T_State
 from nonebot.adapters import Bot,Event
-from nonebot.params import ArgPlainText, Arg, CommandArg, RegexGroup
+from nonebot.params import ArgPlainText, Arg, CommandArg, RegexGroup, EventToMe
 from nonebot.adapters.onebot.v11 import Message,MessageSegment,GroupIncreaseNoticeEvent,PokeNotifyEvent
 from nonebot.adapters.onebot.v11 import Message,MessageSegment,GroupIncreaseNoticeEvent,GroupMessageEvent
 from nonebot.permission import SUPERUSER
@@ -37,15 +37,15 @@ theirAna = on_regex("("+anas_rule+")[-]*([0-9]*)", priority=3)
 AddAna = on_command("add",priority=2)
 DelAna = on_regex("del ("+anas_rule+")：([\s\S]+)",priority=2)
 MergeAna = on_regex("merge ("+anas_rule+")，("+anas_rule+")",priority=1,permission=SUPERUSER)
-LockAna = on_command("lock",priority=1,permission=SUPERUSER)
-UnlockAna = on_command("unlock",priority=1,permission=SUPERUSER)
-DelAllAna = on_command("drop",priority=1,permission=GROUP_ADMIN|GROUP_OWNER|PRIVATE_FRIEND|SUPERUSER)
+LockAna = on_command("lock",priority=1,permission=GROUP_ADMIN|GROUP_OWNER|PRIVATE_FRIEND|SUPERUSER)
+UnlockAna = on_command("unlock",priority=1,permission=GROUP_ADMIN|GROUP_OWNER|PRIVATE_FRIEND|SUPERUSER)
+DelAllAna = on_command("drop",priority=1,permission=SUPERUSER)
 Rename = on_regex("rename ("+anas_rule+") to ("+anas_rule+")",priority=1,permission=SUPERUSER)
 FindAna = on_regex("find：([\s\S]+)",priority=1)
-SuperAna = on_regex("[\w\W]+",priority=5)
+SuperAna = on_regex("[\w\W]+",priority=4)
 AnaList = on_command("侦探的棋子名单",priority=3)
 SuperList = on_command("侦探的魔女名单",priority=3)
-abuse = on_regex("[\s\S]*",rule=to_me(),priority=5)
+abuse = on_regex("[\s\S]*",rule=to_me(),priority=6)
 abuse_on = on_command("开启嘲讽状态",priority=1,permission=GROUP_ADMIN|GROUP_OWNER|PRIVATE_FRIEND|SUPERUSER)
 abuse_off = on_command("关闭嘲讽状态",priority=1,permission=GROUP_ADMIN|GROUP_OWNER|PRIVATE_FRIEND|SUPERUSER)
 
@@ -215,13 +215,13 @@ async def handle(bot: Bot, event: Event ,ana = RegexGroup()):
     await FindAna.finish()
 
 @abuse.handle()
-async def handle(bot: Bot, event: GroupMessageEvent ):
+async def handle(bot: Bot, event: GroupMessageEvent,at_me=EventToMe() ):
     name = "Erika"
     group = event.get_session_id()
     if not group.isdigit():
         group = group.split('_')[1]
     my_ana = model.GetAna(name,group)
-    if my_ana:
+    if my_ana and at_me:
         await abuse.finish(Message(my_ana))
     await abuse.finish()
 
