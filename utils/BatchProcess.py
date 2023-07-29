@@ -7,6 +7,9 @@ from QImage import *
 path = os.path.abspath(os.getcwd())
 
 def transf_anas_image():
+    '''
+    批量清理旧版本中的图片问题
+    '''
     db = sqlite3.connect(path+'/db/anas.db')
     cur = db.cursor()
     cur.execute('select * from AnaList') #获取语录清单
@@ -44,4 +47,4 @@ def transf_anas_image():
             print("------END-------")
         print("====================")
 
-transf_anas_image()
+

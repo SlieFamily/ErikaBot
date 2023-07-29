@@ -29,20 +29,25 @@ def cq_image_to(text:str, url:str='')->str:
         return ana
     return ''
 
-def image_download(url:str, tag:str)->str:
+def image_download(url:str, tag:str, use_timestamp:bool = True)->str:
     '''
         根据所提供的url和tag下载图片并重命名
     '''
-    headers = { #请求头
-        'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.45 Safari/537.36'
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/99.0.4844.51 Safari/537.36 Edg/99.0.1150.36"
     }
-    req = requests.get(url,headers=headers)
+    print("[!]访问图片url中")
+    req = requests.get(url, headers = headers, timeout = 5)
     filename = ''
     dirname = 'imgs/'
     if req.content:
-        filename = tag+"_"+str(time.time())+".jpg"
+        if use_timestamp:
+            filename = tag+"_"+str(time.time())+".jpg"
+        else:
+            filename = tag+".jpg"
         with open(dirname+filename, mode = "wb") as f:
             f.write(req.content) # 下载图片
+        print("[!]图片资源下载成功")
         return  filename
     return filename
 

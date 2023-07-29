@@ -85,7 +85,7 @@ async def handle(bot: Bot, event: Event , msg: Message = CommandArg()):
 @say.handle()
 async def handle(bot: Bot, event: GroupMessageEvent,text: Message = CommandArg()):
     text = re.findall('[\w\W]+',str(text))[0]
-    print("tts语音接收字符长度：",len(text))
+    print("[!]tts语音接收字符长度：",len(text))
     if len(text)<=100:
         await say.finish(Message(f'[CQ:tts,text={text}]'))
     else:

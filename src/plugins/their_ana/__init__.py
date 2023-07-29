@@ -39,7 +39,7 @@ plugin_config = Config(**global_config.dict())
 theirAna = on_regex("("+anas_rule+")[-]*([0-9]*)", priority=3) 
 # AddAna = on_regex("add ("+anas_rule+")：([\s\S]+)", priority=2)
 AddAna = on_command("add",priority=2)
-DelAna = on_regex("del ("+anas_rule+")：([\s\S]+)",priority=2)
+DelAna = on_command("del",priority=2)
 MergeAna = on_regex("merge ("+anas_rule+")，("+anas_rule+")",priority=1,permission=SUPERUSER)
 LockAna = on_command("lock",priority=1,permission=GROUP_ADMIN|GROUP_OWNER|PRIVATE_FRIEND|SUPERUSER)
 UnlockAna = on_command("unlock",priority=1,permission=GROUP_ADMIN|GROUP_OWNER|PRIVATE_FRIEND|SUPERUSER)
@@ -49,7 +49,7 @@ FindAna = on_regex("find：([\s\S]+)",priority=1)
 SuperAna = on_regex("[\w\W]+",priority=4)
 AnaList = on_command("侦探的棋子名单",priority=3)
 SuperList = on_command("侦探的魔女名单",priority=3)
-abuse = on_regex("[\s\S]*",rule=to_me(),priority=6)
+abuse = on_regex("[\s\S]*",rule=to_me(),priority=5)
 abuse_on = on_command("开启嘲讽状态",priority=1,permission=GROUP_ADMIN|GROUP_OWNER|PRIVATE_FRIEND|SUPERUSER)
 abuse_off = on_command("关闭嘲讽状态",priority=1,permission=GROUP_ADMIN|GROUP_OWNER|PRIVATE_FRIEND|SUPERUSER)
 
@@ -96,7 +96,6 @@ async def handle(bot: Bot,event: Event ):
         for i in range(len(gp_names[k])):
             string += gp_names[k][i][:-4]+' \t('+ str(gp_cnts[k][i]) +'条)\n'
         msg.append(MessageFactory(string[:-1]))
-        print(string)
         string = ""
 
     await AggregatedMessageFactory(msg).send_to(TargetQQGroup(group_id=group))
@@ -136,8 +135,8 @@ async def handle(bot: Bot, event: Event, name = RegexGroup()):
 
 @AddAna.handle()
 async def handle(bot: Bot, event: Event , args: Message = CommandArg()):
-    if msg := args.extract_plain_text():
-        name = re.findall("("+anas_rule+")[:]*([\s\S]*)",str(msg))[0]
+    if args:
+        name = re.findall("("+anas_rule+")[:]*([\s\S]*)",str(args))[0]
         ana = name[3][1:]
         by = event.get_user_id()
         name = name[1] if name[1] else name[2]
@@ -145,12 +144,18 @@ async def handle(bot: Bot, event: Event , args: Message = CommandArg()):
         if event.reply: #优先回复方式接收的语录
             ana = event.reply.message
         ana = str(ana)
-
+        print(ana)
         if url := get_image_url(ana):
+            print('[!]所添加语录存在图片消息')
             if new_url := image_download(url,name): #如果有图片，则下载图片到本地
                 new_url = 'file://'+path+'/imgs/'+new_url
                 if new_ana := cq_image_to(ana,new_url): #转换CQ格式
+                    print('[!]修复后的语录：',new_ana)
                     ana = new_ana
+                else:
+                    print('[!]CQ码转换失败')
+            else:
+                print('[!]图片下载失败')
 
         if model.IsAdded(name,ana,by):
             await AddAna.finish(Message(random.choice(rsp)))
@@ -161,13 +166,21 @@ async def handle(bot: Bot, event: Event , args: Message = CommandArg()):
 
 
 @DelAna.handle()
-async def handle(bot: Bot,event: Event ,name = RegexGroup()):
-    ana = name[3]
-    name = name[1] if name[1] else name[2]
-    del_msg = model.IsDel(name,ana)
-    if del_msg:
-        await DelAna.finish(Message("这种垃圾语录没有存在的必要！"))
-    await DelAna.finish(Message("失败了失败了失败了……"))
+async def handle(bot: Bot,event: Event,args: Message = CommandArg()):
+    if args:
+        name = re.findall("("+anas_rule+")-([0-9]+)",str(args))[0]
+        num = name[3]
+        name = name[1] if name[1] else name[2]
+        group = event.get_session_id()
+        if not group.isdigit():
+            group = group.split('_')[1]
+        
+        ana = model.GetAna(name,group,int(num))
+
+        del_msg = model.IsDel(name,ana)
+        if del_msg:
+            await DelAna.finish(Message("这种垃圾语录没有存在的必要！"))
+        await DelAna.finish(Message("失败了失败了失败了……"))
 
 @MergeAna.handle()
 async def handle(bot: Bot,event: Event ,name = RegexGroup()):
@@ -235,6 +248,7 @@ async def handle(bot: Bot, event: GroupMessageEvent,at_me=EventToMe() ):
         await abuse.finish(Message(my_ana))
     await abuse.finish()
 
+
 @abuse_off.handle()
 async def handle(bot: Bot, event: Event ):
     group = event.get_session_id()
@@ -260,17 +274,19 @@ async def handle(bot: Bot, event: Event ):
         await abuse_on.finish()
 
 @SuperAna.handle()
-async def handle(bot: Bot, event: Event ):
-    name = re.findall(model.GetReRule(),str(event.get_message()))
-    if not name:
-        await SuperAna.finish()
-    name = name[0]+"<高级>"
-    isSelf = re.findall("'nickname': '古都艾丽卡'",str(event.get_log_string()))
-    if isSelf:
-        await SuperAna.finish()
+async def handle(bot: Bot, event: Event):
+    msg = event.get_message()
     group = event.get_session_id()
     if not group.isdigit():
         group = group.split('_')[1]
+    # 过滤自发消息 (频道问题)
+    if isSelf := re.findall("'nickname': '古都艾丽卡'",str(event.get_log_string())):
+        await SuperAna.finish()
+    # 高级语录检测
+    name = re.findall(model.GetReRule(),str(msg))
+    if not name:
+        await SuperAna.finish()
+    name = name[0]+"<高级>"
     ana = model.GetAna(name,group)
     if ana:
         await SuperAna.finish(Message(ana))
