@@ -3,6 +3,7 @@ import json
 import sqlite3
 import random
 import re
+import os
 
 def Init():
     '''
@@ -307,6 +308,7 @@ def DropAna(name:str)->bool:
         db.commit()
         if name[-4:-1]+name[-1] == "<高级>":
             CleanReRule(name[:-4])
+        os.system(f"rm -rf imgs/{name}_*")
         return True
     except:
         return False

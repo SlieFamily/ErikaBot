@@ -1,5 +1,6 @@
 ##----------Private settings----------
 /imgs
+/images.rar
 /ghostdriver.log
 /db.json
 /docker-compose.yml

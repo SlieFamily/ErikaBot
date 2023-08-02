@@ -22,7 +22,7 @@ time_task = []
 time_task.append(('《匿名代码》发售',datetime.date(2022,7,28-1)))
 time_task.append(('《匿名代码》Steam版本',datetime.date(2023,9,9-1)))
 time_task.append(('2023英语六级(下半年)',datetime.date(2023,12,12-1)))
-time_task.append(('2024考研',datetime.date(2023,12,24-1)))
+time_task.append(('2024考研',datetime.date(2023,12,23-1)))
 time_task.append(('2024年高考',datetime.date(2024,6,7-1)))
 
 groups = ["904517835","818353963","757530435"]
@@ -62,19 +62,19 @@ async def AutoCallDays():
 						timezone='Asia/Shanghai',id='call_umiko')
 async def CallUmiko():
 	msg = "[CQ:at,qq=1366108600] 该海猫了"
-	(schedBot,) = nonebot.get_bots().values()
+	schedBot = nonebot.get_bot()
 	await schedBot.call_api('send_msg',**{
                 			'message':msg,
                     		'group_id':"757530435"
+            				})
+	await schedBot.call_api('send_msg',**{
+                			'message':"[CQ:at,qq=1364374624] 记得给老娘续费！",
+                    		'group_id':"983806711"
             				})
 
 AddDays = on_command("add 倒计时：",priority=2)
 @AddDays.handle()
 async def handle(bot: Bot, event: Event , args: Message = CommandArg()):
-	if args:
-		state["args"] = args
-@AddDays.got("args",prompt="？")
-async def got(bot: Bot, event: Event , args: Message = Arg("args")):
 	args = re.findall("([\u4E00-\u9FA5A-Za-z0-9_]+)，(\d{4}-\d{1,2}-\d{1,2})",args)[0]
 	name = args[0]
 	date = args[1]

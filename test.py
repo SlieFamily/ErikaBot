@@ -1,17 +1,21 @@
 import requests
 import httpx
-from utils.QImage import image_download
+from pyquery import PyQuery as pq
 import re
+import feedparser
+from utils.HtmlTag import handle_html_tag
 
-url = 'https://px3.rainchan.win/c/540x540_70/img-master/img/2022/06/12/14/03/26/98999570_p16_master1200.jpg'
-print(image_download(url,'丹尼',False))
+url = 'https://rss.mcseekeri.top/twitter/user/kiri_basara'
+rss = feedparser.parse(url)
+html = rss.entries[0]['summary']
+# print(html)
+html_pq = pq(html)
+msg = handle_html_tag(html_pq)
+imgs = [item.attr('src') for item in html_pq('img').items()]
+print(msg)
+print(imgs)
 
 
-# headers = {
-#     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/99.0.4844.51 Safari/537.36 Edg/99.0.1150.36"
-# }
-# url = 'https://moe.jitsu.top/img/?sort=r18&size=1080p&type=json'
 
-# print("[!]访问图片url中")
-# req = httpx.get(url, headers = headers)#, timeout = 5)
-# print(req.json()['pics'][0])
+
+
