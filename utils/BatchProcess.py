@@ -126,21 +126,23 @@ def add_primary_key():
     names = [name[0] for name in cur.fetchall()]
     for name in names: #对每一个语录进行处理
 
-        print(f"======处理{name}语录=======")
+        try:
+            cur.execute(f'select id from "_{name}"')
+            pass
+        except:
+            print(f"======处理{name}语录=======")
 
-        cur.execute(f'create table "new_{name}" (ana TEXT UNIQUE, set_by TEXT, id INTEGER PRIMARY KEY AUTOINCREMENT)')
-        db.commit()
+            cur.execute(f'create table "new_{name}" (ana TEXT UNIQUE, set_by TEXT, id INTEGER PRIMARY KEY AUTOINCREMENT)')
+            db.commit()
 
-        cur.execute(f'insert into "new_{name}" (ana, set_by) select * from "_{name}"')
-        db.commit()
+            cur.execute(f'insert into "new_{name}" (ana, set_by) select ana, set_by from "_{name}"')
+            db.commit()
 
-        print(f"[!]复制 表{name} 完成！")
-        
-        cur.execute(f'drop table "_{name}"')
-        db.commit()
+            print(f"[!]复制 表{name} 完成！")
+            
+            cur.execute(f'drop table "_{name}"')
+            db.commit()
 
-        cur.execute(f'ALTER table "new_{name}" rename to "_{name}"')
+            cur.execute(f'ALTER table "new_{name}" rename to "_{name}"')
 
-        print(f"[!]恢复 表{name} 完成！")
-
-add_primary_key()
+            print(f"[!]恢复 表{name} 完成！")

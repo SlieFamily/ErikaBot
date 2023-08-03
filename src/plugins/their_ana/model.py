@@ -5,6 +5,9 @@ import random
 import re
 import os
 
+# 获取Bot主目录
+path = os.path.abspath(os.getcwd())
+
 def Init():
     '''
     建立语录列表
@@ -116,33 +119,39 @@ def IsDel(name:str,ana:str)->bool:
     '''
     删除语录
     '''
+    print(name,ana)
     db = sqlite3.connect('db/anas.db')
     cur = db.cursor()
     if not Isexisted(name):
         return False
+
     try:
-        cur.execute(f'select * from "_{name}" where ana="{ana}"')
+        cur.execute(f'select ana from "_{name}" where ana="{ana}"')
         if cur.fetchall() == []:
             return False #查无此语录
         cur.execute(f'delete from "_{name}" where ana="{ana}"')
         db.commit()
-        if img := re.findall(f"({name}_[0-9,a-z,A-Z,\.]+\.(image|jpg))",ana):
-            os.system(f"rm -rf imgs/{img}")
-
-        # 语录为空，全清
-        cur.execute(f'select * from "_{name}"')
-        All_anas = cur.fetchall()
-        if len(All_anas) == 0:
+    except:
+        print(f"[!]{name}语录删除失败:\n{ana}")
+        return False
+        
+    # 语录为空，全清
+    cur.execute(f'select * from "_{name}"')
+    All_anas = cur.fetchall()
+    if len(All_anas) == 0:
+        try:
             cur.execute(f'delete from AnaList where ana_name="{name}"')
             db.commit()
             cur.execute(f'DROP TABLE "_{name}"')
             db.commit()
-        if name[-4:-1]+name[-1] == "<高级>":
-            CleanReRule(name[:-4])
-    except:
-        cur.close()
-        db.close()
-        return False
+        except:
+            cur.close()
+            db.close()
+            return False
+
+    if name[-4:-1]+name[-1] == "<高级>":
+        CleanReRule(name[:-4])
+    ReNumberTab(name)
     cur.close()
     db.close()
     return True
@@ -289,7 +298,7 @@ def Inf(ana:str):
         cur.execute(f'''select * from "_{name}" where ana like "%{ana}%"''')
         inf = cur.fetchall()
         if inf:
-            inf_list.append((name,inf[0][0],inf[0][1]))
+            inf_list.append((name,inf[0][0],inf[0][1],inf[0][2]))
     if inf_list == []:
         return False
     return inf_list
@@ -336,3 +345,22 @@ def RenameAna(name1:str,name2:str)->bool:
         return True
     except:
         return False
+
+
+def ReNumberTab(name:str)->bool:
+    '''
+    将旧语录表的主键更新
+
+    由于 sqlite3 本身的问题导致主键不会重新排序
+    '''
+    db = sqlite3.connect('db/anas.db')
+    cur = db.cursor()
+    try:
+        cur.execute(f'create table "new_{name}" (ana TEXT UNIQUE, set_by TEXT, id INTEGER PRIMARY KEY AUTOINCREMENT)')
+        cur.execute(f'insert into "new_{name}" (ana, set_by) select ana, set_by from "_{name}"')
+        cur.execute(f'drop table "_{name}"')
+        cur.execute(f'ALTER table "new_{name}" rename to "_{name}"')
+        db.commit()
+        return True
+    except:
+        return False       

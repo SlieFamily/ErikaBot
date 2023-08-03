@@ -168,16 +168,20 @@ async def handle(bot: Bot, event: Event , args: Message = CommandArg()):
 @DelAna.handle()
 async def handle(bot: Bot,event: Event,args: Message = CommandArg()):
     if args:
-        name = re.findall("("+anas_rule+")-([0-9]+)",str(args))[0]
-        num = name[3]
+        name = re.findall("("+anas_rule+")-*([0-9]*)",str(args))[0]
+
+        num = name[3] if name[3] else 0
         name = name[1] if name[1] else name[2]
         group = event.get_session_id()
         if not group.isdigit():
             group = group.split('_')[1]
-        
-        ana = model.GetAna(name,group,int(num))
 
-        del_msg = model.IsDel(name,ana)
+        if event.reply: #优先回复方式接收的语录
+            ana = event.reply.message
+            del_msg = model.IsDel(name,str(ana))
+        elif num:
+            ana = model.GetAna(name,group,int(num))
+            del_msg = model.IsDel(name,str(ana))
         if del_msg:
             await DelAna.finish(Message("这种垃圾语录没有存在的必要！"))
         await DelAna.finish(Message("失败了失败了失败了……"))
@@ -228,10 +232,10 @@ async def handle(bot: Bot, event: Event ,ana = RegexGroup()):
     if infs:
         msg = f"发现{len(infs)}条相关语录\n\n"
         for i in range(len(infs)):
-            msg += f"第{i+1}条：\n"
-            msg += f'来自：{infs[i][0]}语录\n'
-            msg += f'添加者(QQ)：{infs[i][2]}\n'
-            msg += '内容：\n'+infs[i][1]
+            msg += f'{infs[i][0]}语录-{infs[i][3]}：\n'
+            msg += infs[i][1]
+            msg += f'\n添加者：{infs[i][2]}'
+            
             if i < len(infs)-1:
                 msg += '\n\n'
         await FindAna.send(Message(msg))
