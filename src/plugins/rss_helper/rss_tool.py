@@ -22,7 +22,10 @@ async def get_user_info(url:str)->str:
     '''
     try:
         rss = feedparser.parse(url)
-        msg = rss.entries[0]['author']
+        try:
+            msg = rss.entries[0]['author']
+        except:
+            msg = rss.feed.title.split(" ")[0] #解决B站动态没有作者信息
         logger.success('[√]订阅消息获取成功！')  #存在因订阅源失效导致xml内容无用的情况，待修复
         return msg
 

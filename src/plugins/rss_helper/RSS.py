@@ -1,6 +1,11 @@
 import sqlite3
 from typing import Any, Dict, List, Optional
 from nonebot.log import logger
+import json
+import os
+
+js_path = os.path.dirname(__file__)
+js_path = js_path.replace("\\", "/")
 
 '''
 TABLE user_list [
@@ -15,13 +20,10 @@ TABLE _username [
                     translate(是否翻译)
 ]
 '''
-rss_url = "https://rss.mcseekeri.top"
-
-Apps2Url = {
-    "推特": "/twitter/user/",
-    "微博": "/weibo/user/",
-}
-
+def LoadRssRule()->dict:
+    with open(js_path+'/config.json','r',encoding = 'utf-8') as fp:
+        data =  json.load(fp)
+    return data
 
 def Init2db(): 
     '''
@@ -40,11 +42,14 @@ def AddUser(app:str, user_id:str, screen_name:str)->bool:
     '''
     创建用户对应的表
     '''
+    data = LoadRssRule()
+    url = data['rss_url']
+    route = data['rss_route'][app]
     db = sqlite3.connect('db/rss.db')
     cur = db.cursor()
     cur.execute(f'select count(*) from user_list where user_id="{user_id}"')
     if cur.fetchall()[0][0]==0:
-        cur.execute(f'insert into user_list values("{screen_name}","{user_id}","","{rss_url+Apps2Url[app]+user_id}")')
+        cur.execute(f'insert into user_list values("{screen_name}","{user_id}","","{url+route+user_id}")')
         db.commit()
         cur.execute(f'create table _{user_id} (group_id TEXT,translate TEXT)')
     else:

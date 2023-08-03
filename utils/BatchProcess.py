@@ -111,3 +111,36 @@ def transf_anas_image2():
                         print('[!]语录修复失败')
             print("------END-------")
         print("====================")
+
+
+def add_primary_key():
+    '''
+    为旧版语录数据库的表新增主键
+
+    由于 sqlite3 本身的问题导致不能在已有表中增加主键，因此需要复制表
+    '''
+    db = sqlite3.connect(path+'/db/anas.db')
+    cur = db.cursor()
+    cur.execute('select * from AnaList') #获取语录清单
+
+    names = [name[0] for name in cur.fetchall()]
+    for name in names: #对每一个语录进行处理
+
+        print(f"======处理{name}语录=======")
+
+        cur.execute(f'create table "new_{name}" (ana TEXT UNIQUE, set_by TEXT, id INTEGER PRIMARY KEY AUTOINCREMENT)')
+        db.commit()
+
+        cur.execute(f'insert into "new_{name}" (ana, set_by) select * from "_{name}"')
+        db.commit()
+
+        print(f"[!]复制 表{name} 完成！")
+        
+        cur.execute(f'drop table "_{name}"')
+        db.commit()
+
+        cur.execute(f'ALTER table "new_{name}" rename to "_{name}"')
+
+        print(f"[!]恢复 表{name} 完成！")
+
+add_primary_key()

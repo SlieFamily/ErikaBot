@@ -18,11 +18,7 @@ def Init():
     cur.execute('select count(*) from sqlite_master where type="table" and name = "ruleList"')
     if cur.fetchall()[0][0] == 0:
         cur.execute('create table ruleList (re_str TEXT)') #高级语录匹配
-        db.commit()
-    cur.execute('select count(*) from sqlite_master where type="table" and name = "PhotoList"')
-    if cur.fetchall()[0][0] == 0:
-        cur.execute('create table PhotoList (ph_name TEXT, url TEXT)') #图库映射表
-        db.commit()    
+        db.commit()   
     cur.close()
     db.close()
 
@@ -35,7 +31,7 @@ def AppendList(name:str)->bool:
     try:
         cur.execute(f'insert into AnaList (ana_name) values ("{name}")')
         db.commit()
-        cur.execute(f'create table "_{name}" (ana TEXT UNIQUE, set_by TEXT)')
+        cur.execute(f'create table "_{name}" (ana TEXT UNIQUE, set_by TEXT, id INTEGER PRIMARY KEY AUTOINCREMENT)')
         db.commit()
     except:
         return False
@@ -105,7 +101,7 @@ def IsAdded(name:str,ana:str,by:str)->bool:
     cur.execute(f'select * from "_{name}" where ana="{ana}"')
     if cur.fetchall() == []:
         try:
-            cur.execute(f'insert into "_{name}" values("{ana}","{by}")')
+            cur.execute(f'insert into "_{name}" values("{ana}","{by}", NULL)')
             db.commit()
             cur.close()
             db.close()
@@ -130,6 +126,9 @@ def IsDel(name:str,ana:str)->bool:
             return False #查无此语录
         cur.execute(f'delete from "_{name}" where ana="{ana}"')
         db.commit()
+        if img := re.findall(f"({name}_[0-9,a-z,A-Z,\.]+\.(image|jpg))",ana):
+            os.system(f"rm -rf imgs/{img}")
+
         # 语录为空，全清
         cur.execute(f'select * from "_{name}"')
         All_anas = cur.fetchall()

@@ -28,7 +28,7 @@ index = 0 #用于轮流刷新
 # 请求定时任务对象scheduler   
 scheduler = require('nonebot_plugin_apscheduler').scheduler
 
-# 创建定时任务：推送订阅信息/每1min查询一次
+# 创建定时任务：推送订阅信息/每5min查询一次
 @scheduler.scheduled_job('interval',minutes = 1,id = 'update')
 async def update():
     
@@ -72,16 +72,16 @@ async def update():
                     'group_id':card[0]
             })
 
-    # await schedBot.call_api("send_guild_channel_msg",**{
-    #     'guild_id':54880161636523193,
-    #     'channel_id':2841279,
-    #     'message':msg+media
-    #     })
-    # await schedBot.call_api("send_guild_channel_msg",**{
-    #     'guild_id':28505721637064109,
-    #     'channel_id':2871978,
-    #     'message':msg+media
-    #     })
+    await schedBot.call_api("send_guild_channel_msg",**{
+        'guild_id':54880161636523193,
+        'channel_id':2841279,
+        'message':msg+media
+        })
+    await schedBot.call_api("send_guild_channel_msg",**{
+        'guild_id':28505721637064109,
+        'channel_id':2871978,
+        'message':msg+media
+        })
     index += 1
     
 # 关注推特命令(仅允许管理员操作)
@@ -109,7 +109,9 @@ async def handle(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg(
                 else:
                     msg = f'{user_inf[0]}({user_id})棋子早已就绪！\n[CQ:image,file=https://cdn.jsdelivr.net/gh/SlieFamily/TempImages@main//Auto/erika_ok.jpeg]'
         else: #否则联网获取信息
-            url = RSS.rss_url+RSS.Apps2Url[app]+user_id
+            data = RSS.LoadRssRule()
+            url = data['rss_url']+data['rss_route'][app]+user_id
+            print(url)
             screen_name = await rss_tool.get_user_info(url)
             if (screen_name != ''):
                 RSS.AddUser(app, user_id, screen_name)
@@ -143,7 +145,7 @@ async def handle(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg(
     await adduser.finish(Message(msg))
 
 #显示本群中的关注列表(仅允许管理员操作)  
-alllist = on_command('完美验尸表',priority=1,permission=GROUP_ADMIN|GROUP_OWNER|PRIVATE_FRIEND|SUPERUSER,)
+alllist = on_command('完美验尸！',priority=1)
 @alllist.handle()
 async def handle(bot: Bot, event: GroupMessageEvent):
     group_id = event.get_session_id()
