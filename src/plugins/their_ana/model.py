@@ -167,7 +167,7 @@ def Merge(name1:str,name2:str)->bool:
     cur.execute(f'select * from "_{name2}"')
     n2_anas = cur.fetchall()
     for ana in n2_anas:
-        cur.execute(f'insert into "_{name1}" values{ana}')
+        cur.execute(f'insert into "_{name1}" values("{ana[0]}","{ana[1]}", NULL)')
     cur.execute(f'delete from AnaList where ana_name="{name2}"')
     cur.execute(f'DROP TABLE "_{name2}"')
     if name2[-4:-1]+name2[-1] == "<高级>":

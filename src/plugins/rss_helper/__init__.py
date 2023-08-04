@@ -42,7 +42,7 @@ async def update():
     user_id = users[index][1]
     msg_id = users[index][2]
     url = users[index][3]
-    logger.info(f'[!]查询 {name} 的推特……')
+    logger.info(f'[!]查询 {name} 动态……')
     new_msg_id,data = await rss_tool.get_latest_msg(url)
     if new_msg_id == '' or new_msg_id == msg_id:
         index += 1
@@ -84,7 +84,7 @@ async def update():
         })
     index += 1
     
-# 关注推特命令(仅允许管理员操作)
+# 关注命令(仅允许管理员操作)
 adduser = on_command('验尸',priority=1,permission=GROUP_ADMIN|GROUP_OWNER|PRIVATE_FRIEND|SUPERUSER,)
 @adduser.handle()
 async def handle(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):

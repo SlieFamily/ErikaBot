@@ -107,12 +107,12 @@ async def handle(bot: Bot, event: Event , msg:Message = CommandArg()):
         await anonymous.finish()
 
     msg = str(msg)
-    if url := get_image_url(msg):
-        if new_ana := cq_image_to(msg,url): #转换CQ格式修复图像显示
-            msg = new_ana
+    # if url := get_image_url(msg):
+    #     if new_ana := cq_image_to(msg,url): #转换CQ格式修复图像显示
+    #         msg = new_ana
 
     await bot.call_api('send_msg',**{
-            'message':"吾主，收到 【匿名消息】~",
+            'message':"吾主，收到【匿名消息】~",
             'group_id':int(group)
         })
     await bot.call_api('send_msg',**{
