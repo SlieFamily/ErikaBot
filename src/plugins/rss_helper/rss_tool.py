@@ -2,6 +2,7 @@ import httpx
 import random
 import hashlib
 import os
+import time
 from nonebot.log import logger
 from typing import Any, Dict, List
 import feedparser
@@ -25,7 +26,7 @@ async def get_user_info(url:str)->str:
         try:
             msg = rss.entries[0]['author']
         except:
-            msg = rss.feed.title.split(" ")[0] #解决B站动态没有作者信息
+            msg = rss.feed.title.split(" ")[0] #解决B站动态没有作者信息问题
         logger.success('[√]订阅消息获取成功！')  #存在因订阅源失效导致xml内容无用的情况，待修复
         return msg
 
@@ -35,36 +36,49 @@ async def get_user_info(url:str)->str:
         return ''
 
 
-async def get_latest_msg(url:str)->(str,str):
+async def get_latest_datas(url:str)->(str,list):
     '''
     根据订阅信息的url检查更新
-    返回信息唯一标识 msg_id 和 更新内容 msg
+    返回信息唯一标识和最新数据
     '''
     try:
         rss = feedparser.parse(url)
-        msg = rss.entries[0]['summary']
+        datas = rss.entries
+        time = datas[0]['published']
         logger.success('[√]订阅消息刷新成功！')  #存在因订阅源失效导致xml内容无用的情况，待修复
-        return str_hash(msg),msg
+        return str_hash(time),datas
 
     except:
         logger.error('[!]RSS访问失败，请检查订阅url或代理/网络设置！')
         logger.error('[!]获取订阅消息失败！')
-        return '',''
+        return '',[]
     
 
 
-async def get_Qmsg(name:str, data:str):
+async def get_Qmsg(name:str, datas:list, msg_id:str)->list:
     '''
     将获得的信息转换为QQ可接收的信息(含翻译选项)
-    返回 文本信息、媒体信息(图片)
+    返回 文本信息、媒体信息(图片)、时间戳
     '''
-    text = f'您关注的 【{name}】 更新了：\n\n'
     trans_msg = ''
-    html = Pq(data)
-    msg = handle_html_tag(html)
-    imgs= [item.attr('src') for item in html('img').items()]
+    msgs = []
+    if msg_id == '': #第一次关注则只刷新最新一条
+        datas = [datas[0]]
+    for data in datas[:10]:
+        if str_hash(data['published']) == msg_id: #从最新动态往下更新，直到与上次记录重合
+            break
+        else:
+            html = Pq(data['summary'])
+            msg = handle_html_tag(html)
+            imgs= [item.attr('src') for item in html('img').items()]
 
-    return text+msg,imgs
+            # 将 GMT 时间转换为 北京时间
+            publish_time = data['published_parsed']
+            publish_time = time.mktime(publish_time)+25200
+            publish_time = time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(publish_time))
+            msgs.insert(0,(msg,imgs,publish_time))
+
+    return msgs
     
 # 百度翻译
 async def baidu_translate(msg):

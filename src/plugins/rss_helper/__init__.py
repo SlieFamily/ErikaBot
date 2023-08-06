@@ -12,6 +12,8 @@ from nonebot.adapters.onebot.v11.permission import GROUP_ADMIN, GROUP_OWNER, PRI
 from nonebot.permission import SUPERUSER
 from nonebot.adapters.onebot.v11 import Bot,Message,GroupMessageEvent,bot,FriendRequestEvent,GroupRequestEvent,GroupDecreaseNoticeEvent
 from nonebot_plugin_guild_patch import GuildMessageEvent
+from nonebot_plugin_saa import MessageFactory, PlatformTarget, AggregatedMessageFactory
+from nonebot_plugin_saa import TargetQQGroup, enable_auto_select_bot, Image, Text
 from nonebot import require
 from nonebot.log import logger
 from . import rss_tool
@@ -21,6 +23,8 @@ import asyncio
 import nonebot
 import threading
 
+enable_auto_select_bot() #为ssa插件自动获取bot
+
 RSS.Init2db() #数据库初始化
 
 index = 0 #用于轮流刷新
@@ -29,7 +33,7 @@ index = 0 #用于轮流刷新
 scheduler = require('nonebot_plugin_apscheduler').scheduler
 
 # 创建定时任务：推送订阅信息/每5min查询一次
-@scheduler.scheduled_job('interval',minutes = 1,id = 'update')
+@scheduler.scheduled_job('interval',minutes = 1,id = 'update') #minutes = 1
 async def update():
     
     if RSS.Empty():
@@ -43,7 +47,7 @@ async def update():
     msg_id = users[index][2]
     url = users[index][3]
     logger.info(f'[!]查询 {name} 动态……')
-    new_msg_id,data = await rss_tool.get_latest_msg(url)
+    new_msg_id,datas = await rss_tool.get_latest_datas(url)
     if new_msg_id == '' or new_msg_id == msg_id:
         index += 1
         return #最新 msg_id 和上次收录的一致(说明并未更新) 或 获取信息失败
@@ -51,37 +55,59 @@ async def update():
     logger.info(f'[!]检测到 {name} 已更新')
     RSS.UpdateMsg(user_id, new_msg_id) #更新数据库的最新 msg_id
     is_translate = False
-    msg,imgs = await rss_tool.get_Qmsg(name,data) #读取信息详情
-
-    media = ''
-    for item in imgs:
-        media += MessageSegment.image(item)+'\n'
+    msgs = await rss_tool.get_Qmsg(name,datas,msg_id) #读取信息详情
 
     cards = RSS.GetALLCard(user_id) #card: [group_id(s), is_translate(s)]
-
     schedBot = nonebot.get_bot()
-    for card in cards:
-        if card[1] == '1':#需要翻译
-            await schedBot.call_api('send_msg',**{
-                'message':msg+"-----[翻译]-----\n"+baidu_translate(msg)+media,
-                    'group_id':card[0]
+
+    if len(msgs) > 1: # 消息大于1条时，采用合并转发策略
+        Qlist = []
+        text = f'您关注的 {name} 更新了数条消息(或删除了某条消息)，TA近期动态已为您合并为聊天消息~'
+        for msg in msgs:
+            media = []
+            for img in msg[1]:
+                media.append(Image(img))
+
+            Qlist.append(
+                    MessageFactory(
+                        [Text(msg[0])]+media+[Text("\n🔔："+msg[2])]
+                    )
+                )
+
+        for card in cards:
+            await MessageFactory("text").send_to(TargetQQGroup(group_id=card[0]))
+            await AggregatedMessageFactory(Qlist).send_to(TargetQQGroup(group_id=card[0]))
+
+    else:
+        media = ''
+        text = f'您关注的 {name} 更新了：\n\n'
+        msg = msgs[0]
+        for img in msg[1]:
+            media += MessageSegment.image(img)
+
+        for card in cards:
+            if card[1] == '1':#需要翻译
+                await schedBot.call_api('send_msg',**{
+                    'message':text+msg[0]+"\n\n【翻译】\n"+baidu_translate(msg)+media+"\n🔔："+msg[2],
+                        'group_id':card[0]
+                })
+            else:#不需要翻译
+                await schedBot.call_api('send_msg',**{
+                        'message':text+msg[0]+media+"\n🔔："+msg[2],
+                        'group_id':card[0]
+                })
+
+        await schedBot.call_api("send_guild_channel_msg",**{
+            'guild_id':54880161636523193,
+            'channel_id':2841279,
+            'message':text+msg[0]+media+"\n🔔："+msg[2],
             })
-        else:#不需要翻译
-            await schedBot.call_api('send_msg',**{
-                    'message':msg+media,
-                    'group_id':card[0]
+        await schedBot.call_api("send_guild_channel_msg",**{
+            'guild_id':28505721637064109,
+            'channel_id':2871978,
+            'message':text+msg[0]+media+"\n🔔："+msg[2],
             })
 
-    await schedBot.call_api("send_guild_channel_msg",**{
-        'guild_id':54880161636523193,
-        'channel_id':2841279,
-        'message':msg+media
-        })
-    await schedBot.call_api("send_guild_channel_msg",**{
-        'guild_id':28505721637064109,
-        'channel_id':2871978,
-        'message':msg+media
-        })
     index += 1
     
 # 关注命令(仅允许管理员操作)
