@@ -37,18 +37,24 @@ ldd --version
 
 ## 环境搭建
 
-> 1. 本项目基于`go-cqhttp`[文档](https://docs.go-cqhttp.org/) 进行QQ登录；
-> 1. 本项目基于`nonebot2`[文档](https://v2.nonebot.dev/) 进行Bot自动化；
-> 1. 本项目基于`Python3`部分的依赖库.
+> 1. 本项目基于 `go-cqhttp`[文档](https://docs.go-cqhttp.org/) 进行QQ登录；
+> 1. 本项目基于 `unidbg-fetch-qsign`[文档](https://github.com/fuqiuluo/unidbg-fetch-qsign/wiki) 部署QQ签名服务器；
+> 1. 本项目基于 `nonebot2`[文档](https://v2.nonebot.dev/) 进行Bot自动化；
+> 1. 本项目基于 `Python3`部分的依赖库.
 ### 后端框架安装
 
 阅读相关框架文档，配置反向`ws`客户端、必要的`.env`相关设置、`android_id`和QQ版本同步、服务器端口等。
 
 > **2023.7.24 实测**
 >
-> > 当前可通过 `go-cqhttp v1.1.0` + `qsign v1.1.0` + `nonebot2 v11` 完美部署
+> > 当前可通过 `go-cqhttp v1.1.0` + `qsign v1.1.0` + `nonebot2 v2.0.1` 完美部署
+>
+> **2023.8.7 实测**
+>
+> > 可通过 `go-cqhttp 5db03c7 dev`+`qsign v1.1.7`+`nonebot2 v2.0.1` 完美部署
 > >
-> > 提供包含 `session.token` 的 `cq+qsign`压缩包
+> > - 需在`cq/config.yml` 中增加配置：[详见 #2304](https://github.com/Mrs4s/go-cqhttp/issues/2304)
+> > - 需在`txlib/8.9.63/config.json`中`"auto_register": true,`
 
 ### 前端Bot安装
 
@@ -62,10 +68,10 @@ ldd --version
 
 ### (可选)启动签名服务器
 
-在`qsign`目录下通过如下命令启动（该命令为 *v1.1.0* 版本的命令示例，新版本并不相同！！）
+在`qsign`目录下通过如下命令启动
 
 ```shell
-bash bin/unidbg-fetch-qsign --library=txlib/8.9.63 --host=0.0.0.0 --port=8888 --count=2 --android_id=7d8a0ccd67770cfa
+bash bin/unidbg-fetch-qsign --basePath=txlib/8.9.63
 ```
 
 ### 启动 go-cqhttp
@@ -73,12 +79,12 @@ bash bin/unidbg-fetch-qsign --library=txlib/8.9.63 --host=0.0.0.0 --port=8888 --
 在`go-cqhttp` 目录下通过如下命令启动
 
 ```
-./go-cqhttp
+./go-cqhttp -faststart
 ```
 
 首次启动时，根据提示在 `config.json` 和 `device.json` 中同步 QQsign 的内容
 
-> 🔔首次启动有账号冻结风险，此后长时间可用，但存在玄学
+> 🔔首次启动有账号**冻结**风险，此后长时间可用，但存在玄学
 
 ### 启用虚拟环境运行机器人
 

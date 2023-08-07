@@ -15,9 +15,10 @@ _✨ 基于NoneBot2的绘梨花多功能Bot，自用 ✨_
 
 # 布置棋盘 |<sub>[快速开始](docs/QuickStart.md)</sub>
 
-> 1. 本项目基于`go-cqhttp`[文档](https://docs.go-cqhttp.org/) 进行QQ登录；
-> 1. 本项目基于`nonebot2`[文档](https://v2.nonebot.dev/) 进行Bot自动化；
-> 1. 本项目基于`Python3`部分的依赖库.
+> 1. 本项目基于 `go-cqhttp`[文档](https://docs.go-cqhttp.org/) 进行QQ登录；
+> 1. 本项目基于 `unidbg-fetch-qsign`[文档](https://github.com/fuqiuluo/unidbg-fetch-qsign/wiki) 部署QQ签名服务器；
+> 1. 本项目基于 `nonebot2`[文档](https://v2.nonebot.dev/) 进行Bot自动化；
+> 1. 本项目基于 `Python3`部分的依赖库.
 
 # 魔导书|<sub>[详细功能介绍](docs/ToolList.md)</sub>
 
