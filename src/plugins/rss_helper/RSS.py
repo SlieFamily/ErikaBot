@@ -49,7 +49,11 @@ def AddUser(app:str, user_id:str, screen_name:str)->bool:
     cur = db.cursor()
     cur.execute(f'select count(*) from user_list where user_id="{user_id}"')
     if cur.fetchall()[0][0]==0:
-        cur.execute(f'insert into user_list values("{screen_name}","{user_id}","","{url+route+user_id}")')
+        if app == '推特':
+            url = "https://nitter.nicfab.eu/"+user_id+"/rss"
+        else:
+            url = url+route+user_id
+        cur.execute(f'insert into user_list values("{screen_name}","{user_id}","","{url}")')
         db.commit()
         cur.execute(f'create table _{user_id} (group_id TEXT,translate TEXT)')
     else:

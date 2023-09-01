@@ -136,7 +136,10 @@ async def handle(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg(
                     msg = f'{user_inf[0]}({user_id})棋子早已就绪！\n[CQ:image,file=https://cdn.jsdelivr.net/gh/SlieFamily/TempImages@main//Auto/erika_ok.jpeg]'
         else: #否则联网获取信息
             data = RSS.LoadRssRule()
-            url = data['rss_url']+data['rss_route'][app]+user_id
+            if app=='推特':
+            	url = "https://nitter.nicfab.eu/"+user_id+"/rss"
+            else:
+            	url = data['rss_url']+data['rss_route'][app]+user_id
             print(url)
             screen_name = await rss_tool.get_user_info(url)
             if (screen_name != ''):
