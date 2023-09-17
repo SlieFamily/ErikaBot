@@ -137,7 +137,7 @@ async def handle(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg(
         else: #否则联网获取信息
             data = RSS.LoadRssRule()
             if app=='推特':
-            	url = "https://nitter.nicfab.eu/"+user_id+"/rss"
+            	url = "https://nitter.services.woodland.cafe/"+user_id+"/rss"
             else:
             	url = data['rss_url']+data['rss_route'][app]+user_id
             print(url)

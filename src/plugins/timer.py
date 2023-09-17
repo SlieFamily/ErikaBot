@@ -19,8 +19,6 @@ from nonebot_plugin_apscheduler import scheduler
 global time_task
 
 time_task = []
-time_task.append(('《匿名代码》发售',datetime.date(2022,7,28-1)))
-time_task.append(('《匿名代码》Steam版本',datetime.date(2023,9,9-1)))
 time_task.append(('2023英语六级(下半年)',datetime.date(2023,12,12-1)))
 time_task.append(('2024考研',datetime.date(2023,12,23-1)))
 time_task.append(('2024年高考',datetime.date(2024,6,7-1)))

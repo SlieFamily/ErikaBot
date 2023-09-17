@@ -65,7 +65,7 @@ def load_anas_byExcel():
     print(data.row_values(0))
     for x in range(1,data.nrows):
         ana_inf = data.row_values(x)
-        if ana_inf[1] == '1' or ana_inf[5] != '哼<高级>语录' or ('.jpg' not in ana_inf[5]) or ana_inf[5] != '语录':
+        if ana_inf[1] == '1' and ana_inf[5] != '哼<高级>语录' and ('.jpg' not in ana_inf[5]) and ana_inf[5] != '语录':
             if model.IsAdded(ana_inf[5][:-2], ana_inf[2], ana_inf[3]):
                 pass
             else:
@@ -146,3 +146,24 @@ def add_primary_key():
             cur.execute(f'ALTER table "new_{name}" rename to "_{name}"')
 
             print(f"[!]恢复 表{name} 完成！")
+
+
+def updateRss():
+    '''
+    批量更新推特RSS的订阅源
+
+    临时处理推特RSS无效问题
+    '''
+    db = sqlite3.connect(path+'/db/rss.db')
+    cur = db.cursor()
+    cur.execute('select * from user_list where url like "%nitter%"')
+    data = cur.fetchall()
+    ids = [user[1] for user in data]
+    for id in ids:
+        print('[!]正在处理用户：',id)
+        cur.execute(f'update user_list set url="https://nitter.services.woodland.cafe/{id}/rss" where user_id="{id}" and url like "%nitter%"')
+        db.commit()
+
+    db.close()
+
+updateRss()
