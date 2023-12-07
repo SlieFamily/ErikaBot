@@ -50,7 +50,7 @@ def AddUser(app:str, user_id:str, screen_name:str)->bool:
     cur.execute(f'select count(*) from user_list where user_id="{user_id}"')
     if cur.fetchall()[0][0]==0:
         if app == '推特':
-            url = "https://nitter.x86-64-unknown-linux-gnu.zip/"+user_id+"/rss"
+            url = "https://nitter.x86-64-unknown-linux-gnu.zip/"+user_id+"/with_replies/rss"
         else:
             url = url+route+user_id
         cur.execute(f'insert into user_list values("{screen_name}","{user_id}","","{url}")')

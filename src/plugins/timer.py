@@ -19,9 +19,9 @@ from nonebot_plugin_apscheduler import scheduler
 global time_task
 
 time_task = []
-time_task.append(('2023英语六级(下半年)',datetime.date(2023,12,12-1)))
-time_task.append(('2024考研',datetime.date(2023,12,23-1)))
-time_task.append(('2024年高考',datetime.date(2024,6,7-1)))
+time_task.append(('2023英语六级(下半年)',datetime.date(2023,12,16)))
+time_task.append(('2024考研',datetime.date(2023,12,24)))
+time_task.append(('2024年高考',datetime.date(2024,6,7)))
 
 groups = ["904517835","818353963","757530435"]
 
