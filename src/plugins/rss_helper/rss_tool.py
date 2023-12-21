@@ -74,7 +74,7 @@ async def get_Qmsg(name:str, datas:list, msg_id:str)->list:
 
             # 将 GMT 时间转换为 北京时间
             publish_time = data['published_parsed']
-            publish_time = time.mktime(publish_time)+25200
+            publish_time = time.mktime(publish_time)+28800
             publish_time = time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(publish_time))
             msgs.insert(0,(msg,imgs,publish_time))
 
