@@ -19,9 +19,9 @@ from nonebot_plugin_apscheduler import scheduler
 global time_task
 
 time_task = []
-time_task.append(('2023英语六级(下半年)',datetime.date(2023,12,16)))
-time_task.append(('2024考研',datetime.date(2023,12,23)))
 time_task.append(('2024年高考',datetime.date(2024,6,7)))
+time_task.append(('2024英语六级(上半年)',datetime.date(2024,6,16)))
+time_task.append(('2025考研',datetime.date(2024,12,23)))
 
 groups = ["904517835","818353963","757530435"]
 
@@ -59,12 +59,12 @@ async def AutoCallDays():
 @scheduler.scheduled_job('cron',hour=19, minute=00, second=0,
 						timezone='Asia/Shanghai',id='call_umiko')
 async def CallUmiko():
-	msg = "[CQ:at,qq=2861867116] 该海猫了"
+	# msg = "[CQ:at,qq=2861867116] 该海猫了"
 	schedBot = nonebot.get_bot()
-	await schedBot.call_api('send_msg',**{
-                			'message':msg,
-                    		'group_id':"757530435"
-            				})
+	# await schedBot.call_api('send_msg',**{
+ #                			'message':msg,
+ #                    		'group_id':"757530435"
+ #            				})
 	await schedBot.call_api('send_msg',**{
                 			'message':"[CQ:at,qq=1364374624] 记得给老娘续费！",
                     		'group_id':"983806711"
