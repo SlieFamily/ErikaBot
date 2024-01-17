@@ -64,7 +64,7 @@ async def handle(bot: Bot, event: Event ):
         resp = await client.get('https://api.lolicon.app/setu/v2?r18=0&size=regular', headers = headers)
         print(resp.json())
         url = resp.json()['data'][0]['urls']['regular']
-        imgurl = url.replace('i.pixiv.re','px3.rainchan.win')
+        imgurl = url#.replace('i.pixiv.re','px3.rainchan.win')
         print(imgurl)
         # imgurl = image_download(imgurl,'setu',False)
         # imgurl = 'file://'+path+'/imgs/'+imgurl
@@ -81,7 +81,7 @@ async def got(bot: Bot, event: Event, msg: str = ArgPlainText("str")):
             resp = await client.get('https://api.lolicon.app/setu/v2?r18=2&size=small', headers = headers)
             print(resp.json())
             url = resp.json()['data'][0]['urls']['small']
-            imgurl = url.replace('i.pixiv.re','px3.rainchan.win')
+            imgurl = url#.replace('i.pixiv.re','px3.rainchan.win')
             print(imgurl)
             # imgurl = image_download(imgurl,'setu',False)
             # imgurl = 'file://'+path+'/imgs/'+imgurl
