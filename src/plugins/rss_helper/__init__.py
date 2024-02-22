@@ -79,11 +79,12 @@ async def update():
             await AggregatedMessageFactory(Qlist).send_to(TargetQQGroup(group_id=card[0]))
 
     else:
-        media = ''
+        media = []
         text = f'您关注的 {name} 更新了：\n\n'
         msg = msgs[0]
         for img in msg[1]:
-            media += MessageSegment.image(img)
+            print(img)
+            media.append(Image(img))
 
         for card in cards:
             if card[1] == '1':#需要翻译
@@ -137,7 +138,7 @@ async def handle(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg(
         else: #否则联网获取信息
             data = RSS.LoadRssRule()
             if app=='推特':
-            	url = "https://nitter.x86-64-unknown-linux-gnu.zip/"+user_id+"/with_replies/rss"
+            	url = "https://nitter.privacydev.net/"+user_id+"/rss"
             else:
             	url = data['rss_url']+data['rss_route'][app]+user_id
             print(url)

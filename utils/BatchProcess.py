@@ -161,7 +161,7 @@ def updateRss():
     ids = [user[1] for user in data]
     for id in ids:
         print('[!]正在处理用户：',id)
-        cur.execute(f'update user_list set url="https://nitter.x86-64-unknown-linux-gnu.zip/{id}/with_replies/rss" where user_id="{id}" and url like "%nitter%"')
+        cur.execute(f'update user_list set url="https://nitter.privacydev.net/{id}/rss" where user_id="{id}" and url like "%nitter%"')
         db.commit()
 
     db.close()
