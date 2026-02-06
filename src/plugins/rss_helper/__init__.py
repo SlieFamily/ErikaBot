@@ -112,7 +112,7 @@ async def update():
     index += 1
     
 # 关注命令(仅允许管理员操作)
-adduser = on_command('验尸',priority=1,permission=GROUP_ADMIN|GROUP_OWNER|PRIVATE_FRIEND|SUPERUSER,)
+adduser = on_command('关注',priority=1,permission=GROUP_ADMIN|GROUP_OWNER|PRIVATE_FRIEND|SUPERUSER,)
 @adduser.handle()
 async def handle(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
     group_id = event.get_session_id()
@@ -175,7 +175,7 @@ async def handle(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg(
     await adduser.finish(Message(msg))
 
 #显示本群中的关注列表(仅允许管理员操作)  
-alllist = on_command('完美验尸！',priority=1)
+alllist = on_command('关注列表',priority=1)
 @alllist.handle()
 async def handle(bot: Bot, event: GroupMessageEvent):
     group_id = event.get_session_id()
