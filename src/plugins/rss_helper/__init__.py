@@ -11,12 +11,12 @@ from nonebot.rule import to_me
 from nonebot.adapters.onebot.v11.permission import GROUP_ADMIN, GROUP_OWNER, PRIVATE_FRIEND
 from nonebot.permission import SUPERUSER
 from nonebot.adapters.onebot.v11 import Bot,Message,GroupMessageEvent,bot,FriendRequestEvent,GroupRequestEvent,GroupDecreaseNoticeEvent
-from nonebot_plugin_guild_patch import GuildMessageEvent
 from nonebot_plugin_saa import MessageFactory, PlatformTarget, AggregatedMessageFactory
 from nonebot_plugin_saa import TargetQQGroup, enable_auto_select_bot, Image, Text
 from nonebot import require
 from nonebot.log import logger
 from . import rss_tool
+from . import biliLive, biliDynamic
 from . import RSS
 from . import config
 import asyncio
@@ -33,7 +33,7 @@ index = 0 #用于轮流刷新
 scheduler = require('nonebot_plugin_apscheduler').scheduler
 
 # 创建定时任务：推送订阅信息/每5min查询一次
-@scheduler.scheduled_job('interval',minutes = 1,id = 'update') #minutes = 1
+@scheduler.scheduled_job('interval', seconds = 20, id = 'update') #minutes = 1
 async def update():
     
     if RSS.Empty():
@@ -42,73 +42,44 @@ async def update():
     global index
     users = RSS.GetUserList()
     index %= len(users) #当idx值超过用户数时，idx的值轮换到下一周期
-    name = users[index][0]
-    user_id = users[index][1]
-    msg_id = users[index][2]
-    url = users[index][3]
-    logger.info(f'[!]查询 {name} 动态……')
-    new_msg_id,datas = await rss_tool.get_latest_datas(url)
+    app = users[index][0]
+    name = users[index][1]
+    user_id = users[index][2]
+    msg_id = users[index][3]
+    url = users[index][4]
+    logger.info(f'[!]查询 {app}:{name}({user_id}) 动态……')
+    if app == 'bili直播':
+        new_msg_id, datas = await biliLive.get_latest_datas(user_id)
+    elif app == 'B站':
+        new_msg_id, datas = await biliDynamic.get_latest_datas(user_id) 
+    else:
+        new_msg_id, datas = await rss_tool.get_latest_datas(url)
     if new_msg_id == '' or new_msg_id == msg_id:
         index += 1
         return #最新 msg_id 和上次收录的一致(说明并未更新) 或 获取信息失败
 
-    logger.info(f'[!]检测到 {name} 已更新')
+    logger.info(f'[!]检测到 {app}:{name} 已更新')
     RSS.UpdateMsg(user_id, new_msg_id) #更新数据库的最新 msg_id
-    is_translate = False
-    msgs = await rss_tool.get_Qmsg(name,datas,msg_id) #读取信息详情
+    if app == 'bili直播':
+        msgs = await biliLive.get_Qmsg(name, datas, msg_id) #读取信息详情
+    elif app == 'B站':
+        msgs = await biliDynamic.get_Qmsg(name, datas, msg_id)
+    else:
+        msgs = await rss_tool.get_Qmsg(name, datas, msg_id)
 
     cards = RSS.GetALLCard(user_id) #card: [group_id(s), is_translate(s)]
     schedBot = nonebot.get_bot()
 
-    if len(msgs) > 1: # 消息大于1条时，采用合并转发策略
-        Qlist = []
-        text = f'您关注的 {name} 更新了数条消息(或删除了某条消息)，TA近期动态已为您合并为聊天消息~'
-        for msg in msgs:
-            media = []
-            for img in msg[1]:
-                media.append(Image(img))
-
-            Qlist.append(
-                    MessageFactory(
-                        [Text(msg[0])]+media+[Text("\n🔔："+msg[2])]
-                    )
-                )
-
-        for card in cards:
-            await MessageFactory(text).send_to(TargetQQGroup(group_id=card[0]))
-            await AggregatedMessageFactory(Qlist).send_to(TargetQQGroup(group_id=card[0]))
-
-    else:
-        media = []
-        text = f'您关注的 {name} 更新了：\n\n'
-        msg = msgs[0]
-        for img in msg[1]:
-            print(img)
-            media.append(Image(img))
-
-        for card in cards:
-            if card[1] == '1':#需要翻译
-                await schedBot.call_api('send_msg',**{
-                    'message':text+msg[0]+"\n\n【翻译】\n"+baidu_translate(msg)+media+"\n🔔："+msg[2],
-                        'group_id':card[0]
-                })
-            else:#不需要翻译
-                await schedBot.call_api('send_msg',**{
-                        'message':text+msg[0]+media+"\n🔔："+msg[2],
-                        'group_id':card[0]
-                })
-
-        await schedBot.call_api("send_guild_channel_msg",**{
-            'guild_id':54880161636523193,
-            'channel_id':2841279,
-            'message':text+msg[0]+media+"\n🔔："+msg[2],
-            })
-        await schedBot.call_api("send_guild_channel_msg",**{
-            'guild_id':28505721637064109,
-            'channel_id':2871978,
-            'message':text+msg[0]+media+"\n🔔："+msg[2],
-            })
-
+    media = ""
+    msg, imgs, time = msgs
+    for img in imgs:
+        print(img)
+        media += f"[CQ:image,file={img}]"
+    for card in cards:
+        await schedBot.call_api('send_msg',**{
+                'message':msg+media+"\n🔔："+time,
+                'group_id':card[0]
+        })
     index += 1
     
 # 关注命令(仅允许管理员操作)
@@ -127,26 +98,26 @@ async def handle(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg(
             app,user_id = str(args).split("：")
         except:
             await adduser.finish(Message(msg))
-
         user_inf = RSS.GetUserInfo(user_id)# 如果该用户已存在数据库中，直接拉取
         if len(user_inf) != 0:
-                status = RSS.AddCard(user_id,group_id)
+                status = RSS.AddCard(user_id, group_id)
                 if status == 0:
-                    msg = f'吾主，{user_inf[0]}({user_id})已经关注成功！\n[CQ:image,file=https://cdn.jsdelivr.net/gh/SlieFamily/TempImages@main//Auto/erika_ok.jpeg]'
+                    msg = f'吾主，{user_inf[0]}({user_id})已经关注成功！'
                 else:
-                    msg = f'{user_inf[0]}({user_id})棋子早已就绪！\n[CQ:image,file=https://cdn.jsdelivr.net/gh/SlieFamily/TempImages@main//Auto/erika_ok.jpeg]'
+                    msg = f'{user_inf[0]}({user_id})棋子早已就绪！'
         else: #否则联网获取信息
             data = RSS.LoadRssRule()
-            if app=='推特':
-            	url = "https://nitter.privacydev.net/"+user_id+"/rss"
+            url = data['route'][app]+user_id
+            if app == 'bili直播':
+                screen_name = await biliLive.get_user_info(user_id)
+            elif app == 'B站':
+                screen_name = await biliDynamic.get_user_info(user_id)
             else:
-            	url = data['rss_url']+data['rss_route'][app]+user_id
-            print(url)
-            screen_name = await rss_tool.get_user_info(url)
+                screen_name = await rss_tool.get_user_info(url)
             if (screen_name != ''):
                 RSS.AddUser(app, user_id, screen_name)
                 RSS.AddCard(user_id, group_id)
-                msg = f'吾主，{screen_name}({user_id})已经关注成功！\n[CQ:image,file=https://cdn.jsdelivr.net/gh/SlieFamily/TempImages@main//Auto/erika_ok.jpeg]'
+                msg = f'吾主，{screen_name}({user_id})已经关注成功！'
             else:
                 msg = f'{user_id} 不存在或网络错误！'
     await adduser.finish(Message(msg))
@@ -171,7 +142,7 @@ async def handle(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg(
             if status != 0:
                 msg = f'吾主，{user_inf[0]}({user_id})不在本群的关注列表'
             else:
-                msg = f'{user_inf[0]}({user_id})删除成功！\n[CQ:image,file=https://cdn.jsdelivr.net/gh/SlieFamily/TempImages@main/Auto/erika_ok.jpeg]'
+                msg = f'{user_inf[0]}({user_id})删除成功！'
     await adduser.finish(Message(msg))
 
 #显示本群中的关注列表(仅允许管理员操作)  
@@ -182,13 +153,13 @@ async def handle(bot: Bot, event: GroupMessageEvent):
     if not group_id.isdigit():
         group_id = group_id.split('_')[1] #获取群聊号
 
-    msg = '用户名(订阅号ID)\n'
+    msg = '应用-用户名(ID)\n'
     content = ''
     users = RSS.GetUserList()
     for user in users:
-        card = RSS.GetCard(user[1],group_id)
+        card = RSS.GetCard(user[2],group_id)
         if len(card) != 0:
-            content += f'\n{user[0]}({user[1]})'
+            content += f'\n{user[0]}-{user[1]}({user[2]})'
     if content == '':
         msg = '当前关注列表为空！'
     else:

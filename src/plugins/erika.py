@@ -19,8 +19,8 @@ sarcasm = on_command("嘲讽",priority=3)
 # welcom = on_notice(priority=4)
 selfIntro = on_command("来点自我介绍",priority=4)
 anonymous = on_command("隔空喊话",priority=3)
-poke = on_notice(priority=5)
-say = on_command("请说：",priority=3)
+# poke = on_notice(priority=5)
+# say = on_command("请说：",priority=3)
 # red_true = on_regex("((#[0-9,a-f,A-F]{6})真实|(虚妄)真实|(红色)真实|(蓝色)真实|(金色)真实)：([\w\W]+)",priority=3)
 
 @sarcasm.handle()
@@ -41,14 +41,14 @@ async def handle(bot: Bot, event: Event , msg:Message = CommandArg()):
 #     msg = at_+'欢迎新人进裙~'
 #     await welcom.finish(Message(msg))
 
-@poke.handle()
-async def handle(bot: Bot, event: PokeNotifyEvent ):
-    msg = event.get_log_string()
-    check = re.search("'target_id': 2523899329",msg)
-    rsp = [f'[CQ:poke,type=1,id=-1,name="戳一戳",qq={event.get_user_id()}]'] #,'贱民也想戳一戳我？','再戳？']
-    if check:
-        await poke.finish(Message(random.choice(rsp)))
-    await poke.finish()
+# @poke.handle()
+# async def handle(bot: Bot, event: PokeNotifyEvent ):
+#     msg = event.get_log_string()
+#     check = re.search("'target_id': 2523899329",msg)
+#     rsp = [f'[CQ:poke,type=1,id=-1,name="戳一戳",qq={event.get_user_id()}]'] #,'贱民也想戳一戳我？','再戳？']
+#     if check:
+#         await poke.finish(Message(random.choice(rsp)))
+#     await poke.finish()
 
 @selfIntro.handle()
 async def handle(bot: Bot, event: Event , msg: Message = CommandArg()):
@@ -82,14 +82,14 @@ async def handle(bot: Bot, event: Event , msg: Message = CommandArg()):
 #     send_msg[0]['data']['data'] = data
 #     await red_true.finish(Message(send_msg))
 
-@say.handle()
-async def handle(bot: Bot, event: GroupMessageEvent,text: Message = CommandArg()):
-    text = re.findall('[\w\W]+',str(text))[0]
-    print("[!]tts语音接收字符长度：",len(text))
-    if len(text)<=100:
-        await say.finish(Message(f'[CQ:tts,text={text}]'))
-    else:
-        await say.finish(Message('你这个我说匿🐎！'))
+# @say.handle()
+# async def handle(bot: Bot, event: GroupMessageEvent,text: Message = CommandArg()):
+#     text = re.findall('[\w\W]+',str(text))[0]
+#     print("[!]tts语音接收字符长度：",len(text))
+#     if len(text)<=100:
+#         await say.finish(Message(f'[CQ:tts,text={text}]'))
+#     else:
+#         await say.finish(Message('你这个我说匿🐎！'))
 
 @anonymous.handle()
 async def handle(bot: Bot, event: Event , msg:Message = CommandArg()):

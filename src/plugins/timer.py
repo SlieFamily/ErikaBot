@@ -19,11 +19,10 @@ from nonebot_plugin_apscheduler import scheduler
 global time_task
 
 time_task = []
-time_task.append(('2024年高考',datetime.date(2024,6,7)))
-time_task.append(('2024英语六级(上半年)',datetime.date(2024,6,16)))
-time_task.append(('2025考研',datetime.date(2024,12,23)))
+time_task.append(('2026年高考',datetime.date(2026,6,7)))
+time_task.append(('雪糕cheese生日会',datetime.date(2026,3,3)))
 
-groups = ["904517835","818353963","757530435"]
+groups = ["818353963","757530435", "1053093162", "555973529"]
 
 async def CallDays()->str:
 	msg = '小胶布提醒你，你剩下的时间不多了~\n-----------\n'
@@ -65,10 +64,10 @@ async def CallUmiko():
  #                			'message':msg,
  #                    		'group_id':"757530435"
  #            				})
-	await schedBot.call_api('send_msg',**{
-                			'message':"[CQ:at,qq=1364374624] 记得给老娘续费！",
-                    		'group_id':"983806711"
-            				})
+	# await schedBot.call_api('send_msg',**{
+    #             			'message':"[CQ:at,qq=1364374624] 记得给老娘续费！",
+    #                 		'group_id':"983806711"
+    #         				})
 
 AddDays = on_command("add 倒计时：",priority=2)
 @AddDays.handle()

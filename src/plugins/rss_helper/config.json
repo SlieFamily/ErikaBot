@@ -1,8 +1,7 @@
 {
-	"rss_url": "https://rss.mcseekeri.com",
-	"rss_route":{
-		"推特": "/twitter/user/",
-    	"微博": "/weibo/user/",
-    	"B站": "/bilibili/user/dynamic/"
+	"route":{
+    	"微博": "https://rss.mcseekeri.com/weibo/user/",
+    	"B站": "https://api.bilibili.com/x/polymer/web-dynamic/v1/feed/space?offset=&host_mid=",
+		"bili直播": "https://api.live.bilibili.com/room/v1/Room/get_info?room_id="
 	}
 }

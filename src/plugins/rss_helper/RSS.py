@@ -9,6 +9,7 @@ js_path = js_path.replace("\\", "/")
 
 '''
 TABLE user_list [
+                    app_name(应用名称),
                     name(用户名), 
                     user_id(账号), 
                     msg_id(推送信息标识), 
@@ -33,7 +34,7 @@ def Init2db():
     cur = db.cursor()
     cur.execute('select count(*) from sqlite_master where type="table" and name = "user_list"')
     if cur.fetchall()[0][0]==0: #不存在则创建表
-        cur.execute('create table user_list (name TEXT,user_id TEXT,msg_id TEXT,url TEXT)')
+        cur.execute('create table user_list (app_name TEXT,name TEXT,user_id TEXT,msg_id TEXT,url TEXT)')
         db.commit()
     cur.close()
     db.close()
@@ -43,17 +44,12 @@ def AddUser(app:str, user_id:str, screen_name:str)->bool:
     创建用户对应的表
     '''
     data = LoadRssRule()
-    url = data['rss_url']
-    route = data['rss_route'][app]
+    url = data['route'][app] + user_id
     db = sqlite3.connect('db/rss.db')
     cur = db.cursor()
     cur.execute(f'select count(*) from user_list where user_id="{user_id}"')
     if cur.fetchall()[0][0]==0:
-        if app == '推特':
-            url = "https://nitter.privacydev.net/"+user_id+"/rss"
-        else:
-            url = url+route+user_id
-        cur.execute(f'insert into user_list values("{screen_name}","{user_id}","","{url}")')
+        cur.execute(f'insert into user_list values("{app}","{screen_name}","{user_id}","","{url}")')
         db.commit()
         cur.execute(f'create table _{user_id} (group_id TEXT,translate TEXT)')
     else:
@@ -212,7 +208,7 @@ def IsNotInCard(user_id:str, group_id:str)->bool:
         cur.close()
         db.close()
         return True
-    screen_name = user_inf[0][0]
+    screen_name = user_inf[0][1]
     cur.execute(f'select * from _{user_id} where group_id="{group_id}"')
     data = cur.fetchall()
     if len(data) == 0:
@@ -234,7 +230,7 @@ def GetRssUrl(user_id:str)->str:
         cur.close()
         db.close()
         return ''
-    url = user_inf[0][3]
+    url = user_inf[0][4]
     return url
 
 # def SetRssRule(app:str, route:str, url:str = 'https://rss.mcseekeri.top')->bool:

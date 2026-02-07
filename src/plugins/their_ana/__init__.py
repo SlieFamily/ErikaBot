@@ -70,7 +70,7 @@ async def handle(bot: Bot, event: Event):
         msg.append(MessageFactory(string[:-1]))
         string = ""
 
-    await AggregatedMessageFactory(msg).send_to(TargetQQGroup(group_id=group))
+    await AggregatedMessageFactory(msg).send()
     await AnaList.finish()
 
 @SuperList.handle()
@@ -93,7 +93,7 @@ async def handle(bot: Bot,event: Event ):
         msg.append(MessageFactory(string[:-1]))
         string = ""
 
-    await AggregatedMessageFactory(msg).send_to(TargetQQGroup(group_id=group))
+    await AggregatedMessageFactory(msg).send()
     await AnaList.finish()
 
 @theirAna.handle()
