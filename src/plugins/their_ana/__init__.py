@@ -1,7 +1,6 @@
 import nonebot
 import re
 import math
-from .config import Config
 from nonebot import on_command,on_regex,on_notice
 from nonebot.rule import to_me
 from nonebot.typing import T_State
@@ -30,10 +29,6 @@ anas_rule = "([\w\W]{1,6}<高级>)语录|([\w\W]{1,6})语录"
 
 # 获取Bot主目录
 path = os.path.abspath(os.getcwd())
-
-# 默认配置
-global_config = nonebot.get_driver().config
-plugin_config = Config(**global_config.dict())
 
 # 响应命令
 theirAna = on_regex("("+anas_rule+")[-]*([0-9]*)", priority=3) 
@@ -148,8 +143,9 @@ async def handle(bot: Bot, event: Event , args: Message = CommandArg()):
         if url := get_image_url(ana):
             print('[!]所添加语录存在图片消息')
             if new_url := image_download(url,name): #如果有图片，则下载图片到本地
-                new_url = 'file://'+path+'/imgs/'+new_url
-                if new_ana := cq_image_to(ana,new_url): #转换CQ格式
+                new_url = 'file:///'+path+'\\imgs\\'+new_url
+                print('[!]新图片路径：',new_url)
+                if new_ana := ntqq_image_to(ana,new_url): #转换NTQQ格式
                     print('[!]修复后的语录：',new_ana)
                     ana = new_ana
                 else:

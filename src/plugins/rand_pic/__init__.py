@@ -1,5 +1,4 @@
 import nonebot
-from .config import Config
 import httpx
 import random
 import os
@@ -13,8 +12,6 @@ from nonebot.log import logger
 from utils.QImage import image_download
 from typing import Any, Dict, List, Tuple, Optional, Union
 
-global_config = nonebot.get_driver().config
-plugin_config = Config(**global_config.dict())
 
 # 获取Bot主目录
 path = os.path.abspath(os.getcwd())

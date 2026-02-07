@@ -166,4 +166,39 @@ def updateRss():
 
     db.close()
 
-updateRss()
+
+def transf_anas_image3():
+    '''
+    批量更换旧语录中的图片url为本地路径
+    '''
+    db = sqlite3.connect(path+'/db/anas.db')
+    cur = db.cursor()
+    cur.execute('select * from AnaList') #获取语录清单
+
+    import sys
+    sys.path.append("src/plugins/their_ana")
+    import model
+
+    names = [name[0] for name in cur.fetchall()]
+    for name in names: #对每一个语录进行处理
+        cur.execute(f'select * from "_{name}"')
+        anas = cur.fetchall()
+        print(f"======处理{name}语录=======")
+        for ana in anas:
+            print("-----START-------")
+            by = ana[1]
+            ana = ana[0]
+            if "url=https://image.qslie.top/i/qqbot" in ana and "[CQ:image" in ana:
+                print('[!]存在图片迁移问题，开始处理')
+                # 提取图片文件名
+                match = re.search(r'\[CQ:image,url=https://image\.qslie\.top/i/qqbot/([^\]]+)\]', ana)
+                if match:
+                    filename = match.group(1)
+                    new_ana = re.sub(r'\[CQ:image,url=https://image\.qslie\.top/i/qqbot/[^\]]+\]', f'[CQ:image,file=file:///E:\\\\rerika\\\\Erikabot\\\\imgs\\\\{filename}]', ana)
+                    print('重建语录内容：',new_ana)
+                    cur.execute(f'update "_{name}" set ana = ? where ana = ?', (new_ana, ana))
+                    db.commit()
+            print("------END-------")
+        print("====================")
+
+transf_anas_image3()
