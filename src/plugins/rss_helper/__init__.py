@@ -50,13 +50,17 @@ async def update():
     logger.info(f'[!]查询 {app}:{name}({user_id}) 动态……')
     if app == 'bili直播':
         new_msg_id, datas = await biliLive.get_latest_datas(user_id)
+        if new_msg_id == '0' or msg_id == '1': #直播未开播或已发送开播提醒
+            RSS.UpdateMsg(user_id, new_msg_id) #更新数据库的最新 msg_id
+            index += 1
+            return #未开播或获取信息失败
     elif app == 'B站':
         new_msg_id, datas = await biliDynamic.get_latest_datas(user_id) 
+        if new_msg_id == msg_id:
+            index += 1
+            return #最新 msg_id 和上次收录的一致(说明并未更新)
     else:
         new_msg_id, datas = await rss_tool.get_latest_datas(url)
-    if new_msg_id == '' or new_msg_id == msg_id:
-        index += 1
-        return #最新 msg_id 和上次收录的一致(说明并未更新) 或 获取信息失败
 
     logger.info(f'[!]检测到 {app}:{name} 已更新')
     RSS.UpdateMsg(user_id, new_msg_id) #更新数据库的最新 msg_id

@@ -39,11 +39,8 @@ async def get_latest_datas(room_id:str):
         info = await room.get_room_info()
         datas = info['room_info']
         live_status = datas['live_status']
-        logger.success('[√]订阅消息刷新成功！')
-        if live_status == 1:
-            return str_hash(str(datas['live_status'])), datas
-        else:
-            return '', []
+        logger.success(f'[√]订阅消息刷新成功。Live Status: {live_status}')
+        return str(live_status), datas
     except:
         logger.error('[!]RSS访问失败，请检查订阅url或代理/网络设置！')
         logger.error('[!]获取订阅消息失败！')
