@@ -23,9 +23,8 @@ async def get_user_info(room_id:str)->str:
         room = live.LiveRoom(room_id)
         info = await room.get_room_info()
         return info['anchor_info']['base_info']['uname']
-    except:
-        logger.error('[!]RSS访问失败，请检查订阅url或代理/网络设置！')
-        logger.error('[!]获取订阅消息失败！')
+    except Exception as e:
+        logger.error(f'[!]获取直播间信息失败！Room ID: {room_id}, 错误: {e}')
         return ''
 
 
