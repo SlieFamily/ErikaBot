@@ -56,6 +56,7 @@ def image_download(url:str, tag:str, use_timestamp:bool = True)->str:
     req = requests.get(url, headers = headers, timeout = 5)
     filename = ''
     dirname = 'imgs/'
+    tag = tag.replace('<高级>', '_高级_')
     if req.content:
         if use_timestamp:
             filename = tag+"_"+str(time.time())+".jpg"
