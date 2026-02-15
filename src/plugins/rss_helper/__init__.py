@@ -58,7 +58,7 @@ async def update():
             return #未开播或获取信息失败
     elif app == 'B站':
         new_msg_id, datas = await biliDynamic.get_latest_datas(user_id) 
-        if new_msg_id == msg_id:
+        if new_msg_id == msg_id or new_msg_id == '': #最新动态与上次收录的一致(说明并未更新)或获取信息失败
             index += 1
             return #最新 msg_id 和上次收录的一致(说明并未更新)
         else:
