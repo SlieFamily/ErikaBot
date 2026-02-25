@@ -60,26 +60,17 @@ async def get_Qmsg(name:str, datas:list, msg_id:str)->list:
     将获得的信息转换为QQ可接收的信息(含翻译选项)
     返回 文本信息、媒体信息(图片)、时间戳
     '''
-    trans_msg = ''
-    msgs = []
-    if msg_id == '': #第一次关注则只刷新最新一条
-        datas = [datas[0]]
-    for data in datas[:10]:
-        if str_hash(data['published']) == msg_id: #从最新动态往下更新，直到与上次记录重合
-            break
-        else:
-            html = Pq(data['summary'])
-            msg = handle_html_tag(html)
-            imgs= [item.attr('src') for item in html('img').items()]
+    msg = f'你关注的 {name} 发布新微博啦！\n\n'
+    data = datas[0]
+    if str_hash(data['published']) == msg_id: #从最新动态往下更新，直到与上次记录重合
+        return ()
+    else:
+        html = Pq(data['summary'])
+        msg += handle_html_tag(html)
+        imgs= [item.attr('src') for item in html('img').items()]
+        # 将 GMT 时间转换为 北京时间
+        publish_time = data['published_parsed']
+        publish_time = time.mktime(publish_time)+28800
+        publish_time = time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(publish_time))
 
-            # 将 GMT 时间转换为 北京时间
-            publish_time = data['published_parsed']
-            publish_time = time.mktime(publish_time)+28800
-            publish_time = time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(publish_time))
-            msgs.insert(0,(msg,imgs,publish_time))
-
-    return msgs
-    
-# 百度翻译
-async def baidu_translate(msg):
-    pass
+    return msg, imgs, publish_time

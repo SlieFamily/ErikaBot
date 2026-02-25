@@ -68,6 +68,11 @@ async def update():
             RSS.UpdateMsg(user_id, new_msg_id) #更新数据库的最新 msg_id
     else:
         new_msg_id, datas = await rss_tool.get_latest_datas(url)
+        if new_msg_id == msg_id or new_msg_id == '': #最新动态与上次收录的一致(说明并未更新)或获取信息失败
+            index += 1
+            return #最新 msg_id 和上次收录的一致(说明并未更新)
+        else:
+            RSS.UpdateMsg(user_id, new_msg_id) #更新数据库的最新 msg_id
 
     logger.info(f'[!]检测到 {app}:{name} 已更新')
     if app == 'bili直播':
@@ -152,7 +157,7 @@ async def handle(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg(
             if status != 0:
                 msg = f'吾主，{user_inf[0]-user_inf[1]}({user_id})不在本群的关注列表'
             else:
-                msg = f'{user_inf[0]-user_inf[1]}({user_id})删除成功！'
+                msg = f'{user_inf[0]}-{user_inf[1]}({user_id})删除成功！'
     await removeuser.finish(Message(msg))
 
 #显示本群中的关注列表(仅允许管理员操作)  
