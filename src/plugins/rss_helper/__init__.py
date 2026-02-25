@@ -52,10 +52,13 @@ async def update():
         new_msg_id, datas = await biliLive.get_latest_datas(user_id)
         if new_msg_id == '1' and msg_id == '0': #直播开播且未发送开播提醒
             RSS.UpdateMsg(user_id, new_msg_id) #更新数据库的最新 msg_id
+        elif new_msg_id == '0':
+            RSS.UpdateMsg(user_id, new_msg_id)
+            index += 1
+            return #直播未开播
         else:
             index += 1
-            RSS.UpdateMsg(user_id, new_msg_id) #更新数据库的最新 msg_id
-            return #未开播或获取信息失败
+            return #获取信息失败
     elif app == 'B站':
         new_msg_id, datas = await biliDynamic.get_latest_datas(user_id) 
         if new_msg_id == msg_id or new_msg_id == '': #最新动态与上次收录的一致(说明并未更新)或获取信息失败
@@ -109,9 +112,9 @@ async def handle(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg(
         if len(user_inf) != 0:
                 status = RSS.AddCard(user_id, group_id)
                 if status == 0:
-                    msg = f'吾主，{user_inf[0]}({user_id})已经关注成功！'
+                    msg = f'吾主，{user_inf[1]}({user_id})已经关注成功！'
                 else:
-                    msg = f'{user_inf[0]}({user_id})棋子早已就绪！'
+                    msg = f'{user_inf[1]}({user_id})棋子早已就绪！'
         else: #否则联网获取信息
             data = RSS.LoadRssRule()
             url = data['route'][app]+user_id
@@ -147,10 +150,10 @@ async def handle(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg(
         else:
             status = RSS.DeleteCard(user_id,group_id)
             if status != 0:
-                msg = f'吾主，{user_inf[0]}({user_id})不在本群的关注列表'
+                msg = f'吾主，{user_inf[0]-user_inf[1]}({user_id})不在本群的关注列表'
             else:
-                msg = f'{user_inf[0]}({user_id})删除成功！'
-    await adduser.finish(Message(msg))
+                msg = f'{user_inf[0]-user_inf[1]}({user_id})删除成功！'
+    await removeuser.finish(Message(msg))
 
 #显示本群中的关注列表(仅允许管理员操作)  
 alllist = on_command('关注列表',priority=1)

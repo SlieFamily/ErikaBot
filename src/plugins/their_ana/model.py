@@ -56,7 +56,7 @@ def Isexisted(name:str)->bool:
     db.close()
     return True
 
-def GetAna(name:str,group:str,num:int=-1)->str:
+def GetAna(name:str, group:str, num:int=-1)->str:
     '''
     通过语录名称和群号随机提取语录
     '''
@@ -80,6 +80,11 @@ def GetAna(name:str,group:str,num:int=-1)->str:
         try:
             i = random.randint(1,len(All_anas))
             ana = All_anas[i-1][0]
+        except:
+            pass
+    elif num == 0:
+        try:
+            ana = All_anas[-1][0]
         except:
             pass
     else:

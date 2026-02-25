@@ -1,20 +1,18 @@
 import nonebot
 import re
 import math
-from nonebot import on_command,on_regex,on_notice
+from nonebot import on_command, on_regex, on_notice
 from nonebot.rule import to_me
 from nonebot.typing import T_State
 from nonebot.adapters import Bot,Event
 from nonebot.params import ArgPlainText, Arg, CommandArg, RegexGroup, EventToMe
-from nonebot.adapters.onebot.v11 import Message,MessageSegment,GroupIncreaseNoticeEvent,PokeNotifyEvent
-from nonebot.adapters.onebot.v11 import Message,MessageSegment,GroupIncreaseNoticeEvent,GroupMessageEvent
+from nonebot.adapters.onebot.v11 import Message, MessageSegment, GroupIncreaseNoticeEvent, GroupMessageEvent, PokeNotifyEvent
 from nonebot.permission import SUPERUSER
 from nonebot.adapters.onebot.v11.permission import GROUP_ADMIN, GROUP_OWNER, PRIVATE_FRIEND
 from nonebot.log import logger
 from nonebot.message import run_postprocessor
 from nonebot.matcher import Matcher
-from nonebot_plugin_saa import MessageFactory, PlatformTarget, AggregatedMessageFactory
-from nonebot_plugin_saa import TargetQQGroup, enable_auto_select_bot
+from nonebot_plugin_saa import Text, Image, MessageFactory, AggregatedMessageFactory
 from . import model
 import random
 from utils.QImage import *
@@ -31,8 +29,7 @@ anas_rule = r"([^\s\W_]{1,6}<高级>)语录|([^\s\W_]{1,6})语录"
 path = os.path.abspath(os.getcwd())
 
 # 响应命令
-theirAna = on_regex("("+anas_rule+")[-]*([0-9]*)", priority=3) 
-# AddAna = on_regex("add ("+anas_rule+")：([\s\S]+)", priority=2)
+theirAna = on_regex("("+anas_rule+")[-]*([0-9]*)", priority=4) 
 AddAna = on_command("add",priority=2)
 DelAna = on_command("del",priority=2)
 MergeAna = on_regex("merge ("+anas_rule+")，("+anas_rule+")",priority=1,permission=SUPERUSER)
@@ -42,13 +39,13 @@ DelAllAna = on_command("drop",priority=1,permission=SUPERUSER)
 Rename = on_regex("rename ("+anas_rule+") to ("+anas_rule+")",priority=1,permission=SUPERUSER)
 FindAna = on_regex("find：([\s\S]+)",priority=1)
 SuperAna = on_regex("[\w\W]+",priority=4)
-AnaList = on_command("侦探的棋子名单",priority=3)
-SuperList = on_command("侦探的魔女名单",priority=3)
+AnaList = on_command("侦探的棋子名单",priority=3,permission=GROUP_ADMIN|GROUP_OWNER|PRIVATE_FRIEND|SUPERUSER)
+SuperList = on_command("侦探的魔女名单",priority=3,permission=GROUP_ADMIN|GROUP_OWNER|PRIVATE_FRIEND|SUPERUSER)
 abuse = on_regex("[\s\S]*",rule=to_me(),priority=5)
 abuse_on = on_command("开启嘲讽状态",priority=1,permission=GROUP_ADMIN|GROUP_OWNER|PRIVATE_FRIEND|SUPERUSER)
 abuse_off = on_command("关闭嘲讽状态",priority=1,permission=GROUP_ADMIN|GROUP_OWNER|PRIVATE_FRIEND|SUPERUSER)
 
-enable_auto_select_bot() #为ssa插件自动获取bot
+# enable_auto_select_bot() #为ssa插件自动获取bot
 
 @AnaList.handle()
 async def handle(bot: Bot, event: Event):
@@ -56,7 +53,7 @@ async def handle(bot: Bot, event: Event):
     if not group.isdigit():
         group = group.split('_')[1]
 
-    names,cnts = model.GetList()
+    names, cnts = model.GetList()
     msg = [] #合并聊天记录信息
     string = ""
     gp_names = []; gp_cnts = [] #每20条一页
@@ -67,9 +64,12 @@ async def handle(bot: Bot, event: Event):
     for k in range(math.ceil(len(names)/20)):    
         for i in range(len(gp_names[k])):
             string += gp_names[k][i]+'语录 \t('+ str(gp_cnts[k][i]) +'条)\n'
-        msg.append(MessageFactory(string[:-1]))
+        msg.append(Text(string[:-1]))
+        if len(msg) >= 30:
+            await AggregatedMessageFactory(msg).send()
+            msg = []
         string = ""
-
+    
     await AggregatedMessageFactory(msg).send()
     await AnaList.finish()
 
@@ -90,7 +90,7 @@ async def handle(bot: Bot,event: Event ):
     for k in range(math.ceil(len(names)/20)):    
         for i in range(len(gp_names[k])):
             string += gp_names[k][i][:-4]+' \t('+ str(gp_cnts[k][i]) +'条)\n'
-        msg.append(MessageFactory(string[:-1]))
+        msg.append(Text(string[:-1]))
         string = ""
 
     await AggregatedMessageFactory(msg).send()
@@ -105,10 +105,13 @@ async def handle(bot: Bot, event: Event, name = RegexGroup()):
     if not group.isdigit():
         group = group.split('_')[1]
     if not num:
-        my_ana = model.GetAna(name,group) #获取随机语录
+        my_ana = model.GetAna(name, group) #获取随机语录
     else:
         try:
-           my_ana = model.GetAna(name,group,int(num)) #获取指定序号的语录
+            if num == 'max':
+                my_ana = model.GetAna(name, group, 0) #获取最新语录
+            else:
+                my_ana = model.GetAna(name, group, int(num)) #获取指定序号的语录
     # state["auto_name"] = name
     # AutoAna = Matcher.new(temp=True,priority=4,default_state=state)
     # @AutoAna.handle()
