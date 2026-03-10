@@ -20,9 +20,9 @@ global time_task
 
 time_task = []
 time_task.append(('2026年高考',datetime.date(2026,6,7)))
-time_task.append(('雪糕cheese生日会',datetime.date(2026,3,3)))
+time_task.append(('石头门音乐会',datetime.date(2026,5,31)))
 
-groups = ["818353963","757530435", "1053093162", "555973529"]
+groups = ["818353963", "757530435", "1053093162"]
 
 async def CallDays()->str:
 	msg = '小胶布提醒你，你剩下的时间不多了~\n-----------\n'
@@ -32,7 +32,7 @@ async def CallDays()->str:
 	msg += '-----------'
 	return msg
 
-HowManyDays = on_command("倒计时",aliases=set(['考研倒计时','考研时间','考试']), priority=2)
+HowManyDays = on_command("倒计时", priority=2) # ,aliases=set(['考研倒计时','考研时间','考试'])
 @HowManyDays.handle()
 async def handle(bot: Bot, event: Event, state: T_State):
 	msg = await CallDays()

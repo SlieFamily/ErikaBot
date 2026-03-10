@@ -22,14 +22,14 @@ model.Init()
 
 rsp = ["用最爱的筷子品味最恶俗的语录才称得上健全~","知性的强J者怎能输给后辈！"]
 
-anas_rule = r"([^\s\W_]{1,6}<高级>)语录|([^\s\W_]{1,6})语录"
+anas_rule = r"([\w\W]{1,6}<高级>)语录|([\w\W]{1,6})语录"
 
 
 # 获取Bot主目录
 path = os.path.abspath(os.getcwd())
 
 # 响应命令
-theirAna = on_regex("("+anas_rule+")[-]*([0-9]*)", priority=4) 
+theirAna = on_regex("("+anas_rule+")(?:-([0-9]+|max))?", priority=4) 
 AddAna = on_command("add",priority=2)
 DelAna = on_command("del",priority=2)
 MergeAna = on_regex("merge ("+anas_rule+")，("+anas_rule+")",priority=1,permission=SUPERUSER)
@@ -38,7 +38,7 @@ UnlockAna = on_command("unlock",priority=1,permission=GROUP_ADMIN|GROUP_OWNER|PR
 DelAllAna = on_command("drop",priority=1,permission=SUPERUSER)
 Rename = on_regex("rename ("+anas_rule+") to ("+anas_rule+")",priority=1,permission=SUPERUSER)
 FindAna = on_regex("find：([\s\S]+)",priority=1)
-SuperAna = on_regex("[\w\W]+",priority=4)
+SuperAna = on_regex("[\w\W]+",priority=5)
 AnaList = on_command("侦探的棋子名单",priority=3,permission=GROUP_ADMIN|GROUP_OWNER|PRIVATE_FRIEND|SUPERUSER)
 SuperList = on_command("侦探的魔女名单",priority=3,permission=GROUP_ADMIN|GROUP_OWNER|PRIVATE_FRIEND|SUPERUSER)
 abuse = on_regex("[\s\S]*",rule=to_me(),priority=5)
@@ -156,7 +156,7 @@ async def handle(bot: Bot, event: Event , args: Message = CommandArg()):
             else:
                 print('[!]图片下载失败')
 
-        if model.IsAdded(name,ana,by):
+        if ana and model.IsAdded(name,ana,by):
             await AddAna.finish(Message(random.choice(rsp)))
         await AddAna.finish(Message("苦撸西，失败了失败了！"))
     else:
@@ -283,10 +283,10 @@ async def handle(bot: Bot, event: Event):
     if not group.isdigit():
         group = group.split('_')[1]
     # 过滤自发消息 (频道问题)
-    if isSelf := re.findall("'nickname': '古都艾丽卡'",str(event.get_log_string())):
+    if isSelf := re.findall("'nickname': '古都艾丽卡'", str(event.get_log_string())):
         await SuperAna.finish()
     # 高级语录检测
-    name = re.findall(model.GetReRule(),str(msg))
+    name = re.findall(model.GetReRule(), str(msg))
     if not name:
         await SuperAna.finish()
     name = name[0]+"<高级>"

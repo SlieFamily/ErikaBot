@@ -4,3 +4,4 @@
 /ghostdriver.log
 /db.json
 /docker-compose.yml
+/src/plugins/rss_helper/biliCookie.json

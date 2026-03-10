@@ -142,7 +142,7 @@ def GetUserList()->List:
     res = []
     db = sqlite3.connect('db/rss.db')
     cur = db.cursor()
-    cur.execute('select * from user_list')
+    cur.execute('select * from user_list order by app_name') # order by app_name
     data = cur.fetchall()
     if len(data) == 0:
         cur.close()

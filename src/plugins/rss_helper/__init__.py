@@ -18,7 +18,6 @@ from nonebot.log import logger
 from . import rss_tool
 from . import biliLive, biliDynamic
 from . import RSS
-from . import config
 import asyncio
 import nonebot
 import threading
@@ -32,8 +31,8 @@ index = 0 #用于轮流刷新
 # 请求定时任务对象scheduler   
 scheduler = require('nonebot_plugin_apscheduler').scheduler
 
-# 创建定时任务：推送订阅信息/每5min查询一次
-@scheduler.scheduled_job('interval', seconds = 20, id = 'update') #minutes = 1
+# 创建定时任务：推送订阅信息/每5s查询一次
+@scheduler.scheduled_job('interval', seconds = 15, id = 'update')
 async def update():
     
     if RSS.Empty():
@@ -47,7 +46,7 @@ async def update():
     user_id = users[index][2]
     msg_id = users[index][3]
     url = users[index][4]
-    logger.info(f'[!]查询 {app}:{name}({user_id}) 动态……')
+    logger.info(f'[!]查询 {app}:{name}({user_id}) 中……')
     if app == 'bili直播':
         new_msg_id, datas = await biliLive.get_latest_datas(user_id)
         if new_msg_id == '1' and msg_id == '0': #直播开播且未发送开播提醒
@@ -60,6 +59,8 @@ async def update():
             index += 1
             return #获取信息失败
     elif app == 'B站':
+        # index += 1
+        # return #暂时关闭B站动态功能，待修复
         new_msg_id, datas = await biliDynamic.get_latest_datas(user_id) 
         if new_msg_id == msg_id or new_msg_id == '': #最新动态与上次收录的一致(说明并未更新)或获取信息失败
             index += 1
