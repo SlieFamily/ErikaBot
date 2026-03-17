@@ -16,7 +16,7 @@ import random
 from utils.QImage import *
 
 sarcasm = on_command("嘲讽",priority=3)
-# welcom = on_notice(priority=4)
+welcom = on_notice(priority=4)
 selfIntro = on_command("来点自我介绍",priority=4)
 anonymous = on_command("隔空喊话",priority=3)
 # poke = on_notice(priority=5)
@@ -33,13 +33,13 @@ async def handle(bot: Bot, event: Event , msg:Message = CommandArg()):
     except:
         await sarcasm.finish()
 
-# @welcom.handle()
-# async def handle(bot: Bot, event: GroupIncreaseNoticeEvent ):
-#     user = event.get_user_id()
-#     at_ = "[CQ:at,qq={}]".format(user)
-#     # msg = at_+'新人，想学爆点吗？'
-#     msg = at_+'欢迎新人进裙~'
-#     await welcom.finish(Message(msg))
+@welcom.handle()
+async def handle(bot: Bot, event: GroupIncreaseNoticeEvent ):
+    user = event.get_user_id()
+    at_ = "[CQ:at,qq={}]".format(user)
+    # msg = at_+'新人，想学爆点吗？'
+    msg = at_+'欢迎新宝宝进群~ 记得注意群公告哦！'
+    await welcom.finish(Message(msg))
 
 # @poke.handle()
 # async def handle(bot: Bot, event: PokeNotifyEvent ):

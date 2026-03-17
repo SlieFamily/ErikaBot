@@ -32,7 +32,7 @@ index = 0 #用于轮流刷新
 scheduler = require('nonebot_plugin_apscheduler').scheduler
 
 # 创建定时任务：推送订阅信息/每5s查询一次
-@scheduler.scheduled_job('interval', seconds = 15, id = 'update')
+@scheduler.scheduled_job('interval', seconds = 10, id = 'update')
 async def update():
     
     if RSS.Empty():

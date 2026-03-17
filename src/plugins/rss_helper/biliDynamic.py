@@ -165,7 +165,8 @@ async def get_Qmsg(name: str, datas: Dict, msg_id: str) -> Tuple[str, List[str],
                     elif orig_type == 64: orig_text = f"【专栏】 {origin.get('title')}"
                     else: orig_text = origin.get('item', {}).get('description', '') or origin.get('item', {}).get('content', '查看详情')
                     
-                    content += f"\n\n转发自@{origin.get('user', {}).get('name', '未知用户')}:\n{orig_text}"
+                    user_name = origin.get('user', {}).get('name') or origin.get('owner', {}).get('name') or '未知用户'
+                    content += f"\n\n转发自@{user_name}:\n{orig_text}"
                 except:
                     content += "\n\n[原动态查看链接]"
 
