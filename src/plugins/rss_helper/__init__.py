@@ -53,11 +53,9 @@ async def check_single_user(user_data):
         new_msg_id, datas = await biliLive.get_latest_datas(user_id)
         if new_msg_id == '1' and msg_id == '0': #直播开播且未发送开播提醒
             RSS.UpdateMsg(user_id, new_msg_id) #更新数据库的最新 msg_id
-        elif new_msg_id == '0':
-            RSS.UpdateMsg(user_id, new_msg_id)
-            return #直播未开播
         else:
-            return #获取信息失败
+            RSS.UpdateMsg(user_id, new_msg_id)
+            return #直播未开播或已发送过开播提醒，直接返回不推送消息
     elif app == 'B站':
         # index += 1
         # return #暂时关闭B站动态功能，待修复
@@ -105,7 +103,7 @@ async def check_single_user(user_data):
             
             # 如果机器人的角色是群主 (owner) 或 管理员 (admin)
             if bot_info.get('role') in ['admin', 'owner']:
-                if name == "Slie-wdy":
+                if name == "雪糕cheese":
                     # 重新拼接消息，在头部加上 @全体成员 的 CQ 码
                     final_message = f"[CQ:at,qq=all]\n{final_message}"
                 

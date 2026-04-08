@@ -5,8 +5,8 @@
     <style>
         /* 现代配色变量 */
         :root {
-            --bg-body: #F1F5F9;         /* 外层底色：极浅的蓝灰色 */
-            --bg-card: #FFFFFF;         /* 卡片底色：纯白 */
+            --bg-body: linear-gradient(135deg, #fbc2eb 0%, #a18cd1 100%); /* 外层底色：粉紫渐变 */
+            --bg-card: rgba(255, 255, 255, 0.65);       /* 卡片底色：半透明纯白 */
             --bg-nested: #F8FAFC;       /* 嵌套卡片底色：浅灰 */
             --text-main: #334155;       /* 主文本：深石板灰，比纯黑更柔和 */
             --text-sub: #64748b;        /* 副文本：次级灰 */
@@ -18,17 +18,19 @@
 
         body {
             background: var(--bg-body);
-            /* 使用苹果/现代系统字体栈 */
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             margin: 0;
-            padding: 40px; /* 截图时会保留这 40px 形成完美的画框边缘 */
-            display: inline-block;
+            padding: 20px; /* 【修改这里】从 40px 改成 20px，周边的粉色背景就会变得很窄、很精致 */
+            display: inline-block; /* 这一行千万别删，保证截图尺寸完美贴合的关键 */
             -webkit-font-smoothing: antialiased;
         }
 
         /* 主卡片：大圆角与高级阴影 */
         .card {
             background: var(--bg-card);
+            backdrop-filter: blur(16px); /* 增加毛玻璃模糊效果 */
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.5); /* 增加微光边框增强通透感 */
             width: 680px; 
             border-radius: 28px;
             padding: 36px;

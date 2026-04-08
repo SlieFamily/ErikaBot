@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <style>
         :root {
-            --bg-body: #F1F5F9;
-            --bg-card: #FFFFFF;
+            --bg-body: linear-gradient(135deg, #fbc2eb 0%, #a18cd1 100%); /* 外层底色：粉紫渐变 */
+            --bg-card: rgba(255, 255, 255, 0.65); /* 卡片底色：半透明纯白 */
             --text-main: #0F172A;
             --text-sub: #64748B;
             --accent-gradient: linear-gradient(135deg, #FF6699 0%, #FF8C69 100%);
@@ -17,13 +17,16 @@
             background: var(--bg-body);
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             margin: 0;
-            padding: 40px; 
-            display: inline-block;
+            padding: 20px; /* 【修改这里】从 40px 改成 20px，周边的粉色背景就会变得很窄、很精致 */
+            display: inline-block; /* 这一行千万别删，保证截图尺寸完美贴合的关键 */
             -webkit-font-smoothing: antialiased;
         }
 
         .card {
             background: var(--bg-card);
+            backdrop-filter: blur(16px); /* 增加毛玻璃模糊效果 */
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.5); /* 增加微光边框增强通透感 */
             width: 640px; /* 稍微加宽，让 16:9 封面更具张力 */
             border-radius: 32px; /* 更大的苹果级圆角 */
             padding: 24px; /* 减小内边距，让封面几乎撑满屏幕 */

@@ -25,7 +25,7 @@ async def render_to_image(template_data: dict, output_filename: str, template_na
         
         # device_scale_factor=2 保证画质清晰
         page = await browser.new_page(
-            viewport={"width": 680, "height": 2000},
+            viewport={"width": 900, "height": 2000},
             device_scale_factor=2
         )
         
