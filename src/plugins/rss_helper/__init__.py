@@ -1,4 +1,5 @@
 from dataclasses import MISSING
+import random
 from nonebot import on_command
 from nonebot import rule
 from nonebot import on_request
@@ -26,26 +27,27 @@ enable_auto_select_bot() #为ssa插件自动获取bot
 
 RSS.Init2db() #数据库初始化
 
-index = 0 #用于轮流刷新
-
 # 请求定时任务对象scheduler   
 scheduler = require('nonebot_plugin_apscheduler').scheduler
 
 # 创建定时任务：推送订阅信息/每5s查询一次
-@scheduler.scheduled_job('interval', seconds = 10, id = 'update')
+@scheduler.scheduled_job('interval', seconds = 60, id = 'update')
 async def update():
     
     if RSS.Empty():
         return #数据库关注列表为空，无事发生
 
-    global index
     users = RSS.GetUserList()
-    index %= len(users) #当idx值超过用户数时，idx的值轮换到下一周期
-    app = users[index][0]
-    name = users[index][1]
-    user_id = users[index][2]
-    msg_id = users[index][3]
-    url = users[index][4]
+    # 使用 asyncio.gather 并发执行所有用户的检测任务
+    tasks = [check_single_user(user_info) for user_info in users]
+    await asyncio.gather(*tasks)
+
+async def check_single_user(user_data):
+    """
+    单个用户检测逻辑：独立运行，互不干扰
+    """
+    await asyncio.sleep(random.uniform(5, 30)) #随机错开请求，避免同时访问导致的网络压力或目标站点封禁
+    app, name, user_id, msg_id, url = user_data
     logger.info(f'[!]查询 {app}:{name}({user_id}) 中……')
     if app == 'bili直播':
         new_msg_id, datas = await biliLive.get_latest_datas(user_id)
@@ -53,33 +55,29 @@ async def update():
             RSS.UpdateMsg(user_id, new_msg_id) #更新数据库的最新 msg_id
         elif new_msg_id == '0':
             RSS.UpdateMsg(user_id, new_msg_id)
-            index += 1
             return #直播未开播
         else:
-            index += 1
             return #获取信息失败
     elif app == 'B站':
         # index += 1
         # return #暂时关闭B站动态功能，待修复
         new_msg_id, datas = await biliDynamic.get_latest_datas(user_id) 
         if new_msg_id == msg_id or new_msg_id == '': #最新动态与上次收录的一致(说明并未更新)或获取信息失败
-            index += 1
             return #最新 msg_id 和上次收录的一致(说明并未更新)
         else:
             RSS.UpdateMsg(user_id, new_msg_id) #更新数据库的最新 msg_id
     else:
         new_msg_id, datas = await rss_tool.get_latest_datas(url)
         if new_msg_id == msg_id or new_msg_id == '': #最新动态与上次收录的一致(说明并未更新)或获取信息失败
-            index += 1
             return #最新 msg_id 和上次收录的一致(说明并未更新)
         else:
             RSS.UpdateMsg(user_id, new_msg_id) #更新数据库的最新 msg_id
 
     logger.info(f'[!]检测到 {app}:{name} 已更新')
     if app == 'bili直播':
-        msgs = await biliLive.get_Qmsg(name, datas, msg_id) #读取信息详情
+        msgs = await biliLive.get_Htmlmsg(name, user_id, datas, msg_id) #读取信息详情
     elif app == 'B站':
-        msgs = await biliDynamic.get_Qmsg(name, datas, msg_id)
+        msgs = await biliDynamic.get_Htmlmsg(name, user_id, datas, msg_id)
     else:
         msgs = await rss_tool.get_Qmsg(name, datas, msg_id)
 
@@ -90,13 +88,36 @@ async def update():
     msg, imgs, time = msgs
     for img in imgs:
         print(img)
-        media += f"[CQ:image,file={img}]"
+        if "dynamic_" in img:
+            media += f"\n[CQ:image,file=file:///{img}]"
+        else:
+            media += f"[CQ:image,file={img}]"
     for card in cards:
-        await schedBot.call_api('send_msg',**{
-                'message':msg+media+"\n🔔："+time,
-                'group_id':card[0]
+        group_id = card[0]
+        final_message = msg+media+"\n🔔 "+time
+        try:
+            # 查询机器人在当前群的身份信息
+            # schedBot.self_id 是机器人自己的 QQ 号
+            bot_info = await schedBot.call_api('get_group_member_info', **{
+                'group_id': group_id,
+                'user_id': int(schedBot.self_id)
+            })
+            
+            # 如果机器人的角色是群主 (owner) 或 管理员 (admin)
+            if bot_info.get('role') in ['admin', 'owner']:
+                if name == "Slie-wdy":
+                    # 重新拼接消息，在头部加上 @全体成员 的 CQ 码
+                    final_message = f"[CQ:at,qq=all]\n{final_message}"
+                
+        except Exception as e:
+            # 如果接口调用失败（比如机器人被踢出群但数据库没删），捕获异常防止崩溃
+            logger.warning(f"[!] 获取群 {group_id} 权限失败，按普通消息发送: {e}")
+
+        # 发送最终合成的消息
+        await schedBot.call_api('send_msg', **{
+            'message': final_message,
+            'group_id': group_id
         })
-    index += 1
     
 # 关注命令(仅允许管理员操作)
 adduser = on_command('关注',priority=1,permission=GROUP_ADMIN|GROUP_OWNER|PRIVATE_FRIEND|SUPERUSER,)

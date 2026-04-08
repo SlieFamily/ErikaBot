@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        /* 现代配色变量 */
+        :root {
+            --bg-body: #F1F5F9;         /* 外层底色：极浅的蓝灰色 */
+            --bg-card: #FFFFFF;         /* 卡片底色：纯白 */
+            --bg-nested: #F8FAFC;       /* 嵌套卡片底色：浅灰 */
+            --text-main: #334155;       /* 主文本：深石板灰，比纯黑更柔和 */
+            --text-sub: #64748b;        /* 副文本：次级灰 */
+            --border-color: #E2E8F0;    /* 边框色 */
+            --accent-gradient: linear-gradient(135deg, #FF6699 0%, #FF8C69 100%); /* 名字的渐变粉橘色 */
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            background: var(--bg-body);
+            /* 使用苹果/现代系统字体栈 */
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+            margin: 0;
+            padding: 40px; /* 截图时会保留这 40px 形成完美的画框边缘 */
+            display: inline-block;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* 主卡片：大圆角与高级阴影 */
+        .card {
+            background: var(--bg-card);
+            width: 680px; 
+            border-radius: 28px;
+            padding: 36px;
+            box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.05), 0 1px 3px rgba(0,0,0,0.02);
+        }
+
+        /* 头部信息 */
+        .header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+
+        .avatar {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid #fff;
+            box-shadow: 0 6px 16px rgba(0,0,0,0.08); /* 头像立体感阴影 */
+            margin-right: 18px;
+        }
+
+        .name {
+            font-size: 19px;
+            font-weight: 800;
+            /* 名字使用高级渐变色填充 */
+            background: var(--accent-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 4px;
+        }
+
+        .time {
+            font-size: 14px;
+            color: var(--text-sub);
+            font-weight: 500;
+        }
+
+        /* 主文本排版 */
+        .content {
+            font-size: 16px;
+            line-height: 1.8;
+            color: var(--text-main);
+            margin-bottom: 20px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .bili-emoji {
+            height: 22px;
+            vertical-align: -5px; /* 微调表情与文字的中线对齐 */
+            margin: 0 4px;
+        }
+
+        /* --- 智能图片网格 --- */
+        .pic-grid {
+            display: grid;
+            gap: 12px;
+            margin-top: 16px;
+            border-radius: 16px;
+            overflow: hidden;
+        }
+        
+        /* 根据图片数量自动适配布局 */
+        .pic-grid.single { grid-template-columns: 1fr; }
+        .pic-grid.multi { grid-template-columns: repeat(3, 1fr); }
+
+        .pic-grid img {
+            width: 100%;
+            object-fit: cover;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+            border: 1px solid rgba(0,0,0,0.02);
+        }
+        
+        /* 多图时强制正方形 */
+        .pic-grid.multi img { aspect-ratio: 1 / 1; }
+        /* 单图时自适应高度，但限制最大高度防止过长 */
+        .pic-grid.single img { max-height: 450px; width: auto; max-width: 100%; border-radius: 16px; }
+
+        /* --- 视频/直播卡片 --- */
+        .media-card {
+            display: flex;
+            background: var(--bg-nested);
+            border-radius: 20px;
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+            margin-top: 20px;
+        }
+
+        .media-cover {
+            width: 220px;
+            aspect-ratio: 16/9;
+            object-fit: cover;
+        }
+
+        .media-info {
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            flex: 1;
+        }
+
+        .media-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--text-main);
+            margin-bottom: 14px;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            line-height: 1.5;
+        }
+
+        .badge {
+            display: inline-flex;
+            font-size: 13px;
+            font-weight: 700;
+            padding: 4px 12px;
+            border-radius: 20px;
+            width: max-content;
+        }
+
+        .badge.video { background: #E0F2FE; color: #0284C7; } /* 清爽的蓝色系 */
+        .badge.live { background: #FCE7F3; color: #BE185D; } /* 活力的粉红色系 */
+
+        /* --- 转发内容的嵌套卡片 --- */
+        .orig-card {
+            background: var(--bg-nested);
+            border-radius: 24px;
+            padding: 24px 28px;
+            margin-top: 20px;
+            border: 1px solid var(--border-color);
+            position: relative;
+        }
+
+        /* 转发卡片左侧的小点缀条 */
+        .orig-card::before {
+            content: '';
+            position: absolute;
+            left: -1px;
+            top: 30px;
+            bottom: 30px;
+            width: 4px;
+            background: #cbd5e1;
+            border-radius: 0 4px 4px 0;
+        }
+
+        .orig-name {
+            font-size: 16px;
+            font-weight: 800;
+            color: #0284C7; /* 高级蓝 */
+            margin-bottom: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="card" id="dynamic-card">
+        <div class="header">
+            <img class="avatar" src="{{ avatar }}">
+            <div class="user-info">
+                <div class="name">{{ name }}</div>
+                <div class="time">{{ time }}</div>
+            </div>
+        </div>
+
+        <div class="content">{{ parsed_content | safe }}</div>
+
+        {% if dtype == 2 %}
+            <div class="pic-grid {% if pics|length == 1 %}single{% else %}multi{% endif %}">
+                {% for pic in pics %}
+                    <img src="{{ pic }}">
+                {% endfor %}
+            </div>
+
+        {% elif dtype == 8 %}
+            <div class="media-card">
+                <img class="media-cover" src="{{ cover }}">
+                <div class="media-info">
+                    <div class="media-title">{{ title }}</div>
+                    <div class="badge video">🎬 视频投稿</div>
+                </div>
+            </div>
+
+        {% elif dtype == 4308 %}
+            <div class="media-card">
+                <img class="media-cover" src="{{ cover }}">
+                <div class="media-info">
+                    <div class="media-title">{{ title }}</div>
+                    <div class="badge live">🔴 正在直播</div>
+                </div>
+            </div>
+
+        {% elif dtype == 1 %}
+            <div class="orig-card">
+                <div class="orig-name">@{{ orig_name }}</div>
+                <div class="content" style="margin-bottom: 0;">{{ orig_parsed_content | safe }}</div>
+                
+                {% if orig_pics %}
+                <div class="pic-grid {% if orig_pics|length == 1 %}single{% else %}multi{% endif %}" style="margin-top: 16px;">
+                    {% for pic in orig_pics %} <img src="{{ pic }}"> {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+        {% endif %}
+    </div>
+</body>
+</html>

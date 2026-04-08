@@ -2,10 +2,11 @@ import httpx
 import json
 import time
 import os
+import asyncio
 from typing import Any, Dict, List, Tuple
 from nonebot.log import logger
 from bilibili_api import user
-
+from . import biliRender  # 导入渲染工具
 
 async def get_user_info(uid: str) -> str:
     '''
@@ -40,7 +41,7 @@ def load_cookies() -> Dict[str, str]:
 
 async def get_latest_datas(uid: str) -> Tuple[str, Dict]:
     '''
-    获取最新动态（旧版API）
+    获取最新动态（旧版API更稳定）
     '''
     url = f"https://api.vc.bilibili.com/dynamic_svr/v1/dynamic_svr/space_history?host_uid={uid}"
     
@@ -178,8 +179,8 @@ async def get_Qmsg(name: str, datas: Dict, msg_id: str) -> Tuple[str, List[str],
         content = "内容解析失败"
 
     # 限制长度
-    if len(content) > 200:
-        content = content[:200] + "..."
+    # if len(content) > 200:
+    #     content = content[:200] + "..."
 
     dynamic_url = f"https://t.bilibili.com/{desc.get('dynamic_id_str')}"
     msg_text = (
@@ -189,3 +190,113 @@ async def get_Qmsg(name: str, datas: Dict, msg_id: str) -> Tuple[str, List[str],
     )
 
     return msg_text, img_list, dynamic_time
+
+
+def parse_text_and_emojis(text: str, display_info: dict) -> str:
+    """
+    核心：将文本中的 [doge] 替换为 HTML <img> 标签
+    """
+    if not text:
+        return ""
+    
+    parsed_text = text.replace('\n', '<br>')
+    
+    # 提取表情包映射
+    emoji_info = display_info.get("emoji_info") or {}
+    emoji_details = emoji_info.get("emoji_details") or []
+    
+    # 现在 emoji_details 必定是一个列表（哪怕是空的）
+    for emoji in emoji_details:
+        name = emoji.get("emoji_name")
+        url = emoji.get("url")
+        if name and url:
+            img_tag = f'<img class="bili-emoji" src="{url}" alt="{name}">'
+            parsed_text = parsed_text.replace(name, img_tag)
+                
+    return parsed_text
+
+async def get_Htmlmsg(name: str, user_id: str, datas: Dict, msg_id: str) -> Tuple[str, str]:
+    '''
+    提取 JSON 数据，交给模板渲染，最后返回 QQ 文本和【生成的本地图片路径】
+    '''
+    desc = datas.get('desc', {})
+    display = datas.get('display', {})
+    
+    try:
+        card = json.loads(datas.get('card', '{}'))
+    except:
+        card = {}
+
+    timestamp = desc.get('timestamp', time.time())
+    dynamic_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(int(timestamp)))
+    dtype = desc.get('type')
+    dynamic_url = f"https://t.bilibili.com/{desc.get('dynamic_id_str')}"
+
+    # 初始化准备传给 Jinja2 的数据包
+    template_data = {
+        "avatar": desc.get('user_profile', {}).get('info', {}).get('face', ''),
+        "name": name,
+        "time": dynamic_time,
+        "dtype": dtype,
+        "parsed_content": "",
+        "pics": [],
+        "title": "",
+        "cover": "",
+        "orig_name": "",
+        "orig_parsed_content": "",
+        "orig_pics": []
+    }
+
+    # try:
+    if dtype == 2: # 图文
+        type_msg = "发布了新动态"
+        item = card.get('item', {})
+        raw_text = item.get('description', '')
+        template_data["parsed_content"] = parse_text_and_emojis(raw_text, display)
+        if 'pictures' in item:
+            template_data["pics"] = [p.get('img_src') for p in item['pictures']]
+
+    elif dtype == 8: # 视频
+        type_msg = "投稿了新视频"
+        template_data["parsed_content"] = parse_text_and_emojis(card.get('dynamic', ''), display)
+        template_data["title"] = card.get('title', '')
+        template_data["cover"] = card.get('pic', '')
+
+    elif dtype == 1: # 转发
+        type_msg = "转发了一条动态"
+        raw_text = card.get('item', {}).get('content', '')
+        template_data["parsed_content"] = parse_text_and_emojis(raw_text, display)
+        
+        # 解析原动态
+        if 'origin' in card:
+            origin = json.loads(card['origin'])
+            orig_type = desc.get('orig_type')
+            template_data["orig_name"] = origin.get('user', {}).get('name') or origin.get('owner', {}).get('name', '未知用户')
+            
+            orig_text = ""
+            if orig_type == 8: 
+                orig_text = f"投稿了视频\n{origin.get('title', '')}"
+                template_data["orig_pics"] = [origin.get('pic', '')]
+            elif orig_type == 2:
+                orig_text = origin.get('item', {}).get('description', '')
+                if 'pictures' in origin.get('item', {}):
+                    template_data["orig_pics"] = [p.get('img_src') for p in origin.get('item')['pictures']]
+            else:
+                orig_text = origin.get('item', {}).get('content', '查看详情')
+            
+            # 提取原动态表情 (如果有)
+            orig_display = display.get('origin', {})
+            template_data["orig_parsed_content"] = parse_text_and_emojis(orig_text, orig_display)
+
+    # except Exception as e:
+    #     logger.error(f"构建模板数据失败: {e}")
+    #     template_data["parsed_content"] = "内容解析失败，请点击链接查看。"
+
+    # 执行渲染
+    output_img_name = f"dynamic_{user_id}.png"
+    img_path = await biliRender.render_to_image(template_data, output_img_name)
+
+    # 返回极简的提示文本 + 渲染好的图片路径
+    msg_text = f"你关注的 {name} {type_msg}！"
+    img_list = [img_path]
+    return msg_text, img_list, dynamic_url

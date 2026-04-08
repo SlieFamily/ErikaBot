@@ -6,7 +6,7 @@ import time
 from nonebot.log import logger
 from bilibili_api import live, sync
 from typing import Any, Dict, List
-from utils.HtmlTag import handle_html_tag
+from . import biliRender  # 导入渲染工具
 
 
 # 对字符串计算哈希值，供后续比较
@@ -63,3 +63,41 @@ async def get_Qmsg(name:str, datas:list, msg_id:str)->list:
         live_time
     )
     return msgs
+
+async def get_Htmlmsg(name: str, user_id:str, datas: dict, msg_id: str) -> tuple[str, str]:
+    '''
+    将直播信息放入 live.html 模板渲染，返回 提示文本 和 图片本地路径
+    '''
+    title = datas.get('title', '无标题')
+    cover = datas.get('cover', '')
+    area = datas.get('area_name', '未知分区')
+    
+    # 转换时间
+    live_start_time = datas.get('live_start_time', time.time())
+    live_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(live_start_time))
+    
+    # 直播间链接
+    room_id = datas.get('room_id', '')
+    live_url = f"https://live.bilibili.com/{room_id}"
+
+
+    # 组装丢给 Jinja2 模板的数据字典
+    template_data = {
+        "name": name,
+        "cover": cover,
+        "area": area,
+        "title": title,
+        "live_time": live_time
+    }
+
+    # 调用渲染工具，注意这里传入 template_name="live.html"
+    output_img_name = f"live_{room_id}_{msg_id}.png"
+    img_path = await biliRender.render_to_image(
+        template_data=template_data, 
+        output_filename=output_img_name, 
+        template_name="live.html"
+    )
+    # 构造极简的 QQ 文本（图片里已经有所有详细信息了）
+    msg_text = f"你关注的 {name} 开播啦！"
+    
+    return msg_text, [img_path], live_url

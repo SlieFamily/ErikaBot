@@ -11,13 +11,12 @@ _✨ 基于NoneBot2的绘梨花多功能Bot，自用 ✨_
 
 </div>
 
-> #### 本Bot 已同步支持 **QQ** **频道** 的使用
+> #### ~~本Bot 已同步支持 **QQ** **频道** 的使用~~
 
 # 布置棋盘 |<sub>[快速开始](docs/QuickStart.md)</sub>
 
-> 1. 本项目基于 `go-cqhttp`[文档](https://docs.go-cqhttp.org/) 进行QQ登录；
-> 1. 本项目基于 `unidbg-fetch-qsign`~~[文档(已删库)](https://github.com/fuqiuluo/unidbg-fetch-qsign/wiki)~~ , [备份仓库](https://github.com/touchscale/Qsign/tree/master) 部署QQ签名服务器；
-> 1. 本项目基于 `nonebot2`[文档](https://v2.nonebot.dev/) 进行Bot自动化；
+> 1. 本项目基于 `napcat`[文档](https://napneko.github.io/guide/napcat) 进行QQ登录；
+> 1. 本项目基于 `nonebot2`[文档](https://v2.nonebot.dev) 进行Bot自动化；
 > 1. 本项目基于 `Python3`部分的依赖库.
 
 # 魔导书|<sub>[详细功能介绍](docs/ToolList.md)</sub>
@@ -32,7 +31,7 @@ _✨ 基于NoneBot2的绘梨花多功能Bot，自用 ✨_
 
 **奥利奥** `来点 ['奥'和'利'的组合词（超过一个字）] `
 
-**望文声义** `请说：[需要朗读的文字]`
+~~**望文声义** `请说：[需要朗读的文字]`~~
 
 **隔空喊话** `QQ回复[需要匿名发送的内容，图片/表情等]：隔空喊话to<空格>[Bot所在的QQ群号]`
 
@@ -52,7 +51,7 @@ _✨ 基于NoneBot2的绘梨花多功能Bot，自用 ✨_
 
 ​                如：`发送：今天吃什么` 则`回复：紫菜蛋花汤`
 
-**RSS订阅** `完美验尸！`查看本群关注清单，`验尸[app名称]：[用户ID]`进行关注（当前支持 微博、B站、推特）
+**RSS订阅** `关注列表`查看本群关注清单，`关注[app名称]：[用户ID]`进行关注（当前支持 微博、B站、bili直播）
 
 **倒计时** 每天8点**自动提醒**相关考试或日程的剩余天数
 
