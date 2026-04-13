@@ -5,3 +5,4 @@
 /db.json
 /docker-compose.yml
 /src/plugins/rss_helper/biliCookie.json
+/src/plugins/rss_helper/*.png

@@ -201,18 +201,29 @@ def parse_text_and_emojis(text: str, display_info: dict) -> str:
     
     parsed_text = text.replace('\n', '<br>')
     
-    # 提取表情包映射
     emoji_info = display_info.get("emoji_info") or {}
     emoji_details = emoji_info.get("emoji_details") or []
     
-    # 现在 emoji_details 必定是一个列表（哪怕是空的）
-    for emoji in emoji_details:
-        name = emoji.get("emoji_name")
-        url = emoji.get("url")
-        if name and url:
-            img_tag = f'<img class="bili-emoji" src="{url}" alt="{name}">'
-            parsed_text = parsed_text.replace(name, img_tag)
-                
+    # 1. 提取有效表情并【去重】（利用字典的键唯一性过滤重复表情）
+    unique_emojis = {
+        e.get("emoji_name"): e.get("url") 
+        for e in emoji_details 
+        if e.get("emoji_name") and e.get("url")
+    }
+    
+    # 2. 按表情名字长度【降序排序】
+    # 防止 [doge] 错误地把 [doge_大笑] 的前半部分给替换了
+    sorted_emojis = sorted(unique_emojis.items(), key=lambda x: len(x[0]), reverse=True)
+    
+    for name, url in sorted_emojis:
+        # 3. 【关键修复】去掉 alt 中的中括号
+        # 如果 name 是 "[doge]"，safe_alt 就是 "doge"
+        # 这样即使逻辑出错，也永远不会匹配到 alt="doge" 上去
+        safe_alt = name.strip("[]")
+        
+        img_tag = f'<img class="bili-emoji" src="{url}" alt="{safe_alt}">'
+        parsed_text = parsed_text.replace(name, img_tag)
+            
     return parsed_text
 
 async def get_Htmlmsg(name: str, user_id: str, datas: Dict, msg_id: str) -> Tuple[str, str]:
@@ -246,14 +257,12 @@ async def get_Htmlmsg(name: str, user_id: str, datas: Dict, msg_id: str) -> Tupl
         "orig_parsed_content": "",
         "orig_pics": []
     }
-
-    # try:
     if dtype == 2: # 图文
         type_msg = "发布了新动态"
         item = card.get('item', {})
         raw_text = item.get('description', '')
         template_data["parsed_content"] = parse_text_and_emojis(raw_text, display)
-        if 'pictures' in item:
+        if 'pictures' in item and item['pictures_count']  > 0: 
             template_data["pics"] = [p.get('img_src') for p in item['pictures']]
 
     elif dtype == 8: # 视频

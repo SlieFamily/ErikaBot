@@ -17,19 +17,19 @@
             background: var(--bg-body);
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             margin: 0;
-            padding: 20px; /* 【修改这里】从 40px 改成 20px，周边的粉色背景就会变得很窄、很精致 */
-            display: inline-block; /* 这一行千万别删，保证截图尺寸完美贴合的关键 */
+            padding: 10px; /* 周边的粉色背景保持极窄、精致 */
+            display: inline-block; /* 保证截图尺寸完美贴合的关键 */
             -webkit-font-smoothing: antialiased;
         }
 
         .card {
             background: var(--bg-card);
-            backdrop-filter: blur(16px); /* 增加毛玻璃模糊效果 */
+            backdrop-filter: blur(16px); 
             -webkit-backdrop-filter: blur(16px);
-            border: 1px solid rgba(255, 255, 255, 0.5); /* 增加微光边框增强通透感 */
-            width: 640px; /* 稍微加宽，让 16:9 封面更具张力 */
-            border-radius: 32px; /* 更大的苹果级圆角 */
-            padding: 24px; /* 减小内边距，让封面几乎撑满屏幕 */
+            border: 1px solid rgba(255, 255, 255, 0.5); 
+            width: 540px; /* 【修改】卡片变窄，540px 黄金宽度适合手机端阅读 */
+            border-radius: 32px; 
+            padding: 32px; /* 【修改】稍微收紧内边距配合窄卡片 */
             box-shadow: 0 24px 48px -12px rgba(0, 0, 0, 0.08), 0 4px 6px rgba(0,0,0,0.02);
         }
 
@@ -53,14 +53,14 @@
         /* 高级毛玻璃悬浮组件通用样式 */
         .glass-badge {
             position: absolute;
-            top: 16px;
-            background: rgba(15, 23, 42, 0.6); /* 深灰底色 */
+            top: 20px;
+            background: rgba(15, 23, 42, 0.6); 
             backdrop-filter: blur(16px);
             -webkit-backdrop-filter: blur(16px);
             color: #FFFFFF;
-            padding: 8px 16px;
-            border-radius: 20px;
-            font-size: 14px;
+            padding: 10px 20px; /* 【修改】增加内边距让标签更大 */
+            border-radius: 24px;
+            font-size: 16px; /* 【修改】标签字体放大 */
             font-weight: 700;
             border: 1px solid rgba(255, 255, 255, 0.15);
             box-shadow: 0 4px 16px rgba(0,0,0,0.15);
@@ -70,33 +70,33 @@
 
         /* 左上角：直播状态与呼吸灯 */
         .live-status {
-            left: 16px;
+            left: 18px;
         }
 
         .live-dot {
-            width: 8px;
-            height: 8px;
-            background: #EF4444; /* 鲜艳的红色 */
+            width: 10px; /* 【修改】红点随字体一起放大 */
+            height: 10px;
+            background: #EF4444; 
             border-radius: 50%;
-            margin-right: 8px;
+            margin-right: 10px;
             box-shadow: 0 0 10px #EF4444;
         }
 
         /* 右上角：分区徽章 */
         .area-status {
-            right: 16px;
+            right: 20px;
         }
 
         /* 底部信息区 */
         .info-wrap {
-            padding: 0 8px; /* 让文字和图片有轻微的内缩，增加层次 */
+            padding: 0 4px; /* 轻微内缩 */
         }
 
         .title {
-            font-size: 24px;
+            font-size: 26px; /* 【修改】直播标题大幅度放大 */
             font-weight: 800;
             color: var(--text-main);
-            line-height: 1.4;
+            line-height: 1.5;
             margin-bottom: 16px;
             display: -webkit-box;
             -webkit-line-clamp: 2;
@@ -119,16 +119,16 @@
         .up-tag {
             background: #F1F5F9;
             color: #64748B;
-            padding: 2px 8px;
-            border-radius: 6px;
-            font-size: 12px;
+            padding: 4px 10px;
+            border-radius: 8px;
+            font-size: 16px; /* 【修改】UP主标识放大 */
             font-weight: 800;
-            margin-right: 10px;
+            margin-right: 12px;
             border: 1px solid #E2E8F0;
         }
 
         .name {
-            font-size: 18px;
+            font-size: 20px; /* 【修改】名字放大 */
             font-weight: 800;
             background: var(--accent-gradient);
             -webkit-background-clip: text;
@@ -136,7 +136,7 @@
         }
 
         .time {
-            font-size: 14px;
+            font-size: 16px; /* 【修改】时间放大 */
             font-weight: 600;
             color: var(--text-sub);
         }

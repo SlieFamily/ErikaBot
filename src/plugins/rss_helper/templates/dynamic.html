@@ -20,20 +20,20 @@
             background: var(--bg-body);
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             margin: 0;
-            padding: 20px; /* 【修改这里】从 40px 改成 20px，周边的粉色背景就会变得很窄、很精致 */
-            display: inline-block; /* 这一行千万别删，保证截图尺寸完美贴合的关键 */
+            padding: 10px; /* 周边粉色背景保持很窄、很精致 */
+            display: inline-block; /* 保证截图尺寸完美贴合的关键 */
             -webkit-font-smoothing: antialiased;
         }
 
         /* 主卡片：大圆角与高级阴影 */
         .card {
             background: var(--bg-card);
-            backdrop-filter: blur(16px); /* 增加毛玻璃模糊效果 */
+            backdrop-filter: blur(16px); 
             -webkit-backdrop-filter: blur(16px);
-            border: 1px solid rgba(255, 255, 255, 0.5); /* 增加微光边框增强通透感 */
-            width: 680px; 
+            border: 1px solid rgba(255, 255, 255, 0.5); 
+            width: 540px; /* 【修改】卡片变窄，540px 的黄金宽度让手机端阅读最舒适 */
             border-radius: 28px;
-            padding: 36px;
+            padding: 32px; /* 内边距稍微收紧一点点配合窄卡片 */
             box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.05), 0 1px 3px rgba(0,0,0,0.02);
         }
 
@@ -45,19 +45,18 @@
         }
 
         .avatar {
-            width: 60px;
-            height: 60px;
+            width: 72px; /* 【修改】头像放大 */
+            height: 72px;
             border-radius: 50%;
             object-fit: cover;
             border: 2px solid #fff;
-            box-shadow: 0 6px 16px rgba(0,0,0,0.08); /* 头像立体感阴影 */
+            box-shadow: 0 6px 16px rgba(0,0,0,0.08); 
             margin-right: 18px;
         }
 
         .name {
-            font-size: 19px;
+            font-size: 24px; /* 【修改】名字大幅放大 */
             font-weight: 800;
-            /* 名字使用高级渐变色填充 */
             background: var(--accent-gradient);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
@@ -65,15 +64,15 @@
         }
 
         .time {
-            font-size: 14px;
+            font-size: 16px; /* 【修改】时间放大 */
             color: var(--text-sub);
             font-weight: 500;
         }
 
         /* 主文本排版 */
         .content {
-            font-size: 16px;
-            line-height: 1.8;
+            font-size: 24px; /* 【修改】正文放大至 24px */
+            line-height: 1.6; /* 调整行高，让大字体阅读不松散 */
             color: var(--text-main);
             margin-bottom: 20px;
             white-space: pre-wrap;
@@ -81,9 +80,9 @@
         }
 
         .bili-emoji {
-            height: 22px;
-            vertical-align: -5px; /* 微调表情与文字的中线对齐 */
-            margin: 0 4px;
+            height: 48px; /* 【修改】表情包严格设定为正文字体(24px)的两倍大 */
+            vertical-align: -12px; /* 【修改】向下沉降 12px，完美居中对齐大字号文本 */
+            margin: 0 6px;
         }
 
         /* --- 智能图片网格 --- */
@@ -95,7 +94,6 @@
             overflow: hidden;
         }
         
-        /* 根据图片数量自动适配布局 */
         .pic-grid.single { grid-template-columns: 1fr; }
         .pic-grid.multi { grid-template-columns: repeat(3, 1fr); }
 
@@ -107,10 +105,9 @@
             border: 1px solid rgba(0,0,0,0.02);
         }
         
-        /* 多图时强制正方形 */
         .pic-grid.multi img { aspect-ratio: 1 / 1; }
-        /* 单图时自适应高度，但限制最大高度防止过长 */
-        .pic-grid.single img { max-height: 450px; width: auto; max-width: 100%; border-radius: 16px; }
+        /* 单图显示全图，取消最大高度限制并禁止遮挡裁剪 */
+        .pic-grid.single img { max-height: none; height: auto; width: 100%; border-radius: 16px; object-fit: contain; }
 
         /* --- 视频/直播卡片 --- */
         .media-card {
@@ -137,7 +134,7 @@
         }
 
         .media-title {
-            font-size: 16px;
+            font-size: 20px; /* 【修改】视频标题放大 */
             font-weight: 700;
             color: var(--text-main);
             margin-bottom: 14px;
@@ -150,15 +147,15 @@
 
         .badge {
             display: inline-flex;
-            font-size: 13px;
+            font-size: 15px; /* 【修改】标签字体放大 */
             font-weight: 700;
-            padding: 4px 12px;
+            padding: 6px 14px;
             border-radius: 20px;
             width: max-content;
         }
 
-        .badge.video { background: #E0F2FE; color: #0284C7; } /* 清爽的蓝色系 */
-        .badge.live { background: #FCE7F3; color: #BE185D; } /* 活力的粉红色系 */
+        .badge.video { background: #E0F2FE; color: #0284C7; } 
+        .badge.live { background: #FCE7F3; color: #BE185D; } 
 
         /* --- 转发内容的嵌套卡片 --- */
         .orig-card {
@@ -170,7 +167,6 @@
             position: relative;
         }
 
-        /* 转发卡片左侧的小点缀条 */
         .orig-card::before {
             content: '';
             position: absolute;
@@ -183,9 +179,9 @@
         }
 
         .orig-name {
-            font-size: 16px;
+            font-size: 20px; /* 【修改】被转发者名字放大 */
             font-weight: 800;
-            color: #0284C7; /* 高级蓝 */
+            color: #0284C7; 
             margin-bottom: 12px;
         }
     </style>
