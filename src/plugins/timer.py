@@ -19,8 +19,8 @@ from nonebot_plugin_apscheduler import scheduler
 global time_task
 
 time_task = []
-time_task.append(('2026年高考',datetime.date(2026,6,7)))
-time_task.append(('石头门音乐会',datetime.date(2026,5,31)))
+# time_task.append(('2026年高考',datetime.date(2026,6,7)))
+time_task.append(('命运石之门REBOOT发售',datetime.date(2026,8,20)))
 
 groups = ["818353963", "757530435", "1053093162"]
 

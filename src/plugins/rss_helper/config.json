@@ -1,7 +1,7 @@
 {
 	"route":{
     	"微博": "https://rss.mcseekeri.com/weibo/user/",
-    	"B站": "https://api.bilibili.com/x/polymer/web-dynamic/v1/feed/space?offset=&host_mid=",
+    	"B站": "https://api.bilibili.com/x/polymer/web-dynamic/v1/feed/space?features=itemOpusStyle,listOnlyfans,opusBigCover,onlyfansVote,forwardListHidden,decorationCard,commentsNewVersion,onlyfansAssetsV2,ugcDelete,onlyfansQaCard&host_mid=",
 		"bili直播": "https://api.live.bilibili.com/room/v1/Room/get_info?room_id="
 	}
 }

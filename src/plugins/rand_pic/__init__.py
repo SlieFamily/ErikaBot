@@ -26,7 +26,9 @@ headers = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/99.0.4844.51 Safari/537.36 Edg/99.0.1150.36"
 }
 
-setu = on_command("setu", aliases=set(['涩图', '色图', '来点色图', '来点涩图']), priority=1)
+# setu = on_command("setu", aliases=set(['涩图', '色图', '来点色图', '来点涩图']), priority=1)
+setu = on_command("setu", aliases=set(['来来来来点涩图']), priority=1)
+
 
 
 async def get_msg_id(

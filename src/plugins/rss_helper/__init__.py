@@ -31,7 +31,7 @@ RSS.Init2db() #数据库初始化
 scheduler = require('nonebot_plugin_apscheduler').scheduler
 
 # 创建定时任务：推送订阅信息/每5s查询一次
-@scheduler.scheduled_job('interval', seconds = 40, id = 'update')
+@scheduler.scheduled_job('interval', seconds = 60, id = 'update')
 async def update():
     
     if RSS.Empty():
@@ -46,7 +46,7 @@ async def check_single_user(user_data):
     """
     单个用户检测逻辑：独立运行，互不干扰
     """
-    await asyncio.sleep(random.uniform(5, 20)) #随机错开请求，避免同时访问导致的网络压力或目标站点封禁
+    await asyncio.sleep(random.uniform(5, 25)) #随机错开请求，避免同时访问导致的网络压力或目标站点封禁
     app, name, user_id, msg_id, url = user_data
     logger.info(f'[!]查询 {app}:{name}({user_id}) 中……')
     if app == 'bili直播':

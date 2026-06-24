@@ -3,15 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <style>
-        /* 现代配色变量 */
         :root {
-            --bg-body: linear-gradient(135deg, #fbc2eb 0%, #a18cd1 100%); /* 外层底色：粉紫渐变 */
-            --bg-card: rgba(255, 255, 255, 0.65);       /* 卡片底色：半透明纯白 */
-            --bg-nested: #F8FAFC;       /* 嵌套卡片底色：浅灰 */
-            --text-main: #334155;       /* 主文本：深石板灰，比纯黑更柔和 */
-            --text-sub: #64748b;        /* 副文本：次级灰 */
-            --border-color: #E2E8F0;    /* 边框色 */
-            --accent-gradient: linear-gradient(135deg, #FF6699 0%, #FF8C69 100%); /* 名字的渐变粉橘色 */
+            --bg-body: linear-gradient(135deg, #fbc2eb 0%, #a18cd1 100%); 
+            --bg-card: rgba(255, 255, 255, 0.75);       
+            --bg-nested: #F8FAFC;       
+            --text-main: #1E293B;       
+            --text-sub: #64748b;        
+            --border-color: #E2E8F0;    
+            --accent-gradient: linear-gradient(135deg, #FF6699 0%, #FF8C69 100%); 
         }
 
         * { box-sizing: border-box; }
@@ -20,197 +19,196 @@
             background: var(--bg-body);
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             margin: 0;
-            padding: 10px; /* 周边粉色背景保持很窄、很精致 */
-            display: inline-block; /* 保证截图尺寸完美贴合的关键 */
+            padding: 10px; 
+            display: inline-block; 
             -webkit-font-smoothing: antialiased;
         }
 
-        /* 主卡片：大圆角与高级阴影 */
         .card {
+            position: relative; 
             background: var(--bg-card);
             backdrop-filter: blur(16px); 
             -webkit-backdrop-filter: blur(16px);
-            border: 1px solid rgba(255, 255, 255, 0.5); 
-            width: 540px; /* 【修改】卡片变窄，540px 的黄金宽度让手机端阅读最舒适 */
+            border: 1px solid rgba(255, 255, 255, 0.6); 
+            width: 540px; 
             border-radius: 28px;
-            padding: 32px; /* 内边距稍微收紧一点点配合窄卡片 */
-            box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.05), 0 1px 3px rgba(0,0,0,0.02);
+            padding: 32px; 
+            box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0,0,0,0.02);
+            overflow: hidden; 
+        }
+
+        /* 【修复】装扮图大幅放大，侵占更多右上角空间，且不会被裁剪 */
+        .decorate-bg {
+            position: absolute;
+            top: -10px;
+            right: -10px;
+            height: 220px;       
+            max-width: 65%;      
+            object-fit: contain; 
+            object-position: top right; 
+            opacity: 0.85;        
+            pointer-events: none;
+            z-index: 0; 
+        }
+
+        .header, .content, .pic-grid, .media-card, .video-card, .reserve-box, .orig-card {
+            position: relative;
+            z-index: 1;
         }
 
         /* 头部信息 */
-        .header {
-            display: flex;
-            align-items: center;
-            margin-bottom: 24px;
+        .header { display: flex; align-items: center; margin-bottom: 12px; }
+
+        /* 【修复】头像区域右侧加大留白，坚决不让头像框碰到名字 */
+        .avatar-wrap {
+            position: relative;
+            width: 72px;
+            height: 72px;
+            margin-right: 36px; 
         }
 
         .avatar {
-            width: 72px; /* 【修改】头像放大 */
-            height: 72px;
-            border-radius: 50%;
-            object-fit: cover;
-            border: 2px solid #fff;
-            box-shadow: 0 6px 16px rgba(0,0,0,0.08); 
-            margin-right: 18px;
+            width: 100%; height: 100%; border-radius: 50%; object-fit: cover;
+            border: 2px solid #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.1); 
+        }
+
+        /* 【修复】头像框稍微放大一点点 */
+        .pendant {
+            position: absolute;
+            width: 120px;  
+            height: 120px;
+            top: -24px;    
+            left: -24px;
+            pointer-events: none;
         }
 
         .name {
-            font-size: 24px; /* 【修改】名字大幅放大 */
-            font-weight: 800;
+            font-size: 24px; font-weight: 800; margin-bottom: 4px;
             background: var(--accent-gradient);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            margin-bottom: 4px;
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
         }
 
-        .time {
-            font-size: 16px; /* 【修改】时间放大 */
-            color: var(--text-sub);
+        .time { font-size: 16px; color: var(--text-sub); font-weight: 600; }
+
+        /* 图文专属标题 */
+        .opus-title {
+            font-size: 28px; font-weight: 900; color: #000000; margin: 0; margin-bottom: 6px; padding: 0; line-height: 1.4;
+        }
+
+        /* 【修复】主文本排版，行高调整为 48px，强制兼容巨大的表情包 */
+        .content {
+            font-size: 24px; 
+            line-height: 48px;  /* 必须与表情包高度一致，防止行距忽大忽小 */
+            color: var(--text-main); 
+            margin: 0;           
+            margin-bottom: 16px; 
+            padding: 0;          
+            white-space: pre-wrap; 
+            word-wrap: break-word; 
             font-weight: 500;
         }
 
-        /* 主文本排版 */
-        .content {
-            font-size: 24px; /* 【修改】正文放大至 24px */
-            line-height: 1.6; /* 调整行高，让大字体阅读不松散 */
-            color: var(--text-main);
-            margin-bottom: 20px;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-        }
-
         .bili-emoji {
-            height: 48px; /* 【修改】表情包严格设定为正文字体(24px)的两倍大 */
-            vertical-align: -12px; /* 【修改】向下沉降 12px，完美居中对齐大字号文本 */
-            margin: 0 6px;
+            height: 48px; 
+            vertical-align: -12px; 
+            margin: 0 4px;
         }
 
-        /* --- 智能图片网格 --- */
-        .pic-grid {
-            display: grid;
-            gap: 12px;
-            margin-top: 16px;
-            border-radius: 16px;
-            overflow: hidden;
-        }
-        
+        .pic-grid { display: grid; gap: 12px; margin-top: 16px; border-radius: 16px; overflow: hidden; }
         .pic-grid.single { grid-template-columns: 1fr; }
         .pic-grid.multi { grid-template-columns: repeat(3, 1fr); }
-
-        .pic-grid img {
-            width: 100%;
-            object-fit: cover;
-            border-radius: 12px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.03);
-            border: 1px solid rgba(0,0,0,0.02);
-        }
-        
+        .pic-grid img { width: 100%; object-fit: cover; border-radius: 12px; border: 1px solid rgba(0,0,0,0.02); }
         .pic-grid.multi img { aspect-ratio: 1 / 1; }
-        /* 单图显示全图，取消最大高度限制并禁止遮挡裁剪 */
         .pic-grid.single img { max-height: none; height: auto; width: 100%; border-radius: 16px; object-fit: contain; }
 
-        /* --- 视频/直播卡片 --- */
-        .media-card {
-            display: flex;
-            background: var(--bg-nested);
-            border-radius: 20px;
-            overflow: hidden;
-            border: 1px solid var(--border-color);
-            margin-top: 20px;
+        /* 视频投稿卡排版 */
+        .video-card {
+            display: flex; flex-direction: column; 
+            background: rgba(255,255,255,0.6); border-radius: 20px; overflow: hidden;
+            border: 1px solid rgba(0,0,0,0.06); margin-top: 10px;
         }
-
-        .media-cover {
-            width: 220px;
-            aspect-ratio: 16/9;
-            object-fit: cover;
+        .video-cover-wrap { position: relative; width: 100%; aspect-ratio: 16/9; }
+        .video-cover { width: 100%; height: 100%; object-fit: cover; }
+        .video-badge {
+            position: absolute; top: 12px; right: 12px;
+            background: rgba(0,0,0,0.6); color: #fff; padding: 6px 14px;
+            border-radius: 16px; font-size: 14px; font-weight: 800; backdrop-filter: blur(4px);
         }
-
-        .media-info {
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            flex: 1;
-        }
-
-        .media-title {
-            font-size: 20px; /* 【修改】视频标题放大 */
-            font-weight: 700;
-            color: var(--text-main);
-            margin-bottom: 14px;
-            display: -webkit-box;
-            -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
+        .video-info-box { padding: 16px 20px; }
+        .video-title {
+            font-size: 22px; font-weight: 800; color: var(--text-main); margin-bottom: 8px;
+            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
             line-height: 1.5;
         }
-
-        .badge {
-            display: inline-flex;
-            font-size: 15px; /* 【修改】标签字体放大 */
-            font-weight: 700;
-            padding: 6px 14px;
-            border-radius: 20px;
-            width: max-content;
+        .video-summary {
+            font-size: 16px; color: var(--text-sub);
+            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+            line-height: 1.6;
         }
 
-        .badge.video { background: #E0F2FE; color: #0284C7; } 
+        .media-card { display: flex; background: var(--bg-nested); border-radius: 20px; overflow: hidden; border: 1px solid var(--border-color); margin-top: 16px; }
+        .media-cover { width: 220px; aspect-ratio: 16/9; object-fit: cover; }
+        .media-info { padding: 20px; display: flex; flex-direction: column; justify-content: center; flex: 1; }
+        .media-title { font-size: 20px; font-weight: 700; color: var(--text-main); margin-bottom: 14px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.5; }
+        .badge { display: inline-flex; font-size: 15px; font-weight: 700; padding: 6px 14px; border-radius: 20px; width: max-content; }
         .badge.live { background: #FCE7F3; color: #BE185D; } 
 
-        /* --- 转发内容的嵌套卡片 --- */
-        .orig-card {
-            background: var(--bg-nested);
-            border-radius: 24px;
-            padding: 24px 28px;
-            margin-top: 20px;
-            border: 1px solid var(--border-color);
-            position: relative;
+        .reserve-box {
+            display: flex; align-items: center; margin-top: 16px; position: relative; overflow: hidden;
+            background: linear-gradient(90deg, rgba(255,102,153,0.1) 0%, rgba(255,140,105,0.03) 100%);
+            border: 1px solid rgba(255,102,153,0.25); border-radius: 16px; padding: 18px 24px;
         }
+        .reserve-box::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 6px; background: #FF6699; }
+        .reserve-icon { font-size: 32px; margin-right: 18px; }
+        .reserve-text { flex: 1; }
+        .reserve-title { font-size: 18px; font-weight: 800; color: #E11D48; margin-bottom: 6px; }
+        .reserve-time { font-size: 15px; color: #BE185D; font-weight: 600; }
+        .reserve-btn { background: #FF6699; color: #fff; padding: 8px 20px; border-radius: 20px; font-size: 15px; font-weight: 800; }
 
-        .orig-card::before {
-            content: '';
-            position: absolute;
-            left: -1px;
-            top: 30px;
-            bottom: 30px;
-            width: 4px;
-            background: #cbd5e1;
-            border-radius: 0 4px 4px 0;
-        }
-
-        .orig-name {
-            font-size: 20px; /* 【修改】被转发者名字放大 */
-            font-weight: 800;
-            color: #0284C7; 
-            margin-bottom: 12px;
-        }
+        .orig-card { background: var(--bg-nested); border-radius: 24px; padding: 24px 28px; margin-top: 16px; border: 1px solid var(--border-color); position: relative; }
+        .orig-card::before { content: ''; position: absolute; left: -1px; top: 30px; bottom: 30px; width: 4px; background: #cbd5e1; border-radius: 0 4px 4px 0; }
+        .orig-name { font-size: 20px; font-weight: 800; color: #0284C7; margin-bottom: 12px; }
     </style>
 </head>
 <body>
     <div class="card" id="dynamic-card">
+        
+        {% if decorate_card %}
+            <img class="decorate-bg" src="{{ decorate_card }}">
+        {% endif %}
+
         <div class="header">
-            <img class="avatar" src="{{ avatar }}">
+            <div class="avatar-wrap">
+                <img class="avatar" src="{{ avatar }}">
+                {% if pendant %}
+                    <img class="pendant" src="{{ pendant }}">
+                {% endif %}
+            </div>
+            
             <div class="user-info">
                 <div class="name">{{ name }}</div>
                 <div class="time">{{ time }}</div>
             </div>
         </div>
 
-        <div class="content">{{ parsed_content | safe }}</div>
+        {% if (dtype == 2 and title) or parsed_content %}
+        <div class="content">{% if dtype == 2 and title %}<div class="opus-title">{{ title }}</div>{% endif %}{{ parsed_content | safe }}</div>
+        {% endif %}
 
         {% if dtype == 2 %}
             <div class="pic-grid {% if pics|length == 1 %}single{% else %}multi{% endif %}">
-                {% for pic in pics %}
-                    <img src="{{ pic }}">
-                {% endfor %}
+                {% for pic in pics %} <img src="{{ pic }}"> {% endfor %}
             </div>
 
         {% elif dtype == 8 %}
-            <div class="media-card">
-                <img class="media-cover" src="{{ cover }}">
-                <div class="media-info">
-                    <div class="media-title">{{ title }}</div>
-                    <div class="badge video">🎬 视频投稿</div>
+            <div class="video-card">
+                <div class="video-cover-wrap">
+                    <img class="video-cover" src="{{ cover }}">
+                    <div class="video-badge">🎬 视频投稿</div>
+                </div>
+                <div class="video-info-box">
+                    <div class="video-title">{{ title }}</div>
+                    <div class="video-summary">{{ summary }}</div>
                 </div>
             </div>
 
@@ -226,13 +224,26 @@
         {% elif dtype == 1 %}
             <div class="orig-card">
                 <div class="orig-name">@{{ orig_name }}</div>
+                {% if orig_parsed_content %}
                 <div class="content" style="margin-bottom: 0;">{{ orig_parsed_content | safe }}</div>
+                {% endif %}
                 
                 {% if orig_pics %}
                 <div class="pic-grid {% if orig_pics|length == 1 %}single{% else %}multi{% endif %}" style="margin-top: 16px;">
                     {% for pic in orig_pics %} <img src="{{ pic }}"> {% endfor %}
                 </div>
                 {% endif %}
+            </div>
+        {% endif %}
+
+        {% if reserve %}
+            <div class="reserve-box">
+                <div class="reserve-icon">📅</div>
+                <div class="reserve-text">
+                    <div class="reserve-title">{{ reserve.title }}</div>
+                    <div class="reserve-time">{{ reserve.time }} · {{ reserve.count }}</div>
+                </div>
+                <div class="reserve-btn">预约</div>
             </div>
         {% endif %}
     </div>
