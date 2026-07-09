@@ -64,6 +64,8 @@ async def check_single_user(user_data):
             return #最新 msg_id 和上次收录的一致(说明并未更新)
         else:
             RSS.UpdateMsg(user_id, new_msg_id) #更新数据库的最新 msg_id
+    # elif app == '微博':
+    #     return #暂时关闭微博功能，待修复
     else:
         new_msg_id, datas = await rss_tool.get_latest_datas(url)
         if new_msg_id == msg_id or new_msg_id == '': #最新动态与上次收录的一致(说明并未更新)或获取信息失败

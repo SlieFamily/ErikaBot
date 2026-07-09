@@ -26,7 +26,7 @@ async def get_user_info(url:str)->str:
         try:
             msg = rss.entries[0]['author']
         except:
-            msg = rss.feed.title.split(" ")[0] #解决B站动态没有作者信息问题
+            msg = rss.feed.title.split(" ")[0]
         logger.success('[√]订阅消息获取成功！')  #存在因订阅源失效导致xml内容无用的情况，待修复
         return msg
 
@@ -36,7 +36,7 @@ async def get_user_info(url:str)->str:
         return ''
 
 
-async def get_latest_datas(url:str)->(str,list):
+async def get_latest_datas(url:str):
     '''
     根据订阅信息的url检查更新
     返回信息唯一标识和最新数据
