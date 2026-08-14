@@ -107,6 +107,7 @@ async def check_single_user(user_data):
             if bot_info.get('role') in ['admin', 'owner']:
                 if name == "雪糕cheese" and app == 'bili直播':
                     # 重新拼接消息，在头部加上 @全体成员 的 CQ 码
+                    # pass
                     final_message = f"[CQ:at,qq=all]\n{final_message}"
                 
         except Exception as e:
