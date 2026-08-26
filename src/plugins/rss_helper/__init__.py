@@ -33,14 +33,15 @@ scheduler = require('nonebot_plugin_apscheduler').scheduler
 # 创建定时任务：推送订阅信息/每5s查询一次
 @scheduler.scheduled_job('interval', seconds = 60, id = 'update')
 async def update():
-    
+
     if RSS.Empty():
         return #数据库关注列表为空，无事发生
 
     users = RSS.GetUserList()
     # 使用 asyncio.gather 并发执行所有用户的检测任务
     tasks = [check_single_user(user_info) for user_info in users]
-    await asyncio.gather(*tasks)
+    # return_exceptions=True 确保一个源出错不影响其他源
+    await asyncio.gather(*tasks, return_exceptions=True)
 
 async def check_single_user(user_data):
     """

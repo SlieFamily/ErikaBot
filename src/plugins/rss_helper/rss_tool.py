@@ -3,11 +3,18 @@ import random
 import hashlib
 import os
 import time
+import asyncio
 from nonebot.log import logger
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 import feedparser
 from pyquery import PyQuery as Pq
 from utils.HtmlTag import handle_html_tag
+
+# 创建全局异步HTTP客户端，配置15秒超时
+_http_client = httpx.AsyncClient(
+    timeout=httpx.Timeout(15.0, connect=10.0),
+    follow_redirects=True
+)
 
 
 # 对字符串计算哈希值，供后续比较
@@ -22,36 +29,58 @@ async def get_user_info(url:str)->str:
     根据订阅信息的url获取作者昵称
     '''
     try:
-        rss = feedparser.parse(url)
+        # 异步获取RSS内容，自动应用15秒超时
+        response = await _http_client.get(url)
+        response.raise_for_status()
+
+        # 在线程池中解析RSS（feedparser是同步的，避免阻塞事件循环）
+        loop = asyncio.get_event_loop()
+        rss = await loop.run_in_executor(None, feedparser.parse, response.text)
+
         try:
             msg = rss.entries[0]['author']
         except:
             msg = rss.feed.title.split(" ")[0]
-        logger.success('[√]订阅消息获取成功！')  #存在因订阅源失效导致xml内容无用的情况，待修复
+        logger.success('[√]订阅消息获取成功！')
         return msg
 
-    except:
-        logger.error('[!]RSS访问失败，请检查订阅url或代理/网络设置！')
-        logger.error('[!]获取订阅消息失败！')
+    except httpx.TimeoutException:
+        logger.error(f'[!]RSS访问超时: {url}')
+        return ''
+    except Exception as e:
+        logger.error(f'[!]RSS访问失败: {e}')
         return ''
 
 
-async def get_latest_datas(url:str):
+async def get_latest_datas(url:str) -> Tuple[str, List]:
     '''
     根据订阅信息的url检查更新
     返回信息唯一标识和最新数据
     '''
     try:
-        rss = feedparser.parse(url)
-        datas = rss.entries
-        time = datas[0]['published']
-        logger.success('[√]订阅消息刷新成功！')  #存在因订阅源失效导致xml内容无用的情况，待修复
-        return str_hash(time),datas
+        # 异步获取RSS内容，自动应用15秒超时
+        response = await _http_client.get(url)
+        response.raise_for_status()
 
-    except:
-        logger.error('[!]RSS访问失败，请检查订阅url或代理/网络设置！')
-        logger.error('[!]获取订阅消息失败！')
-        return '',[]
+        # 在线程池中解析RSS（feedparser是同步的，避免阻塞事件循环）
+        loop = asyncio.get_event_loop()
+        rss = await loop.run_in_executor(None, feedparser.parse, response.text)
+
+        datas = rss.entries
+        if not datas:
+            logger.warning('[!]RSS内容为空')
+            return '', []
+
+        time = datas[0]['published']
+        logger.success('[√]订阅消息刷新成功！')
+        return str_hash(time), datas
+
+    except httpx.TimeoutException:
+        logger.error(f'[!]RSS访问超时: {url}')
+        return '', []
+    except Exception as e:
+        logger.error(f'[!]获取订阅消息失败: {e}')
+        return '', []
     
 
 
