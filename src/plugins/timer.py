@@ -19,8 +19,10 @@ from nonebot_plugin_apscheduler import scheduler
 global time_task
 
 time_task = []
-# time_task.append(('2026年高考',datetime.date(2026,6,7)))
-time_task.append(('命运石之门REBOOT发售',datetime.date(2026,8,20)))
+time_task.append(('影之刃零游戏发售',datetime.date(2026,10,29)))
+time_task.append(('GTA6游戏发售',datetime.date(2026,11,19)))
+time_task.append(('2027级研究生考试',datetime.date(2026,12,19)))
+time_task.append(('2027年高考',datetime.date(2027,6,7)))
 
 groups = ["818353963", "757530435", "1053093162"]
 
