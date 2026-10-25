@@ -108,6 +108,8 @@ class TurnCollector:
         elif kind == "tool/call":
             # Defence-in-depth detector, NOT the execution guard. DSH guard enforces denial.
             raise BridgeError("unexpected_tool_call")
+        elif kind == "agent-preset/selected" and data.get("agentPreset") != PRESET_ID:
+            raise BridgeError("session_preset_changed")
         elif kind == "assistant/message" and self.owned and data.get("turn") == self.turn:
             blocks = data.get("message", {}).get("content", [])
             self.text = "".join(b.get("text", "") for b in blocks if b.get("type") == "text")
@@ -263,6 +265,11 @@ class DshClient:
             header = snapshot.get("header", {})
             if header.get("id") != sid or header.get("agentPreset") != PRESET_ID:
                 raise BridgeError("unsafe_session_header")
+            projections = snapshot.get("projections", {}).get("values", {})
+            # Header is creation-time only. The projection folds the ENTIRE log,
+            # including preset switches older than this bounded snapshot window.
+            if projections.get("agentPreset") != PRESET_ID:
+                raise BridgeError("unsafe_current_session_preset")
             # Reject a changed preset, unfinished historical turn or queued work.
             open_turns = set()
             for record in snapshot.get("records", []):
@@ -272,7 +279,7 @@ class DshClient:
                     raise BridgeError("session_preset_changed")
                 if kind == "turn/start": open_turns.add(data.get("turn"))
                 if kind == "turn/end": open_turns.discard(data.get("turn"))
-            inbox = snapshot.get("projections", {}).get("values", {}).get("inbox", {})
+            inbox = projections.get("inbox", {})
             if open_turns or any(inbox.get(k) for k in ("next-turn", "next-step")):
                 raise BridgeError("session_has_pending_work")
             result = await self.rpc("session/prompt", {"sessionId": sid, "requestId": rid, "mode": "queue",

@@ -60,8 +60,9 @@ class WireTests(unittest.IsolatedAsyncioTestCase):
             snapshot = {"type":"snapshot", "header":{"id":sid,"agentPreset":"erika-agent-chat-v1"},
                         "records":[{"event":{"type":"assistant/message","data":{"turn":1,"message":{"content":[{"type":"text","text":"旧消息"}]}}}},
                                    {"event":{"type":"turn/end","data":{"turn":1,"reason":{"kind":"completed"}}}}],
-                        "projections":{"values":{"inbox":{"next-turn":[],"next-step":[]}}}}
+                        "projections":{"values":{"agentPreset":"erika-agent-chat-v1", "inbox":{"next-turn":[],"next-step":[]}}}}
             if self.mode == "unsafe-preset": snapshot["header"]["agentPreset"] = "standard"
+            if self.mode == "old-preset-switch": snapshot["projections"]["values"]["agentPreset"] = "standard"
             await ws.send_json({"type":"item","streamId":self.stream,"value":snapshot})
             try:
                 while True: await ws.receive_text()
@@ -104,6 +105,12 @@ class WireTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(dsh.BridgeError):
             await self.client.reply("session-1", "QQ_CHAT_EVENT test")
         self.assertEqual(len(self.prompts), 1)
+
+    async def test_old_preset_switch_outside_history_window_rejected(self):
+        self.mode = "old-preset-switch"
+        with self.assertRaisesRegex(dsh.BridgeError, "unsafe_current_session_preset"):
+            await self.client.reply("session-1", "QQ_CHAT_EVENT test")
+        self.assertEqual(self.prompts, [])
 
     async def test_unexpected_tool_stops_output(self):
         self.mode = "tool"
