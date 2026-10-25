@@ -26,6 +26,11 @@ class MissingSession(BridgeError):
     pass
 
 
+class ImageUnsupported(BridgeError):
+    """DSH explicitly refused images before accepting or executing a prompt."""
+    pass
+
+
 class _RedactAuthURL(logging.Filter):
     def filter(self, record):
         # httpx's INFO access log otherwise includes the launch token in the URL.
@@ -185,6 +190,9 @@ class DshClient:
         envelope = result.get("result", {})
         if envelope.get("ok") is not True:
             code = envelope.get("error", {}).get("code", "")
+            if (code == 'session/attachment-invalid' and
+                    envelope.get('error', {}).get('details', {}).get('reason') == 'MODEL_DOES_NOT_SUPPORT_IMAGES'):
+                raise ImageUnsupported('model_does_not_support_images')
             if code in {"session-not-found", "session/not-found"}:
                 raise MissingSession("dsh_session_missing")
             raise BridgeError("dsh_rpc_rejected")
@@ -238,15 +246,23 @@ class DshClient:
             if failure:
                 raise BridgeError("cannot_confirm_queue_cleared") from None
 
-    async def reply(self, sid, text):
+    async def reply(self, sid, text, images=None):
         try:
-            return await asyncio.wait_for(self._reply(sid, text), self.cfg.agent_chat_timeout)
+            return await asyncio.wait_for(self._reply(sid, text, images), self.cfg.agent_chat_timeout)
         except asyncio.TimeoutError:
             raise BridgeError("dsh_turn_timeout") from None
         except (OSError, websockets.WebSocketException):
             raise BridgeError("dsh_stream_disconnected") from None
 
-    async def _reply(self, sid, text):
+    async def _reply(self, sid, text, images=None):
+        content = [{"type": "text", "text": text}]
+        for image in images or []:
+            if (len(content) > 4 or set(image) != {"type", "mediaType", "data", "name"} or
+                    image["type"] != "image" or image["mediaType"] != "image/jpeg" or
+                    not isinstance(image["data"], str) or len(image["data"]) > 1_400_000 or
+                    not re.fullmatch(r"qq-image-[1-4]\.jpg", image["name"])):
+                raise BridgeError("invalid_image_input")
+            content.append(image)
         await self.authenticate()
         ws_url = self.cfg.agent_chat_dsh_url.replace("http", "ws", 1) + "/api/remote.mux"
         stream = str(uuid.uuid4())
@@ -284,7 +300,7 @@ class DshClient:
             if open_turns or any(inbox.get(k) for k in ("next-turn", "next-step")):
                 raise BridgeError("session_has_pending_work")
             result = await self.rpc("session/prompt", {"sessionId": sid, "requestId": rid, "mode": "queue",
-                                     "content": [{"type": "text", "text": text}]}, rpc_id=rid)
+                                     "content": content}, rpc_id=rid)
             if not isinstance(result, dict) or result.get("accepted") is not True or result.get("command"):
                 raise BridgeError("unexpected_prompt_response")
             collector = TurnCollector(rid)

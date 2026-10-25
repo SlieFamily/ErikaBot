@@ -1,7 +1,7 @@
 """ErikaBot ↔ DSH bridge. Disabled unless explicitly configured by the owner."""
 from typing import Optional
 
-from nonebot import get_driver, on_command
+from nonebot import get_bots, get_driver, on_command
 from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, Message, MessageEvent, MessageSegment, PrivateMessageEvent
 from nonebot.log import logger
 from nonebot.matcher import Matcher
@@ -16,11 +16,13 @@ from .domain import ChatMessage
 from .dsh import BridgeError, DshClient
 from .service import ChatService
 from .store import Store
+from .media import MediaResolver, allowed_url, safe_file_ref
 
 
 driver = get_driver()
 config = load_config(driver.config.dict())
 service: Optional[ChatService] = None
+media_resolver: Optional[MediaResolver] = None
 
 
 def chat_key(bot, event):
@@ -41,22 +43,61 @@ def readable(message):
     return "".join(parts)[:config.agent_chat_max_message_chars]
 
 
+def image_refs(message):
+    refs = []
+    for segment in message:
+        if segment.type != 'image' or len(refs) >= config.agent_chat_image_count:
+            continue
+        file = segment.data.get('file', '')
+        url = segment.data.get('url', '')
+        try:
+            allowed_url(url)
+        except Exception:
+            url = ''
+        file = file if safe_file_ref(file) else ''
+        if file or url:
+            refs.append({'file': file, 'url': url})
+    return refs
+
+
+def proactive_sender(key):
+    if not service or not service.proactive_group(key):
+        return None
+    bot_id, _, group_id = key.split(':')
+    if bot_id not in get_bots():
+        return None
+
+    async def send(text):
+        bot = get_bots().get(bot_id)
+        if not bot or not service or service.closed or not service.proactive_group(key):
+            raise RuntimeError('proactive_target_unavailable')
+        await bot.send_group_msg(group_id=int(group_id), message=Message(MessageSegment.text(text)))
+    return send
+
+
 @driver.on_startup
 async def start_agent_chat():
-    global service
+    global service, media_resolver
     if not config.agent_chat_enabled:
         logger.info("agent_chat disabled (no DSH connection or chat recording)")
         return
     service = ChatService(config, Store(config.agent_chat_state_path), DshClient(config))
+    if config.agent_chat_images_enabled:
+        media_resolver = MediaResolver(config)
+    if config.agent_chat_proactive_enabled:
+        service.start_proactive(proactive_sender)
     logger.info("agent_chat enabled for explicitly allowed conversations")
 
 
 @driver.on_shutdown
 async def stop_agent_chat():
-    global service
+    global service, media_resolver
     if service:
         await service.close()
         service = None
+    if media_resolver:
+        await media_resolver.close()
+        media_resolver = None
 
 
 @event_preprocessor
@@ -75,6 +116,8 @@ async def observe_chat(bot: Bot, event: MessageEvent, state: T_State):
         text=readable(event.message), timestamp=float(event.time), directed=directed,
         reply_to=str(reply.message_id) if reply else "",
         reply_text=readable(reply.message) if reply else "", reply_user_id=quoted_user,
+        media=tuple((image_refs(event.message) + (image_refs(reply.message) if reply else []))[:config.agent_chat_image_count])
+              if config.agent_chat_images_enabled else (),
     )
     fresh = service.observe(message)
     # NoneBot shallow-copies state per matcher; this nested bucket is intentionally shared.
@@ -100,7 +143,12 @@ async def dispatch_chat(bot: Bot, event: MessageEvent, state: T_State):
         # Construct a literal text segment: model-produced CQ code never executes.
         await bot.send(event, Message(MessageSegment.text(text)))
 
-    service.schedule(message, send)
+    if media_resolver:
+        async def prepare(history):
+            return await media_resolver.prepare(history, bot.call_api)
+        service.schedule(message, send, prepare)
+    else:
+        service.schedule(message, send)
 
 
 admin = on_command("ai", permission=SUPERUSER, priority=1, block=True)
@@ -115,7 +163,12 @@ async def administer(bot: Bot, event: MessageEvent, args: Message = CommandArg()
     if command in {"状态", "status"}:
         bound = service.store.session(key)
         status = "未创建会话" if not bound else ("已暂停，需要检查 DSH 后重置" if bound[2] else "会话已保存")
-        await admin.finish("AI 桥接：" + status)
+        row = service.store.activity(key)
+        used = row[6] if row and row[5] == service.local_time().date().isoformat() else 0
+        await admin.finish("AI 桥接：" + status +
+            f"\n读图：{'开启' if config.agent_chat_images_enabled else '关闭'}；随机接话：{config.agent_chat_ambient_probability:.0%}" +
+            f"\n自主发言：{'开启' if config.agent_chat_proactive_enabled and service.proactive_group(key) else '关闭'}；今日尝试 {used}/{config.agent_chat_proactive_daily_limit}" +
+            f"\n安静时段：{config.agent_chat_quiet_start}:00—{config.agent_chat_quiet_end}:00；语音识别暂未启用。")
     if command in {"重置", "reset"}:
         try:
             await service.reset(key)

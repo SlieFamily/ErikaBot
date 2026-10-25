@@ -3,7 +3,7 @@ import ipaddress
 import json
 import os
 from pathlib import Path
-from typing import FrozenSet
+from typing import FrozenSet, Tuple
 from urllib.parse import urlsplit
 
 from pydantic import BaseModel, Field, SecretStr, root_validator, validator
@@ -35,11 +35,25 @@ class Config(BaseModel):
     agent_chat_takeover_mentions: bool = True
     agent_chat_provider: str = ""
     agent_chat_model: str = ""
+    agent_chat_images_enabled: bool = False
+    agent_chat_image_count: int = Field(2, ge=1, le=4)
+    agent_chat_image_max_bytes: int = Field(8_000_000, ge=100_000, le=20_000_000)
+    agent_chat_image_max_pixels: int = Field(20_000_000, ge=100_000, le=40_000_000)
+    agent_chat_image_cache_roots: Tuple[Path, ...] = ()
+    agent_chat_proactive_enabled: bool = False
+    agent_chat_proactive_groups: FrozenSet[int] = frozenset()
+    agent_chat_proactive_idle: float = Field(900, ge=60, le=86400)
+    agent_chat_proactive_daily_limit: int = Field(6, ge=1, le=24)
+    agent_chat_proactive_recent_hours: int = Field(6, ge=1, le=24)
+    agent_chat_quiet_start: int = Field(23, ge=0, le=23)
+    agent_chat_quiet_end: int = Field(9, ge=0, le=23)
+    agent_chat_utc_offset_hours: int = Field(8, ge=-12, le=14)
 
     class Config:
         extra = "ignore"
 
-    @validator("agent_chat_groups", "agent_chat_private_users", pre=True)
+    @validator("agent_chat_groups", "agent_chat_private_users", "agent_chat_proactive_groups",
+               "agent_chat_image_cache_roots", pre=True)
     def parse_ids(cls, value):
         return json.loads(value) if isinstance(value, str) else value
 
@@ -58,13 +72,15 @@ class Config(BaseModel):
             raise ValueError("Use http://127.0.0.1:3080 (SSH tunnel for a remote server)")
         return value.rstrip("/")
 
-    @validator("agent_chat_groups", "agent_chat_private_users")
+    @validator("agent_chat_groups", "agent_chat_private_users", "agent_chat_proactive_groups")
     def positive_ids(cls, values):
         if any(v <= 0 for v in values):
             raise ValueError("QQ identifiers must be positive")
         return values
     @root_validator
     def valid_enabled_config(cls, values):
+        if not values.get("agent_chat_proactive_groups", frozenset()) <= values.get("agent_chat_groups", frozenset()):
+            raise ValueError("Proactive groups must be inside the main group allowlist")
         if bool(values.get("agent_chat_model")) != bool(values.get("agent_chat_provider")):
             raise ValueError("Set provider and model together")
         if values.get("agent_chat_enabled"):

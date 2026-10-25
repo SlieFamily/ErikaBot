@@ -37,3 +37,22 @@ class DeliveryTests(unittest.IsolatedAsyncioTestCase):
         self.client.answer = 'private</thinking>可见回复'
         await self.submit(message())
         self.assertEqual(self.sent, ['可见回复'])
+
+    async def test_image_unsupported_falls_back_once_without_suspending_text_chat(self):
+        requests = []
+        async def reply(sid, text, images=None):
+            requests.append(images)
+            if images:
+                raise core.dsh.ImageUnsupported('model_does_not_support_images')
+            self.assertIn('不支持图片', text)
+            return '这张图我现在看不了'
+        async def prepare(history): return [{'type':'image'}], 'image note'
+        self.client.reply = reply
+        msg = message()
+        self.service.observe(msg)
+        self.service.schedule(msg, self.send, prepare)
+        import asyncio
+        await asyncio.gather(*list(self.service.tasks.values()))
+        self.assertEqual(len(requests), 2)
+        self.assertEqual(self.store.session(msg.key)[2], 0)
+        self.assertEqual(self.sent, ['这张图我现在看不了'])

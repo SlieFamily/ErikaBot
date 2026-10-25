@@ -32,6 +32,10 @@ class WireTests(unittest.IsolatedAsyncioTestCase):
                 self.session_counter += 1
                 value = {"sessionId":"session-" + str(self.session_counter), "agentPreset":"erika-agent-chat-v1"}
             elif method == "session/prompt":
+                if self.mode == 'image-unsupported':
+                    return {'type':'server-response','rpcId':body['rpcId'],
+                            'result':{'ok':False,'error':{'code':'session/attachment-invalid',
+                            'details':{'reason':'MODEL_DOES_NOT_SUPPORT_IMAGES'},'message':'not exposed'}}}
                 self.prompts.append(payload["request"])
                 await self.emit({"type":"turn/start", "data":{"turn":3}})
                 await self.emit({"type":"user/message", "data":{"source":{"kind":"user","rpcId":body["rpcId"]}}})
@@ -99,6 +103,18 @@ class WireTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(dsh.BridgeError, "unsafe_session_header"):
             await self.client.reply("session-1", "QQ_CHAT_EVENT test")
         self.assertEqual(self.prompts, [])
+
+    async def test_native_image_uses_only_allowed_attachment_fields(self):
+        image = {'type':'image','mediaType':'image/jpeg','data':'YWJj','name':'qq-image-1.jpg'}
+        await self.client.reply('session-1', 'QQ_CHAT_EVENT image-test', [image])
+        self.assertEqual(self.prompts[0]['content'][1], image)
+        self.assertEqual(self.prompts[0]['content'][0]['type'], 'text')
+
+    async def test_explicit_image_rejection_has_a_distinct_safe_error(self):
+        self.mode = 'image-unsupported'
+        with self.assertRaises(dsh.ImageUnsupported):
+            await self.client.reply('session-1', 'test',
+                [{'type':'image','mediaType':'image/jpeg','data':'YWJj','name':'qq-image-1.jpg'}])
 
     async def test_disconnect_never_resubmits_prompt(self):
         self.mode = "disconnect"

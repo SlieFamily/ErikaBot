@@ -29,7 +29,7 @@ async def main():
             def __init__(self): self.observed = []; self.scheduled = []
             def allowed(self, bot_id, group_id, user_id): return group_id == 42 and str(user_id) != str(bot_id)
             def observe(self, message): self.observed.append(message); return True
-            def schedule(self, message, send): self.scheduled.append((message, send))
+            def schedule(self, message, send, prepare=None): self.scheduled.append((message, send)); self.prepare = prepare
 
         service = FakeService(); ai.service = service
         sent = []
@@ -75,10 +75,22 @@ async def main():
         await handle_event(bot, event("你好", group=99))
         await handle_event(bot, event("你好", uid=100))
         assert len(service.observed) == before, "non-allowed groups and bot echoes excluded"
+        ai.config.agent_chat_images_enabled = True
+        class FakeMedia:
+            async def prepare(self, history, call_api): return [], 'checked'
+        ai.media_resolver = FakeMedia()
+        picture = event('这是什么图', directed=True)
+        picture.message.append(MessageSegment.image('a' * 32 + '.jpg'))
+        await handle_event(bot, picture)
+        assert service.scheduled[-1][0].media[0]['file'] == 'a' * 32 + '.jpg'
+        assert service.prepare is not None, 'only unclaimed allowed events schedule media preparation'
+        service.scheduled.clear()
+        ai.config.agent_chat_images_enabled = False
+        ai.media_resolver = None
         ai.service = None
         await handle_event(bot, event("你好", directed=True))
         assert sent, "disabled AI retains old @ reply"
-        print("PASS: real NoneBot dispatch, SuperAna no-hit/hit, @ takeover, command priority, literal CQ, allowlist, disabled fallback")
+        print("PASS: real NoneBot dispatch, SuperAna no-hit/hit, @ takeover, command priority, literal CQ, image routing, allowlist, disabled fallback")
         os.chdir(ROOT)
 
 

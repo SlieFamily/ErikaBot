@@ -22,6 +22,11 @@ class Store:
             CREATE TABLE IF NOT EXISTS dispatches (
                 id INTEGER PRIMARY KEY AUTOINCREMENT, chat_key TEXT NOT NULL,
                 created REAL NOT NULL, status TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS activity (
+                chat_key TEXT PRIMARY KEY, last_input REAL NOT NULL,
+                last_output REAL NOT NULL DEFAULT 0, generation INTEGER NOT NULL DEFAULT 1,
+                consumed_generation INTEGER NOT NULL DEFAULT -1,
+                day TEXT NOT NULL DEFAULT '', attempts INTEGER NOT NULL DEFAULT 0);
         """)
         # An interrupted request is not blindly re-sent after restart.
         with self.db:
@@ -36,6 +41,10 @@ class Store:
             self.db.execute("DELETE FROM messages WHERE chat_key=? AND seq NOT IN "
                             "(SELECT seq FROM messages WHERE chat_key=? ORDER BY seq DESC LIMIT ?)",
                             (message.key, message.key, self.history_limit))
+            if cur.rowcount == 1 and abs(time.time() - message.timestamp) <= 120:
+                self.db.execute("INSERT INTO activity(chat_key,last_input) VALUES(?,?) "
+                                "ON CONFLICT(chat_key) DO UPDATE SET last_input=excluded.last_input, "
+                                "generation=activity.generation+1", (message.key, time.time()))
         return cur.rowcount == 1
 
     def recent(self, key, count):
@@ -71,6 +80,26 @@ class Store:
         with self.db:
             self.db.execute("DELETE FROM sessions WHERE chat_key=?", (key,))
             self.db.execute("DELETE FROM messages WHERE chat_key=?", (key,))
+            # Preserve daily budget, and do not revive an idle opportunity after reset.
+            self.db.execute("UPDATE activity SET consumed_generation=generation WHERE chat_key=?", (key,))
+
+    def activities(self):
+        return self.db.execute("SELECT chat_key,last_input,last_output,generation,consumed_generation,day,attempts FROM activity").fetchall()
+
+    def activity(self, key):
+        return self.db.execute("SELECT chat_key,last_input,last_output,generation,consumed_generation,day,attempts FROM activity WHERE chat_key=?", (key,)).fetchone()
+
+    def claim_proactive(self, key, generation, day, limit):
+        with self.db:
+            cur = self.db.execute("UPDATE activity SET consumed_generation=generation,day=?, "
+                "attempts=CASE WHEN day=? THEN attempts+1 ELSE 1 END "
+                "WHERE chat_key=? AND generation=? AND consumed_generation<>generation "
+                "AND (day<>? OR attempts<?)", (day, day, key, generation, day, limit))
+        return cur.rowcount == 1
+
+    def mark_output(self, key):
+        with self.db:
+            self.db.execute("UPDATE activity SET last_output=? WHERE chat_key=?", (time.time(), key))
 
     def close(self):
         self.db.close()
