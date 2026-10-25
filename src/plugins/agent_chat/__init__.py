@@ -111,7 +111,12 @@ async def observe_chat(bot: Bot, event: MessageEvent, state: T_State):
         return
     reply = event.reply
     quoted_user = str(reply.sender.user_id) if reply and reply.sender.user_id is not None else ""
-    directed = isinstance(event, PrivateMessageEvent) or event.is_tome() or quoted_user == str(bot.self_id)
+    # OneBot's reply preprocessing removes the segment immediately following a
+    # quote, even when it mentions THIS bot rather than the quoted image's sender.
+    # Inspect only structured original segments, never raw CQ-looking text.
+    mentioned = any(s.type == 'at' and str(s.data.get('qq', '')) == str(bot.self_id)
+                    for s in event.original_message)
+    directed = isinstance(event, PrivateMessageEvent) or event.is_tome() or mentioned or quoted_user == str(bot.self_id)
     message = ChatMessage(
         key=chat_key(bot, event), message_id=str(event.message_id), user_id=str(event.user_id),
         name=(getattr(event.sender, "card", None) or event.sender.nickname or str(event.user_id))[:80],

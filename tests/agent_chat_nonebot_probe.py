@@ -18,6 +18,7 @@ async def main():
         import nonebot
         nonebot.init(_env_file=None, driver="~fastapi", superusers={"1"}, command_start={"/", ""}, log_level="ERROR")
         from nonebot.adapters.onebot.v11 import Adapter, Bot, GroupMessageEvent, Message, MessageSegment
+        from nonebot.adapters.onebot.v11.bot import _check_reply, _check_at_me
         from nonebot.message import handle_event
         ai_plugin = nonebot.load_plugin("src.plugins.agent_chat")
         ana_plugin = nonebot.load_plugin("src.plugins.their_ana")
@@ -39,6 +40,10 @@ async def main():
                 sent.append(Message(message))
                 return {"message_id": 999}
             async def call_api(self, api, **data):
+                if api == 'get_msg':
+                    return {'time': int(time.time()), 'message_type': 'group', 'message_id': 123,
+                            'real_id': 123, 'sender': {'user_id': 8, 'nickname': '发图者'},
+                            'message': [{'type': 'image', 'data': {'file': 'b' * 32 + '.jpg'}}]}
                 sent.append(Message(data.get("message", "")))
                 return {"message_id": 999}
 
@@ -85,12 +90,28 @@ async def main():
         assert service.scheduled[-1][0].media[0]['file'] == 'a' * 32 + '.jpg'
         assert service.prepare is not None, 'only unclaimed allowed events schedule media preparation'
         service.scheduled.clear()
+        quoted = event('这个人是谁')
+        quoted.message = Message([MessageSegment.reply(123), MessageSegment.at(100), MessageSegment.text('这个人是谁')])
+        quoted.original_message = quoted.message.copy()
+        await _check_reply(bot, quoted)
+        _check_at_me(bot, quoted)
+        assert not quoted.is_tome(), 'reproduce upstream removal of mention after quoting another sender'
+        await handle_event(bot, quoted)
+        assert service.scheduled[-1][0].directed, 'original structured bot mention must survive quote preprocessing'
+        assert service.scheduled[-1][0].media[0]['file'] == 'b' * 32 + '.jpg'
+        service.scheduled.clear()
+        for mention in [MessageSegment.at(8), MessageSegment.at('all'), MessageSegment.text('[CQ:at,qq=100]')]:
+            other = event('看图')
+            other.original_message = Message([mention, MessageSegment.text('看图')])
+            await handle_event(bot, other)
+            assert not service.scheduled[-1][0].directed, 'other targets and literal CQ text are not a bot mention'
+            service.scheduled.clear()
         ai.config.agent_chat_images_enabled = False
         ai.media_resolver = None
         ai.service = None
         await handle_event(bot, event("你好", directed=True))
         assert sent, "disabled AI retains old @ reply"
-        print("PASS: real NoneBot dispatch, SuperAna no-hit/hit, @ takeover, command priority, literal CQ, image routing, allowlist, disabled fallback")
+        print("PASS: real NoneBot dispatch, SuperAna no-hit/hit, @ takeover, quoted-image mention recovery, literal CQ, image routing, allowlist, disabled fallback")
         os.chdir(ROOT)
 
 

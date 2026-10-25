@@ -33,6 +33,23 @@ class DeliveryTests(unittest.IsolatedAsyncioTestCase):
     asyncTearDown = core.ServiceTests.asyncTearDown
     send = core.ServiceTests.send
     submit = core.ServiceTests.submit
+    async def test_empty_or_filtered_final_text_gives_direct_notice_without_retry(self):
+        for i, answer in enumerate(['', '<thinking>PRIVATE_CANARY', 'PRIVATE_CANARY</thinking>']):
+            self.client.answer = answer
+            await self.submit(message(mid=str(i)))
+        self.assertEqual(len(self.client.prompts), 3)
+        self.assertEqual(self.sent, ['这次没能生成可用的回复，你再问我一次。'] * 3)
+        self.assertEqual(self.store.session(message().key)[2], 0)
+
+    async def test_empty_random_reply_stays_silent(self):
+        from dataclasses import replace
+        from unittest.mock import patch
+        self.client.answer = ''
+        self.service.cfg.agent_chat_ambient_probability = .1
+        with patch.object(self.service, 'quiet', return_value=False), patch('random.random', return_value=0):
+            await self.submit(replace(message(), directed=False))
+        self.assertEqual(self.sent, [])
+
     async def test_embedded_reasoning_removed_at_actual_send_boundary(self):
         self.client.answer = 'private</thinking>可见回复'
         await self.submit(message())
@@ -45,6 +62,7 @@ class DeliveryTests(unittest.IsolatedAsyncioTestCase):
             if images:
                 raise core.dsh.ImageUnsupported('model_does_not_support_images')
             self.assertIn('不支持图片', text)
+            self.assertIn('如果最新问题只涉及文字，正常回答文字问题', text)
             return '这张图我现在看不了'
         async def prepare(history): return [{'type':'image'}], 'image note'
         self.client.reply = reply

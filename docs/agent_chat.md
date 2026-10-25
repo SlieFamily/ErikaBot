@@ -30,6 +30,10 @@ NoneBot 负责 QQ 收发、白名单、消息仲裁与限流；DSH 负责模型/
 
 模型在直接对话、随机接话和自主发言路径都可以输出 `[SILENT]`。当前没有独立的“先判断要不要回复”模型调用；抽签命中后才调用 DSH，由同一轮决定回复或沉默。固定 2 秒消息合并属于去抖，不等于模型自主等待群友把话说完。
 
+模型明确输出 `[SILENT]` 才视为主动沉默。如果确认回合已结束，却没有最终正文（例如服务商只返回 `reasoning` 块），直接 @、引用和允许的私聊会收到一条简短失败提示；随机/主动发言仍保持安静。内部搜索控制输出无法作为答案发布时也适用此规则。不会把思考块或其标签后面的文字提升为答案，也不会因此自动重复模型请求。断线、超时及发送结果不确定仍走暂停保护，不能用此规则绕过。
+
+@ 判定会检查原始消息中的结构化提及，避免 OneBot 在处理“引用别人的图片 + @机器人”时删掉 @，使直接提问误走夜间静默或随机路径。消息中间的真实 @ 也有效；@其他人、@全体和文字形式的 CQ 码不会被视为 @机器人。
+
 ### 当前部署节奏与仓库默认值
 
 当前使用的活跃节奏是：随机接话 10%；安静 15 分钟后可主动说一句；每群每天最多 6 次主动尝试；23:00—09:00（UTC+8）停止随机与自主发言。主白名单由私有配置维护，目前部署到 5 个群，各群会话独立且共用同一版人设。仓库不保存完整生产白名单或登录凭据。
@@ -208,7 +212,7 @@ Get-CimInstance Win32_Process |
 
 8080 是本部署的 NoneBot 端口，其他部署按实际配置替换。DSH Desktop 是独立进程，界面进程与监听本机 API 端口的子进程可能不同；其窗口关闭是否等于退出，要以端口是否还在监听为准。DSH、NoneBot、NapCat/QQ 不是同一个进程。
 
-本机 2026-10-25 部署使用后台启动并重定向输出，日志目录为用户目录下的 `Documents/Codex/2026-10-24/new-chat/work/agent-chat/search-release/`：
+本机 2026-10-25 部署使用后台启动并重定向输出，日志目录为用户目录下的 `Documents/Codex/2026-10-24/new-chat/work/agent-chat/reply-fix-release/`：
 
 - `bot.stdout.log`：标准输出，包含 NoneBot 启动、插件加载和网关连接等日志。
 - `bot.stderr.log`：标准错误，可能包含警告和错误；文件为空不代表没有发生过业务问题，应同时检查标准输出和 `ai 状态`。
@@ -218,14 +222,14 @@ Get-CimInstance Win32_Process |
 查看当前日志末尾（`-Wait` 可选；在独立查看窗口按 Ctrl+C 只结束查看）：
 
 ```powershell
-$logDir = Join-Path $env:USERPROFILE 'Documents\Codex\2026-10-24\new-chat\work\agent-chat\search-release'
+$logDir = Join-Path $env:USERPROFILE 'Documents\Codex\2026-10-24\new-chat\work\agent-chat\reply-fix-release'
 Get-Content -LiteralPath (Join-Path $logDir 'bot.stdout.log') -Tail 100 -Wait
 ```
 
 导出已有日志不会断开机器人连接，也不需要重启：
 
 ```powershell
-$logDir = Join-Path $env:USERPROFILE 'Documents\Codex\2026-10-24\new-chat\work\agent-chat\search-release'
+$logDir = Join-Path $env:USERPROFILE 'Documents\Codex\2026-10-24\new-chat\work\agent-chat\reply-fix-release'
 $exportDir = Join-Path $env:USERPROFILE ('Desktop\ErikaBot-logs-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
 New-Item -ItemType Directory -Path $exportDir | Out-Null
 Copy-Item -LiteralPath (Join-Path $logDir 'bot.stdout.log'), (Join-Path $logDir 'bot.stderr.log') -Destination $exportDir
@@ -261,6 +265,8 @@ poetry run nb run 1>> $stdoutLog 2>> $stderrLog
 | 修改角色卡、安全预设或守卫 | 按安装流程重启 DSH；部署时安排必要的机器人切换 | 内容变更触发预设指纹变化，旧群映射须核查后重置或迁移 |
 
 插件中 provider/model 留空时由 DSH 决定模型；成对填写时，插件在创建会话时调用 `session/selectModel`。当前没有自动将 DSH 默认模型切换同步到所有既有会话的功能。直接在 DSH 中更换实际模型/服务地址，也不一定触发桥接的配置指纹变化；仍须主动确认实际路由和兼容性。
+
+**更换模型后重新检查读图声明。** 原模型的 `input: [text, image]` 不会自动继承给新模型。若 DSH 返回 `MODEL_DOES_NOT_SUPPORT_IMAGES`，应先用独立测试确认新服务商/模型确实能识别图片，再为这条模型补充 `input: [text, image]`，在正式切换时重载或重启 DSH。不能仅凭模型名称判断视觉能力；声明也不能让纯文本模型凭空支持读图。若 DSH 拒绝图片，桥接会按文字继续对话，只有问题依赖图片时才说明无法看图，不应让聊天中无关的近期图片干扰纯文字问题。
 
 已兼容 Harness 的 `model-selection / notice` 元数据：管理员切换模型时，运行时插入的通知不会再被误认作其他人抢占输入，也不会发到 QQ。真正来自另一个客户端的聊天输入仍会中止当前请求。请在独立会话测试模型，避免同时在桥接使用的群会话里手动聊天。
 
@@ -308,6 +314,8 @@ DSH 不在线时，AI 会记录连接/协议错误并保持沉默，通常不会
 日常新增群只需改私有白名单并在配置正式应用时重启机器人。修改 Markdown 说明文档不需要重启任何进程。
 
 ## 测试与故障定位
+
+2026-10-25 无回复修复：102 项 Python 回归通过；真实 OneBot/NoneBot 隔离探针复现并验证了“引用别人图片后紧跟 @机器人”的提及丢失，同时验证 @其他人、@全体和文字 CQ 不会误触发。当前新模型经独立几何图与随机数字测试确认支持视觉后，补齐了该模型在 DSH 中的图片输入声明。空最终正文现在会对直接提问给出失败提示，仍不发布思考块、不自动重试模型。
 
 2026-10-25 Bing 搜索更新：99 项 Python 测试、6 项 Node 测试、实际 NoneBot 隔离分发探针与已安装 DSH 工具守卫检查通过。搜索用例覆盖内部动作解析、敏感查询拒绝、固定公网连接、重定向/超大 XML 拒绝、超时、缓存隔离、两轮额度、搜索失败后的正常回复、模型失败暂停、取消/重启及搜索期间新消息的投递进度；另覆盖模型切换通知兼容和真正外来输入继续拦截。
 

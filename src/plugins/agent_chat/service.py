@@ -8,7 +8,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from .domain import ChatMessage, clean_reply, prompt_text
+from .domain import ChatMessage, clean_reply, prompt_text, strip_reasoning
 from .dsh import BridgeError, ImageUnsupported, MissingSession
 from .search import BingSearch, SearchError, decision, instructions, result_prompt, final_answer
 
@@ -201,7 +201,8 @@ class ChatService:
                 except ImageUnsupported:
                     # This precise rejection is before prompt admission; a text-only explanation is safe.
                     result = await self.client.reply(session_id, text + '\n当前模型明确不支持图片，图片没有送入模型。'
-                        '请简短说明目前看不了图片，不要猜测图中内容。')
+                        '如果最新问题依赖图片，请简短说明目前看不了图片，不要猜测图中内容。'
+                        '如果最新问题只涉及文字，正常回答文字问题，不要因为近期聊天附带了图片就转移话题。')
                 self.store.delivered(key, session_id, boundary, cut, forward)
                 return result
             try:
@@ -211,6 +212,7 @@ class ChatService:
                 sid = await self.client.create_session()
                 self.store.bind(key, sid, policy)
                 answer = await ask(sid)
+            intentional_silence = strip_reasoning(answer).strip() == '[SILENT]'
             try:
                 query = decision(answer, nonce, (
                     self.cfg.agent_chat_dsh_cookie.get_secret_value(),
@@ -242,6 +244,7 @@ class ChatService:
                         text = '管理员部署的固定角色设定：\n' + persona + '\n角色设定结束。\n' + text
                     self.store.search_stage(dispatch, 'answering')
                     answer = await self.client.reply(sid, text)
+                    intentional_silence = strip_reasoning(answer).strip() == '[SILENT]'
                     self.store.delivered(key, sid, delivered[0], cut, delivered[2])
                     self.store.finish(followup, 'completed')
                     answer = final_answer(answer, result, self.cfg.agent_chat_max_reply_chars)
@@ -250,6 +253,12 @@ class ChatService:
                              result['status'], len(result.get('results', ())), result.get('cached', False))
             else:
                 answer = clean_reply(answer, self.cfg.agent_chat_max_reply_chars)
+            if not answer and not intentional_silence and request.kind == 'direct':
+                # A completed turn containing only reasoning is a failed answer, not
+                # deliberate silence. Never recover/publish reasoning or retry the model.
+                answer = ('这次查询没能整理出可用答案，你换个关键词再试试。' if query is not None
+                          else '这次没能生成可用的回复，你再问我一次。')[:self.cfg.agent_chat_max_reply_chars]
+                log.warning('agent_chat completed without publishable final text; sent direct-request notice')
             if proactive:
                 current = self.store.activity(key)
                 if not current or current[3] != request.generation or self.quiet():

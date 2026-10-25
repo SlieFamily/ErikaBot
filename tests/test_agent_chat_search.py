@@ -172,11 +172,13 @@ class ServiceSearchTests(unittest.IsolatedAsyncioTestCase):
             await self.submit(replace(message(mid='2'), directed=False))
         self.assertEqual(len(self.backend.calls), 1)
 
-    async def test_bad_action_does_not_send_or_suspend(self):
+    async def test_bad_action_gives_notice_without_control_leak_or_suspension(self):
         self.service.client = FakeClient()
         self.service.client.answer = action('stale', '818353963')
         await self.submit()
-        self.assertEqual(self.sent, [])
+        self.assertEqual(len(self.sent), 1)
+        self.assertNotIn('agent_chat_search', self.sent[0])
+        self.assertNotIn('818353963', self.sent[0])
         self.assertEqual(self.backend.calls, [])
         self.assertEqual(self.store.session(message().key)[2], 0)
 
@@ -229,7 +231,15 @@ class ServiceSearchTests(unittest.IsolatedAsyncioTestCase):
         await self.submit()
         self.assertEqual(len(self.backend.calls), 1)
         self.assertEqual(len(self.client.prompts), 2)
-        self.assertEqual(self.sent, [])
+        self.assertEqual(self.sent, ['这次查询没能整理出可用答案，你换个关键词再试试。'])
+
+    async def test_completed_search_without_final_text_gives_notice_not_reasoning(self):
+        self.client.answer = ''
+        await self.submit()
+        self.assertEqual(self.sent, ['这次查询没能整理出可用答案，你换个关键词再试试。'])
+        self.assertEqual(len(self.client.prompts), 2)
+        self.assertEqual(self.store.session(message().key)[2], 0)
+        self.assertEqual(self.store.db.execute('SELECT stage FROM searches').fetchone()[0], 'sent')
 
     async def test_late_arrival_during_search_not_marked_delivered(self):
         self.backend.callback = lambda: self.store.append(message(mid='late'))
