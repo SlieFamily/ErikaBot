@@ -114,6 +114,12 @@ class TurnCollector:
                 # DSH emits its own metadata/clearing snapshot in this event channel.
                 # It is not another operator's prompt and never establishes ownership.
                 return None
+            if (source.get('kind') == 'model-selection' and source.get('form') == 'notice' and
+                    set(source) <= {'kind', 'form', 'summary'} and
+                    isinstance(source.get('summary'), str) and event.get('surfaceOp') == 'append'):
+                # Harness emits this metadata when an administrator changes the model.
+                # It is neither a foreign human prompt nor proof of our turn ownership.
+                return None
             op = event.get("surfaceOp", {})
             if (source.get("kind") == "compact-checkpoint" and
                     source.get("compactionId") in self.compactions and isinstance(op, dict) and

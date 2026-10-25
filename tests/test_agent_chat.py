@@ -127,6 +127,28 @@ class StoreTests(unittest.TestCase):
 
 
 class CollectorTests(unittest.TestCase):
+    def test_model_switch_notice_never_owns_or_leaks_but_foreign_user_still_stops(self):
+        c = dsh.TurnCollector('mine')
+        c.push({'type': 'turn/start', 'data': {'turn': 1}})
+        event = {'type': 'user/message', 'surfaceOp': 'append', 'data': {
+            'source': {'kind': 'model-selection', 'form': 'notice', 'summary': 'old -> new'},
+            'content': [{'type': 'text', 'text': 'internal model notice'}]}}
+        c.push(event)
+        self.assertFalse(c.owned)
+        c.push({'type': 'user/message', 'data': {'source': {'kind': 'user', 'rpcId': 'mine'}}})
+        c.push(event)
+        c.push({'type': 'assistant/message', 'data': {'turn': 1, 'message': {'content': [{'type': 'text', 'text': 'reply'}]}}})
+        self.assertEqual(c.push({'type': 'turn/end', 'data': {'turn': 1, 'reason': {'kind': 'completed'}}}), 'reply')
+        with self.assertRaisesRegex(dsh.BridgeError, 'concurrent_session_input'):
+            c.push({'type': 'user/message', 'data': {'source': {'kind': 'user', 'rpcId': 'foreign'}}})
+
+    def test_malformed_model_selection_metadata_rejected(self):
+        for source, op in [({'kind': 'model-selection', 'form': 'prompt', 'summary': 'x'}, 'append'),
+                           ({'kind': 'model-selection', 'form': 'notice', 'summary': 'x', 'rpcId': 'foreign'}, 'append'),
+                           ({'kind': 'model-selection', 'form': 'notice', 'summary': 'x'}, 'replace')]:
+            with self.subTest(source=source), self.assertRaises(dsh.BridgeError):
+                dsh.TurnCollector('mine').push({'type': 'user/message', 'surfaceOp': op, 'data': {'source': source}})
+
     def test_correlated_compaction_checkpoint_never_owns_or_leaks_summary(self):
         c = dsh.TurnCollector('mine')
         c.push({'type': 'turn/start', 'data': {'turn': 22}})
