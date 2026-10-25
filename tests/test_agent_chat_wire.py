@@ -17,6 +17,7 @@ class WireTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.app = FastAPI(); self.ws = None; self.stream = None
         self.prompts = []; self.session_counter = 0; self.mode = "normal"
+        self.pages = []; self.page_requests = []
 
         @self.app.post("/api/{method:path}")
         async def rpc(method: str, request: Request):
@@ -56,6 +57,9 @@ class WireTests(unittest.IsolatedAsyncioTestCase):
                 value = {"accepted":True}
             elif method == "session/projections":
                 value = {"asOfSeq":2,"values":{"inbox":{"next-turn":[],"next-step":[]}}}
+            elif method == "session/page":
+                self.page_requests.append(payload['request'])
+                value = self.pages.pop(0)
             else:
                 value = {"accepted":True}
             return {"type":"server-response","rpcId":body["rpcId"],"result":{"ok":True,"value":value}}
@@ -66,9 +70,9 @@ class WireTests(unittest.IsolatedAsyncioTestCase):
             body = await ws.receive_json(); self.stream = body["streamId"]
             sid = body["payload"]["args"]["request"]["address"]["sessionId"]
             # Completed historical output MUST NOT be replayed as a new QQ message.
-            snapshot = {"type":"snapshot", "header":{"id":sid,"agentPreset":"erika-agent-chat-v1"},
-                        "records":[{"event":{"type":"assistant/message","data":{"turn":1,"message":{"content":[{"type":"text","text":"旧消息"}]}}}},
-                                   {"event":{"type":"turn/end","data":{"turn":1,"reason":{"kind":"completed"}}}}],
+            snapshot = {"type":"snapshot", "cursor":20, "hasMore":True, "header":{"id":sid,"agentPreset":"erika-agent-chat-v1"},
+                        "records":[{"event":{"seq":19,"type":"assistant/message","data":{"turn":1,"message":{"content":[{"type":"text","text":"旧消息"}]}}}},
+                                   {"event":{"seq":20,"type":"turn/end","data":{"turn":1,"reason":{"kind":"completed"}}}}],
                         "projections":{"values":{"agentPreset":"erika-agent-chat-v1", "inbox":{"next-turn":[],"next-step":[]}}}}
             if self.mode == "unsafe-preset": snapshot["header"]["agentPreset"] = "standard"
             if self.mode == "old-preset-switch": snapshot["projections"]["values"]["agentPreset"] = "standard"
@@ -111,6 +115,42 @@ class WireTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(dsh.BridgeError):
             await self.client.policy_with_persona()
         self.assertEqual(self.prompts, [])
+
+    async def test_context_seed_and_unchanged_history(self):
+        self.assertEqual(await self.client.context_state('session-1'), (20, True))
+        self.assertEqual(await self.client.context_state('session-1', 18), (20, False))
+        self.assertEqual(await self.client.context_state('session-1', 20), (20, False))
+        self.assertEqual(await self.client.context_state('session-1', 21), (20, True))
+        self.assertEqual(self.prompts, [])
+
+    async def test_compaction_before_opening_window_is_detected(self):
+        self.pages = [{'hasMore': True, 'records': [
+            {'event': {'seq': 16, 'type': 'compaction/summary', 'data': {}}}]}]
+        self.assertEqual(await self.client.context_state('session-1', 5), (20, True))
+        self.assertEqual(self.page_requests[0]['throughSeq'], 20)
+        self.assertEqual(self.page_requests[0]['beforeSeq'], 19)
+        self.assertEqual(self.prompts, [])
+
+    async def test_old_compaction_is_not_refreshed_again(self):
+        self.pages = [{'hasMore': False, 'records': [
+            {'event': {'seq': 5, 'type': 'compaction/summary', 'data': {}}},
+            {'event': {'seq': 6, 'type': 'turn/start', 'data': {}}}]}]
+        self.assertEqual(await self.client.context_state('session-1', 5), (20, False))
+
+    async def test_long_unverifiable_gap_refreshes_but_never_calls_model(self):
+        self.pages = [{'hasMore': True, 'records': [
+            {'event': {'seq': seq, 'type': 'turn/end', 'data': {}}}]} for seq in (18, 17, 16)]
+        self.assertEqual(await self.client.context_state('session-1', 0), (20, True))
+        self.assertEqual(len(self.page_requests), 3)
+        self.assertEqual(self.prompts, [])
+
+    async def test_malformed_page_rejected_and_unsafe_preset_checked(self):
+        self.pages = [{'hasMore': True, 'records': []}]
+        with self.assertRaisesRegex(dsh.BridgeError, 'invalid_context_page'):
+            await self.client.context_state('session-1', 0)
+        self.mode = 'old-preset-switch'
+        with self.assertRaisesRegex(dsh.BridgeError, 'unsafe_current_session_preset'):
+            await self.client.context_state('session-1', 18)
 
     async def test_wrong_preset_rejected_before_prompt(self):
         self.mode = "unsafe-preset"

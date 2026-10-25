@@ -94,17 +94,33 @@ class TurnCollector:
         self.turn = None
         self.owned = False
         self.text = ""
+        self.compactions = set()
 
     def push(self, event):
         kind, data = event.get("type"), event.get("data", {})
         if kind == "turn/start":
             self.turn = data.get("turn")
             self.owned, self.text = False, ""
+            self.compactions.clear()
+        elif kind == "compaction/start" and data.get("turn") == self.turn:
+            cid = data.get("compactionId")
+            if isinstance(cid, str) and cid:
+                self.compactions.add(cid)
+        elif kind == "compaction/end":
+            self.compactions.discard(data.get("compactionId"))
         elif kind == "user/message":
             source = data.get("source", {})
             if source.get("kind") == "runtime-context":
                 # DSH emits its own metadata/clearing snapshot in this event channel.
                 # It is not another operator's prompt and never establishes ownership.
+                return None
+            op = event.get("surfaceOp", {})
+            if (source.get("kind") == "compact-checkpoint" and
+                    source.get("compactionId") in self.compactions and isinstance(op, dict) and
+                    op.get("op") == "replace" and type(op.get("startSeq")) is int and
+                    type(op.get("endSeq")) is int and 0 <= op["startSeq"] <= op["endSeq"]):
+                # DSH's correlated history replacement is not a second human input.
+                # Never establish ownership or copy the summary into the QQ answer.
                 return None
             if source.get("kind") == "user" and source.get("rpcId") == self.rpc_id:
                 self.owned = True
@@ -260,6 +276,70 @@ class DshClient:
             raise BridgeError("dsh_turn_timeout") from None
         except (OSError, websockets.WebSocketException):
             raise BridgeError("dsh_stream_disconnected") from None
+
+    async def context_state(self, sid, since=None):
+        """Inspect durable events, never model text, for loss of the initial role seed."""
+        try:
+            return await asyncio.wait_for(self._context_state(sid, since), 15)
+        except asyncio.TimeoutError:
+            raise BridgeError("dsh_context_timeout") from None
+        except (OSError, websockets.WebSocketException):
+            raise BridgeError("dsh_stream_disconnected") from None
+
+    async def _context_state(self, sid, since):
+        await self.authenticate()
+        ws_url = self.cfg.agent_chat_dsh_url.replace("http", "ws", 1) + "/api/remote.mux"
+        stream = str(uuid.uuid4())
+        async with self.connect(ws_url, extra_headers={"Cookie": self.cookie},
+                                open_timeout=10, close_timeout=2, max_size=2_000_000, max_queue=32) as ws:
+            await ws.send(json.dumps({"type": "open", "streamId": stream, "endpoint": "session/follow",
+                "payload": {"args": {"request": {"address": {"kind": "session", "sessionId": sid}, "maxMessages": 2}}}}))
+            snapshot = None
+            async for raw in ws:
+                frame = self.frame(raw, stream)
+                if frame and frame.get("type") == "snapshot":
+                    snapshot = frame
+                    break
+            if snapshot is None:
+                raise BridgeError("missing_snapshot")
+        if (snapshot.get("header", {}).get("id") != sid or
+                snapshot.get("header", {}).get("agentPreset") != PRESET_ID or
+                snapshot.get("projections", {}).get("values", {}).get("agentPreset") != PRESET_ID):
+            raise BridgeError("unsafe_current_session_preset")
+        cut = snapshot.get("cursor")
+        if type(cut) is not int or cut < -1:
+            raise BridgeError("invalid_context_cursor")
+        if since is None or cut < since:
+            return cut, True
+        if cut == since:
+            return cut, False
+        page, before = snapshot, cut + 1
+        # Bound local work. If a long gap cannot be proved intact, re-seed conservatively.
+        for attempt in range(4):
+            records = page.get("records")
+            if not isinstance(records, list) or type(page.get("hasMore")) is not bool:
+                raise BridgeError("invalid_context_page")
+            events = [r.get("event", {}) for r in records if isinstance(r, dict)]
+            if len(events) != len(records) or any(type(e.get("seq")) is not int for e in events):
+                raise BridgeError("invalid_context_page")
+            seqs = [e["seq"] for e in events]
+            if seqs and (seqs != sorted(set(seqs)) or seqs[-1] >= before or seqs[0] < 0):
+                raise BridgeError("invalid_context_page")
+            if any(e["seq"] > since and
+                   (e.get("type", "").startswith("compaction/") or
+                    isinstance(e.get("surfaceOp"), dict)) for e in events):
+                return cut, True
+            if not page["hasMore"] or seqs and seqs[0] <= since + 1:
+                return cut, False
+            if not seqs:
+                raise BridgeError("invalid_context_page")
+            before = seqs[0]
+            if attempt < 3:
+                page = await self.rpc("session/page", {"address": {"kind": "session", "sessionId": sid},
+                    "throughSeq": cut, "beforeSeq": before, "maxMessages": 4})
+                if not isinstance(page, dict):
+                    raise BridgeError("invalid_context_page")
+        return cut, True
 
     async def _reply(self, sid, text, images=None):
         content = [{"type": "text", "text": text}]

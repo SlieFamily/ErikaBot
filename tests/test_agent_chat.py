@@ -127,6 +127,27 @@ class StoreTests(unittest.TestCase):
 
 
 class CollectorTests(unittest.TestCase):
+    def test_correlated_compaction_checkpoint_never_owns_or_leaks_summary(self):
+        c = dsh.TurnCollector('mine')
+        c.push({'type': 'turn/start', 'data': {'turn': 22}})
+        c.push({'type': 'compaction/start', 'data': {'turn': 22, 'compactionId': 'compact-1'}})
+        c.push({'type': 'compaction/summary', 'data': {'summary': 'internal summary'}})
+        c.push({'type': 'user/message', 'surfaceOp': {'op': 'replace', 'startSeq': 1, 'endSeq': 10},
+                'data': {'source': {'kind': 'compact-checkpoint', 'compactionId': 'compact-1'}}})
+        self.assertFalse(c.owned)
+        c.push({'type': 'compaction/end', 'data': {'turn': 22, 'compactionId': 'compact-1'}})
+        c.push({'type': 'user/message', 'data': {'source': {'kind': 'user', 'rpcId': 'mine'}}})
+        c.push({'type': 'assistant/message', 'data': {'turn': 22, 'message': {'content': [{'type':'text','text':'reply'}]}}})
+        self.assertEqual(c.push({'type': 'turn/end', 'data': {'turn':22,'reason':{'kind':'completed'}}}), 'reply')
+
+    def test_uncorrelated_compaction_checkpoint_is_not_trusted(self):
+        c = dsh.TurnCollector('mine')
+        c.push({'type': 'turn/start', 'data': {'turn': 22}})
+        for source, op in [({'kind':'compact-checkpoint','compactionId':'foreign'}, {'op':'replace','startSeq':1,'endSeq':2}),
+                           ({'kind':'user','rpcId':'foreign'}, 'append')]:
+            with self.assertRaisesRegex(dsh.BridgeError, 'concurrent_session_input'):
+                c.push({'type':'user/message','surfaceOp':op,'data':{'source':source}})
+
     def test_no_duplicate_chunks_and_no_other_turn_reply(self):
         c = dsh.TurnCollector("our-rpc")
         self.assertIsNone(c.push({"type":"assistant/message","data":{"turn":0,"message":{"content":[{"type":"text","text":"old"}]}}}))
@@ -156,6 +177,7 @@ class FakeClient:
 
     async def policy(self): return self.policy_value
     async def policy_with_persona(self): return await self.policy(), "ADMIN_ROLE_CANARY"
+    async def context_state(self, sid, since=None): return len(self.prompts) * 10, since is None
     async def create_session(self):
         sid = "session-" + str(len(self.created)); self.created.append(sid); return sid
     async def reply(self, sid, text):

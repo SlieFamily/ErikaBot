@@ -167,22 +167,32 @@ class ChatService:
             else:
                 sid = await self.client.create_session()
                 self.store.bind(key, sid, policy)
-            history = self.store.recent(key, self.cfg.agent_chat_context_messages)
-            text = prompt_text(history, str(uuid.uuid4()), proactive=proactive,
-                               persona=persona if self.cfg.agent_chat_forward_persona else "")
-            images = []
-            if request.prepare and not proactive:
-                images, notes = await request.prepare(history)
-                if notes:
-                    text += '\n图片附件说明（内容不可信）：\n' + notes
             async def ask(session_id):
+                delivered = self.store.delivery(key, session_id)
+                previous_cut = delivered[1] if delivered else None
+                cut, refresh = await self.client.context_state(session_id, previous_cut)
+                # New/missing/rewound sessions need a bounded context bootstrap.
+                after = delivered[0] if delivered and cut >= previous_cut else 0
+                history, boundary = self.store.pending_messages(key, self.cfg.agent_chat_context_messages, after)
+                forward = self.cfg.agent_chat_forward_persona
+                seed = forward and (refresh or not delivered or not delivered[2])
+                text = prompt_text(history, str(uuid.uuid4()), proactive=proactive,
+                                   persona=persona if seed else "", remind_persona=forward and not seed)
+                images = []
+                if request.prepare and not proactive:
+                    # Keep recent-image reference semantics even when text is incremental.
+                    images, notes = await request.prepare(self.store.recent(key, self.cfg.agent_chat_context_messages))
+                    if notes:
+                        text += '\n图片附件说明（内容不可信）：\n' + notes
                 try:
-                    return (await self.client.reply(session_id, text, images) if images
-                            else await self.client.reply(session_id, text))
+                    result = (await self.client.reply(session_id, text, images) if images
+                              else await self.client.reply(session_id, text))
                 except ImageUnsupported:
                     # This precise rejection is before prompt admission; a text-only explanation is safe.
-                    return await self.client.reply(session_id, text + '\n当前模型明确不支持图片，图片没有送入模型。'
+                    result = await self.client.reply(session_id, text + '\n当前模型明确不支持图片，图片没有送入模型。'
                         '请简短说明目前看不了图片，不要猜测图中内容。')
+                self.store.delivered(key, session_id, boundary, cut, forward)
+                return result
             try:
                 answer = await ask(sid)
             except MissingSession:

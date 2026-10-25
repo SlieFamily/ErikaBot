@@ -27,6 +27,10 @@ class Store:
                 last_output REAL NOT NULL DEFAULT 0, generation INTEGER NOT NULL DEFAULT 1,
                 consumed_generation INTEGER NOT NULL DEFAULT -1,
                 day TEXT NOT NULL DEFAULT '', attempts INTEGER NOT NULL DEFAULT 0);
+            CREATE TABLE IF NOT EXISTS delivery (
+                chat_key TEXT PRIMARY KEY, session_id TEXT NOT NULL,
+                message_seq INTEGER NOT NULL, context_seq INTEGER NOT NULL,
+                persona_sent INTEGER NOT NULL);
         """)
         # An interrupted request is not blindly re-sent after restart.
         with self.db:
@@ -51,11 +55,30 @@ class Store:
         rows = self.db.execute("SELECT payload FROM messages WHERE chat_key=? ORDER BY seq DESC LIMIT ?", (key, count)).fetchall()
         return [json.loads(row[0]) for row in reversed(rows)]
 
+    def pending_messages(self, key, count, after=0):
+        """Freeze the delivered input boundary before any network await."""
+        rows = self.db.execute("SELECT seq,payload FROM messages WHERE chat_key=? AND seq>? "
+                               "ORDER BY seq DESC LIMIT ?", (key, after, count)).fetchall()
+        return ([json.loads(row[1]) for row in reversed(rows)], rows[0][0] if rows else after)
+
+    def delivery(self, key, session_id):
+        return self.db.execute("SELECT message_seq,context_seq,persona_sent FROM delivery "
+                               "WHERE chat_key=? AND session_id=?", (key, session_id)).fetchone()
+
+    def delivered(self, key, session_id, message_seq, context_seq, persona_sent):
+        # Only called after DSH confirms a completed turn, including deliberate silence.
+        with self.db:
+            self.db.execute("INSERT INTO delivery VALUES(?,?,?,?,?) ON CONFLICT(chat_key) DO UPDATE SET "
+                            "session_id=excluded.session_id,message_seq=excluded.message_seq,"
+                            "context_seq=excluded.context_seq,persona_sent=excluded.persona_sent",
+                            (key, session_id, message_seq, context_seq, int(persona_sent)))
+
     def session(self, key):
         return self.db.execute("SELECT session_id,policy,suspended FROM sessions WHERE chat_key=?", (key,)).fetchone()
 
     def bind(self, key, session_id, policy):
         with self.db:
+            self.db.execute("DELETE FROM delivery WHERE chat_key=?", (key,))
             self.db.execute("INSERT INTO sessions VALUES(?,?,?,0) ON CONFLICT(chat_key) DO UPDATE SET "
                             "session_id=excluded.session_id,policy=excluded.policy,suspended=0", (key, session_id, policy))
 
@@ -78,6 +101,7 @@ class Store:
 
     def reset(self, key):
         with self.db:
+            self.db.execute("DELETE FROM delivery WHERE chat_key=?", (key,))
             self.db.execute("DELETE FROM sessions WHERE chat_key=?", (key,))
             self.db.execute("DELETE FROM messages WHERE chat_key=?", (key,))
             # Preserve daily budget, and do not revive an idle opportunity after reset.

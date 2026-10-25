@@ -86,7 +86,8 @@ async def start_agent_chat():
         media_resolver = MediaResolver(config)
     if config.agent_chat_proactive_enabled:
         service.start_proactive(proactive_sender)
-    logger.info("agent_chat enabled for explicitly allowed conversations")
+    logger.info(f"agent_chat enabled: {len(config.agent_chat_groups)} allowed groups, "
+                f"{len(config.agent_chat_private_users)} allowed private users; incremental context enabled")
 
 
 @driver.on_shutdown
