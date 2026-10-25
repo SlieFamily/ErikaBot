@@ -199,6 +199,11 @@ class DshClient:
         return envelope.get("value")
 
     async def policy(self):
+        fingerprint, _ = await self.policy_with_persona()
+        return fingerprint
+
+    async def policy_with_persona(self):
+        """Fingerprint and role come from one validated preset read, never chat text."""
         listed = await self.rpc("agentPresets/list")
         if not isinstance(listed, dict) or not any(p.get("id") == PRESET_ID and not p.get("broken") for p in listed.get("presets", [])):
             raise BridgeError("safe_preset_missing")
@@ -206,7 +211,9 @@ class DshClient:
         preset = await self.rpc("agentPresets/read", {"agentPreset": PRESET_ID})
         if not isinstance(preset, dict) or preset.get("agentPreset") != PRESET_ID:
             raise BridgeError("preset_identity_mismatch")
-        return validate_preset(preset.get("content"))
+        content = preset.get("content")
+        fingerprint = validate_preset(content)
+        return fingerprint, yaml.safe_load(content)[1]["config"]["prefix"]
 
     async def create_session(self):
         value = await self.rpc("session/create", {"agentPreset": PRESET_ID})

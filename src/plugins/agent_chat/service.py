@@ -152,7 +152,7 @@ class ChatService:
             return
         dispatch = self.store.begin(key)
         try:
-            composition = await self.client.policy()
+            composition, persona = await self.client.policy_with_persona()
             # Mapping is also tied to the DSH origin and pinned model selection.
             policy = hashlib.sha256(json.dumps([composition, self.cfg.agent_chat_dsh_url,
                 self.cfg.agent_chat_provider, self.cfg.agent_chat_model]).encode()).hexdigest()
@@ -168,7 +168,8 @@ class ChatService:
                 sid = await self.client.create_session()
                 self.store.bind(key, sid, policy)
             history = self.store.recent(key, self.cfg.agent_chat_context_messages)
-            text = prompt_text(history, str(uuid.uuid4()), proactive=proactive)
+            text = prompt_text(history, str(uuid.uuid4()), proactive=proactive,
+                               persona=persona if self.cfg.agent_chat_forward_persona else "")
             images = []
             if request.prepare and not proactive:
                 images, notes = await request.prepare(history)

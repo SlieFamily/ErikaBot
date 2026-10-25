@@ -23,7 +23,8 @@ test('setup dry-run is read-only, preserves existing settings and is idempotent'
   const first = setup(folder, true);
   assert.equal(first.roleFile, fs.realpathSync(defaultRole));
   const preset = fs.readFileSync(path.join(first.target, 'preset.patch.yml'), 'utf8');
-  assert.ok(preset.includes('群里的落魄名侦探'));
+  const card = fs.readFileSync(defaultRole, 'utf8').replace(/\r\n?/g, '\n').trim();
+  assert.ok(preset.includes(card.split('\n').map(line => '                ' + line).join('\n')));
   assert.ok(!preset.includes('__AGENT_CHAT_ROLE_CARD__'));
   assert.ok(first.backup);
   const pkg = JSON.parse(fs.readFileSync(path.join(folder, 'package.json')));

@@ -33,6 +33,7 @@ class Config(BaseModel):
     agent_chat_max_concurrent: int = Field(2, ge=1, le=8)
     agent_chat_max_pending: int = Field(16, ge=1, le=64)
     agent_chat_takeover_mentions: bool = True
+    agent_chat_forward_persona: bool = True
     agent_chat_provider: str = ""
     agent_chat_model: str = ""
     agent_chat_images_enabled: bool = False

@@ -87,8 +87,20 @@ AGENT_CHAT_AMBIENT_PROBABILITY=0
 
 ## 参考与区别
 
-结构和群聊语气设计参考 qq-bridge 的 [角色说明](https://github.com/Derpyu520/qq-bridge/blob/main/roles/README.md)、[小鲸鱼](https://github.com/Derpyu520/qq-bridge/blob/main/roles/小鲸鱼.md) 和 [傲娇助手](https://github.com/Derpyu520/qq-bridge/blob/main/roles/傲娇助手.md)。保留了身份、说话风格、情境反应与示例的组织方式，绘梨花的正文和示例针对本项目重新创作；上游 MIT 许可见 [许可文件](../third_party/qq-bridge-LICENSE)。
+结构和群聊语气设计参考 qq-bridge 的 [角色说明](https://github.com/Derpyu520/qq-bridge/blob/main/roles/README.md)、[小鲸鱼](https://github.com/Derpyu520/qq-bridge/blob/main/roles/小鲸鱼.md) 和 [傲娇助手](https://github.com/Derpyu520/qq-bridge/blob/main/roles/傲娇助手.md)。2026-10-25 进一步移植并改写了小鲸鱼的去 AI 味规则，以及 [qq-chat-v2 预设](https://github.com/Derpyu520/qq-bridge/blob/main/dsh/agent-presets/qq-chat-v2/agent.cordis.yml) 的群聊节奏规则；上游 MIT 许可见 [许可文件](../third_party/qq-bridge-LICENSE)。人物细节与绘梨花对话示例为本项目设定。
 
-上游由桥接按消息注入角色，支持其自己的切换指令与控制台；本项目采用安装时生成 DSH 安全预设的方式，因此没有移植“进入角色扮演”指令、控制台和逐消息热更新，也不能直接照搬上游卡里的工具说明。
+### 去 AI 味的继承范围
+
+| 上游部分 | 绘梨花卡中的落点 |
+| --- | --- |
+| 群聊铁律、说话方式、AI 味黑名单 | 第三节完整覆盖短句、默认 1～10 字、一行、少括号/尾词/问号、不问好、不总结升华、不推销、不当客服、不每轮认输或强赢 |
+| 不必有求必应、保持主体性 | 可打岔、已读乱回、拒绝推荐、有偏好和不同意见；认真事实问题不编造 |
+| 节奏、群文化、选择性接话 | 一次追问、看清引用对象、不抢第三方对话、不串群、不挨个回应、不当主持人、没有新回应不追发 |
+| 分条、等待、搜索与工具指令 | 保留自然表达原则，适配现有单条最终输出与 `[SILENT]`；搜索、长等待和分条工具尚不存在，不注入不可执行指令 |
+| 小鲸鱼身份和爹梗 | 换成绘梨花的角色口吻及白萱斯莱酱的二创关系，保留全部别名，不继承 DeepSeek 厂商自述、白饭 token 和鲸鱼动作 |
+
+侦探身份降为背景和偶发玩笑，新增无畏契约、三角洲行动、APEX 英雄、CS2 的兴趣及短回复示例。日常身份打趣保持角色口吻；技术限制用普通话说明，不虚构线下真人证明、真实账号战绩或已执行的操作。关系设定不会给同名群友管理员权限。
+
+上游由桥接按消息注入角色，支持其自己的切换指令与控制台。本项目仍先安装 DSH 安全预设，再默认把同一次校验取得的完整角色提示附到每轮请求（`AGENT_CHAT_FORWARD_PERSONA=true`），改善部分模型接口不遵循系统人设时的效果。投递来源是已安装预设，不是群友输入或随时读取的本地文件；修改卡片仍需安装、重启和重置旧映射。没有移植“进入角色扮演”指令、控制台和源文件热更新，也不能直接照搬上游卡里的工具说明。
 
 设定核对参考：[科学 ADV 官方系列介绍](https://www.kagaku-adv.com/about/)列出了本卡提及的主要系列作品；[腾讯广告的 QQ 炫舞案例](https://file.tencentads.com/files/pdf/2020/7/b552257c712c4b4db87b24d07f86b728.pdf)介绍了星瞳的炫舞虚拟偶像背景。雪糕与柯洁相关的公开内容可以从[雪糕cheese 频道](https://space.bilibili.com/3493139945884106)核对；其余主播偏好按本项目设定编写，不把粉丝传闻当设定资料。

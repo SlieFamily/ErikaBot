@@ -1,6 +1,7 @@
 """Real loopback HTTP + WebSocket test, simulating the documented DSH wire protocol."""
 import asyncio
 import json
+import yaml
 from http import HTTPStatus
 import socket
 import unittest
@@ -28,6 +29,10 @@ class WireTests(unittest.IsolatedAsyncioTestCase):
             elif method == "agentPresets/read":
                 assert payload == {"agentPreset":"erika-agent-chat-v1"}
                 value = {"agentPreset":"erika-agent-chat-v1", "content":composition()}
+                if self.mode == 'unsafe-composition':
+                    rows = yaml.safe_load(value['content'])
+                    rows.append({'name': '@deepseek-ai/dsh-tool-bash'})
+                    value['content'] = yaml.safe_dump(rows)
             elif method == "session/create":
                 self.session_counter += 1
                 value = {"sessionId":"session-" + str(self.session_counter), "agentPreset":"erika-agent-chat-v1"}
@@ -97,6 +102,15 @@ class WireTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.client.reply(sid, "QQ_CHAT_EVENT test"), "新回复")
         self.assertEqual(self.prompts[0]["sessionId"], sid)
         self.assertTrue(self.prompts[0]["requestId"])
+
+    async def test_forwarded_persona_is_extracted_only_after_validating_same_preset(self):
+        fingerprint, persona = await self.client.policy_with_persona()
+        self.assertEqual(fingerprint, dsh.validate_preset(composition()))
+        self.assertEqual(persona, yaml.safe_load(composition())[1]['config']['prefix'])
+        self.mode = 'unsafe-composition'
+        with self.assertRaises(dsh.BridgeError):
+            await self.client.policy_with_persona()
+        self.assertEqual(self.prompts, [])
 
     async def test_wrong_preset_rejected_before_prompt(self):
         self.mode = "unsafe-preset"

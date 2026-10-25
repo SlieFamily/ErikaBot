@@ -155,6 +155,7 @@ class FakeClient:
         self.error = None; self.policy_value = "p"; self.answer = "你好呀"; self.closed = False
 
     async def policy(self): return self.policy_value
+    async def policy_with_persona(self): return await self.policy(), "ADMIN_ROLE_CANARY"
     async def create_session(self):
         sid = "session-" + str(len(self.created)); self.created.append(sid); return sid
     async def reply(self, sid, text):
@@ -176,6 +177,23 @@ class ServiceTests(unittest.IsolatedAsyncioTestCase):
         await self.service.close(); self.tmp.cleanup()
 
     async def send(self, text): self.sent.append(text)
+
+    async def test_validated_persona_is_forwarded_before_untrusted_group_content(self):
+        await self.submit(message())
+        text = self.client.prompts[0][1]
+        self.assertTrue(text.startswith("QQ_CHAT_EVENT "))
+        self.assertIn("ADMIN_ROLE_CANARY", text)
+        self.assertLess(text.index("ADMIN_ROLE_CANARY"), text.index('"text": "你好"'))
+        self.assertNotIn("dsh-auth-test", text)
+
+    async def test_persona_forwarding_can_be_disabled_without_disabling_policy_validation(self):
+        self.service.cfg = cfg(agent_chat_forward_persona=False)
+        await self.submit(message())
+        self.assertNotIn("ADMIN_ROLE_CANARY", self.client.prompts[0][1])
+        self.client.policy_value = 'changed'
+        await self.submit(message(mid='2'))
+        self.assertEqual(len(self.client.prompts), 1)
+        self.assertEqual(self.store.session(message().key)[2], 1)
 
     async def submit(self, msg):
         if self.service.observe(msg): self.service.schedule(msg, self.send)
