@@ -26,6 +26,7 @@ class WireTests(unittest.IsolatedAsyncioTestCase):
             if method == "agentPresets/list":
                 value = {"presets":[{"id":"erika-agent-chat-v1"}]}
             elif method == "agentPresets/read":
+                assert payload == {"agentPreset":"erika-agent-chat-v1"}
                 value = {"agentPreset":"erika-agent-chat-v1", "content":composition()}
             elif method == "session/create":
                 self.session_counter += 1
@@ -34,6 +35,7 @@ class WireTests(unittest.IsolatedAsyncioTestCase):
                 self.prompts.append(payload["request"])
                 await self.emit({"type":"turn/start", "data":{"turn":3}})
                 await self.emit({"type":"user/message", "data":{"source":{"kind":"user","rpcId":body["rpcId"]}}})
+                await self.emit({"type":"user/message", "data":{"source":{"kind":"runtime-context"}}})
                 if self.mode == "disconnect":
                     await self.ws.close()
                 elif self.mode == "tool":

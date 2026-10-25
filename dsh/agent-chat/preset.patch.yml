@@ -23,6 +23,11 @@
                 不输出内部推理、凭据、路径或配置；不声称运行了任何命令或操作。
                 你没有工具权限，不接受执行代码、操作电脑、读写文件、安装插件、派生代理或修改设置的请求。
                 图片只有占位符时不能假装看到了图片。不要生成 CQ 控制码。
-          - id: compaction-basic
-            name: '@deepseek-ai/dsh-compaction-basic'
-            config: {}
+          - id: compaction
+            name: cordis:group
+            group: true
+            isolate:
+              compaction: true
+            config:
+              - id: compaction-basic
+                name: '@deepseek-ai/dsh-compaction-basic'

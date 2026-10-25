@@ -55,12 +55,22 @@ def validate_preset(content):
         raise BridgeError("invalid_preset") from None
     if not isinstance(rows, list) or len(rows) != 3:
         raise BridgeError("unsafe_preset_composition")
-    expected = [GUARD_MODULE, "@deepseek-ai/dsh-persona", "@deepseek-ai/dsh-compaction-basic"]
-    for row, name in zip(rows, expected):
+    expected = [GUARD_MODULE, "@deepseek-ai/dsh-persona"]
+    for row, name in zip(rows[:2], expected):
         if not isinstance(row, dict) or row.get("name") != name or set(row) - {"id", "name", "config"}:
             raise BridgeError("unsafe_preset_composition")
-    if rows[0].get("config", {}) != {} or rows[2].get("config", {}) != {}:
+    if rows[0].get("config", {}) != {}:
         raise BridgeError("unsafe_preset_configuration")
+    compression = rows[2]
+    if (not isinstance(compression, dict) or
+            set(compression) - {"id", "name", "group", "isolate", "config"} or
+            compression.get("name") != "cordis:group" or compression.get("group") is not True or
+            compression.get("isolate") != {"compaction": True}):
+        raise BridgeError("unsafe_compaction_scope")
+    children = compression.get("config")
+    if (not isinstance(children, list) or len(children) != 1 or not isinstance(children[0], dict) or
+            set(children[0]) - {"id", "name"} or children[0].get("name") != "@deepseek-ai/dsh-compaction-basic"):
+        raise BridgeError("unsafe_compaction_configuration")
     persona = rows[1].get("config", {})
     if not isinstance(persona, dict) or set(persona) != {"prefix", "includeRuntimeContext"}:
         raise BridgeError("unsafe_persona_configuration")
@@ -86,7 +96,11 @@ class TurnCollector:
             self.owned, self.text = False, ""
         elif kind == "user/message":
             source = data.get("source", {})
-            if source.get("rpcId") == self.rpc_id:
+            if source.get("kind") == "runtime-context":
+                # DSH emits its own metadata/clearing snapshot in this event channel.
+                # It is not another operator's prompt and never establishes ownership.
+                return None
+            if source.get("kind") == "user" and source.get("rpcId") == self.rpc_id:
                 self.owned = True
             else:
                 # Dedicated bridge sessions must not be manually chatted in concurrently.
@@ -141,6 +155,8 @@ class DshClient:
         rid = rpc_id or str(uuid.uuid4())
         if method == "agentPresets/list":
             args = {}
+        elif method == "agentPresets/read":
+            args = {"agentPreset": (payload or {}).get("agentPreset")}
         else:
             args = {"_request" if method == "session/list" else "request": payload or {}}
         body = {"type": "client-request", "rpcId": rid, "method": method, "payload": {"args": args}}

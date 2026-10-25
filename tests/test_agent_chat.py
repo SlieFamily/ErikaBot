@@ -77,7 +77,9 @@ class ConfigTests(unittest.TestCase):
         for change in [lambda r: r.append({"name": "@deepseek-ai/dsh-tool-bash"}),
                        lambda r: r[0].update(disabled=True),
                        lambda r: r[0].update(name="qq-agent-presets/qq-tool-restrict.mjs"),
-                       lambda r: r[1]["config"].update(includeRuntimeContext=True)]:
+                       lambda r: r[1]["config"].update(includeRuntimeContext=True),
+                       lambda r: r[2].update(isolate={}),
+                       lambda r: r[2]["config"].append({"name": "@deepseek-ai/dsh-tool-bash"})]:
             modified = yaml.safe_load(valid)
             change(modified)
             with self.assertRaises(dsh.BridgeError): dsh.validate_preset(yaml.safe_dump(modified))
@@ -129,7 +131,8 @@ class CollectorTests(unittest.TestCase):
         c = dsh.TurnCollector("our-rpc")
         self.assertIsNone(c.push({"type":"assistant/message","data":{"turn":0,"message":{"content":[{"type":"text","text":"old"}]}}}))
         c.push({"type":"turn/start","data":{"turn":1}})
-        c.push({"type":"user/message","data":{"source":{"rpcId":"our-rpc"}}})
+        c.push({"type":"user/message","data":{"source":{"kind":"user","rpcId":"our-rpc"}}})
+        c.push({"type":"user/message","data":{"source":{"kind":"runtime-context"}}})
         c.push({"type":"assistant/chunk","data":{"turn":1,"text":"reply"}})
         c.push({"type":"assistant/message","data":{"turn":1,"message":{"content":[{"type":"thinking","text":"secret"},{"type":"text","text":"reply"}]}}})
         self.assertEqual(c.push({"type":"turn/end","data":{"turn":1,"reason":{"kind":"completed"}}}), "reply")
@@ -223,6 +226,34 @@ class ServiceTests(unittest.IsolatedAsyncioTestCase):
         self.service.cfg.agent_chat_max_calls_per_hour = 1
         await self.submit(message()); await self.submit(message(mid="2"))
         self.assertEqual(len(self.sent), 1)
+
+    async def test_burst_coalesces_and_limits_cross_chat_concurrency(self):
+        self.service.cfg.agent_chat_debounce = .02
+        active = set()
+        peak = 0
+        original = self.client.reply
+        async def slow(sid, text):
+            nonlocal peak
+            self.assertNotIn(sid, active)
+            active.add(sid); peak = max(peak, len(active))
+            await asyncio.sleep(.03)
+            try: return await original(sid, text)
+            finally: active.remove(sid)
+        self.client.reply = slow
+        for key in ("100:group:42", "100:group:43", "100:group:44"):
+            for mid in ("1", "2", "3"):
+                msg = message(key=key, mid=mid)
+                self.service.observe(msg); self.service.schedule(msg, self.send)
+        await asyncio.gather(*list(self.service.tasks.values()))
+        self.assertEqual(len(self.client.prompts), 3)
+        self.assertEqual(peak, 2)
+
+    async def test_reset_failure_keeps_original_session(self):
+        await self.submit(message())
+        async def failing_stop(sid): raise dsh.BridgeError("cannot_confirm_queue_cleared")
+        self.client.stop = failing_stop
+        with self.assertRaises(dsh.BridgeError): await self.service.reset(message().key)
+        self.assertIsNotNone(self.store.session(message().key))
 
     async def test_reset_cancels_and_clears_only_target(self):
         await self.submit(message()); await self.submit(message(key="100:group:43"))
