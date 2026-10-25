@@ -87,7 +87,8 @@ async def start_agent_chat():
     if config.agent_chat_proactive_enabled:
         service.start_proactive(proactive_sender)
     logger.info(f"agent_chat enabled: {len(config.agent_chat_groups)} allowed groups, "
-                f"{len(config.agent_chat_private_users)} allowed private users; incremental context enabled")
+                f"{len(config.agent_chat_private_users)} allowed private users; incremental context enabled; "
+                f"Bing search {'enabled' if config.agent_chat_search_enabled else 'disabled'}")
 
 
 @driver.on_shutdown
@@ -167,6 +168,7 @@ async def administer(bot: Bot, event: MessageEvent, args: Message = CommandArg()
         row = service.store.activity(key)
         used = row[6] if row and row[5] == service.local_time().date().isoformat() else 0
         await admin.finish("AI 桥接：" + status +
+            f"\nBing 搜索：{'开启' if config.agent_chat_search_enabled else '关闭'}；近一小时尝试 {service.store.search_count(key)}/{config.agent_chat_search_max_per_hour}" +
             f"\n读图：{'开启' if config.agent_chat_images_enabled else '关闭'}；随机接话：{config.agent_chat_ambient_probability:.0%}" +
             f"\n自主发言：{'开启' if config.agent_chat_proactive_enabled and service.proactive_group(key) else '关闭'}；今日尝试 {used}/{config.agent_chat_proactive_daily_limit}" +
             f"\n安静时段：{config.agent_chat_quiet_start}:00—{config.agent_chat_quiet_end}:00；语音识别暂未启用。")

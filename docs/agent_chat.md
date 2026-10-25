@@ -14,7 +14,7 @@ NoneBot 负责 QQ 收发、白名单、消息仲裁与限流；DSH 负责模型/
 - 收到旧消息快照不重发；输出只认本次请求对应的已完成回合，忽略流式片段和思考内容。断线、超时或发送结果不确定时暂停该会话，不自动重试，避免重复回复和重复收费。
 - 超级用户命令：`ai 状态`、`ai 重置`（也接受 `/ai`，以机器人 COMMAND_START 为准）。重置先清空 DSH 待处理消息并取消执行，再清除当前对话的本地映射与上下文；保留 DSH 历史和调用频率记录。
 
-支持文本聊天、可选读图、随机接话和安静时的自主发言。语音和视频目前仍只有类型占位符；语音识别按用户要求延期。未开放联网搜索、任意文件处理、MCP 或多智能体工具。
+支持文本聊天、可选读图、随机接话和安静时的自主发言。语音和视频目前仍只有类型占位符；语音识别按用户要求延期。可选联网搜索由 Python 调用 Bing，模型自主决定是否查询；DSH 仍未开放任意文件处理、MCP 或多智能体工具。
 
 ### 哪些消息会让她开口
 
@@ -46,6 +46,40 @@ NoneBot 负责 QQ 收发、白名单、消息仲裁与限流；DSH 负责模型/
 | `AGENT_CHAT_TIMEOUT` / `AGENT_CHAT_MAX_REPLY_CHARS` | `90` 秒 / `600` 字符 | DSH 回合超时和最终可见回复长度 |
 
 各参数完整定义见 [配置模型](../src/plugins/agent_chat/config.py)，建议从 [.env.agent_chat.example](../.env.agent_chat.example) 开始设置。
+
+## AI 自主联网搜索（Bing）
+
+在私有 `.env.agent_chat` 中开启后重启 NoneBot 即可；不需要 API Key，不需要重新安装人设、重置群会话或重启 DSH：
+
+```dotenv
+AGENT_CHAT_SEARCH_ENABLED=true
+AGENT_CHAT_SEARCH_AMBIENT=false
+AGENT_CHAT_SEARCH_PROACTIVE=false
+AGENT_CHAT_SEARCH_MAX_PER_HOUR=6
+AGENT_CHAT_SEARCH_TIMEOUT=20
+```
+
+当前部署对全部 5 个白名单群的 @、引用机器人和允许的私聊开放搜索。随机接话与主动发言仍能聊天，但默认不搜索；确有需要时分别把 `AGENT_CHAT_SEARCH_AMBIENT` / `AGENT_CHAT_SEARCH_PROACTIVE` 设为 `true`，重启后生效。所有路径沿用主白名单、消息仲裁、静默和调用额度，不增加新的群授权入口。
+
+无需专门的搜索命令。比如问“STEINS;GATE RE:BOOT 官网页面现在写的发售日是哪天？”或近期游戏更新，AI 自己决定是否需要查询。普通闲聊仍是一轮模型调用；需要联网时先产生内部查询请求，Python 验证并请求 Bing，再把标题、网址和摘要送回**原来的 DSH 会话**，让绘梨花消化后回复，也仍可选择沉默。中间请求不会发到 QQ，不会每条群消息都调用搜索。
+
+一次回复链最多搜索一次，取最多 3 条去重结果，每条标题至多 150 字符、摘要 600 字符、网址 400 字符。查询至多 120 字符；检索异步执行，全局最多 2 个搜索并发，排队、DNS 和请求共享 20 秒总超时。每个“机器人账号 + 群/私聊”默认每小时最多 6 次搜索尝试，失败、空结果和缓存命中均计数，重启或 `ai 重置` 不返还额度。缓存按机器人、对话与查询隔离，保留 5 分钟，全局至多 64 项。
+
+提出搜索和阅读资料是两个 DSH 回合，**都计入原来的 30 次/小时模型额度**。剩余不足两轮时不开放搜索。新增的是简短能力协议与按需资料，完整人设仍按首次/压缩后补充的策略投递，不重新逐轮附全文，也不重复投递已处理群聊。Bing 本方案没有配置独立付费搜索 API，但模型的第二轮和历史资料仍可能产生 token 费用。
+
+模型用 `[来源1]` 等编号引用检索资料，桥接只从实际返回结果中填入链接，最多 2 个；模型临时写的网址不会当作检索来源发送。最终回复（含链接）仍受字符数上限约束。Bing RSS 的时间字段仅作为 `rss_date` 提示，**不保证是文章发布日期**，不能据此判断“最新”。
+
+### 搜索边界与失败处理
+
+- 唯一搜索目的地是固定的 `https://cn.bing.com/search`；只发送模型提炼且通过校验的公开主题，不发送完整聊天、人设、DSH Cookie 或 API Key。请求不读取系统代理、浏览器 Cookie 或 DSH 模型凭据。
+- 拒绝常见 QQ/手机数字串、邮箱、Windows 路径、凭据关键词和已知连接凭据；提示词同时禁止查询群友私人资料。自动检测不能识别所有语义上的隐私，请勿把敏感信息当公开主题查询。
+- DNS 必须全部为公网地址，实际连接固定到已校验的地址并继续验证 TLS 主机名；不跟随重定向，拒绝压缩响应、超大响应、XML 实体和异常格式，响应上限 512 KB。
+- 只读取 Bing RSS 中的搜索摘要，**不访问结果页面，不支持任意网址全文抓取**。网页内容是不可信资料；不会因网页文字递归搜索、调用 shell、读文件或恢复 DSH 工具权限。
+- 搜索断网/超时会把“资料不可用”交回模型作答，不因此暂停 DSH 会话。摘要无关、过旧或矛盾时要求模型承认无法确认；有结果不等于答案已核实。Bing RSS 并非稳定承诺的官方 API，查询质量可能偏泛，也可能被限流或返回验证码；不自动向其他服务商外发查询。
+- 模型阶段失败仍沿用会话暂停和停止旧请求的保护。搜索阶段写入本地 `searches` 表；进程在链中中断后不自动重搜或重发。搜索期间新到的群消息不会被错误记为已处理。内部动作格式错误或再次要求搜索时拦截，不将控制 JSON 发到 QQ。
+- `ai 状态` 显示搜索开关与近一小时尝试次数，属于本地状态，不是联网健康检查。日志只记录状态、结果数、是否命中缓存，不记录查询词或网页正文；查询和结果会作为对话保留在 DSH 历史中，不应随意对外导出。
+
+只改这几个搜索开关或额度需要重启 NoneBot；搜索与 DSH 的聊天 API Key 无关。更换聊天模型后，除文本/图片外还要验证该模型遵循内部搜索协议的能力。
 
 ## 配置与安装
 
@@ -174,7 +208,7 @@ Get-CimInstance Win32_Process |
 
 8080 是本部署的 NoneBot 端口，其他部署按实际配置替换。DSH Desktop 是独立进程，界面进程与监听本机 API 端口的子进程可能不同；其窗口关闭是否等于退出，要以端口是否还在监听为准。DSH、NoneBot、NapCat/QQ 不是同一个进程。
 
-本机 2026-10-25 部署使用后台启动并重定向输出，日志目录为用户目录下的 `Documents/Codex/2026-10-24/new-chat/work/agent-chat/token-opt/`：
+本机 2026-10-25 部署使用后台启动并重定向输出，日志目录为用户目录下的 `Documents/Codex/2026-10-24/new-chat/work/agent-chat/search-release/`：
 
 - `bot.stdout.log`：标准输出，包含 NoneBot 启动、插件加载和网关连接等日志。
 - `bot.stderr.log`：标准错误，可能包含警告和错误；文件为空不代表没有发生过业务问题，应同时检查标准输出和 `ai 状态`。
@@ -184,14 +218,14 @@ Get-CimInstance Win32_Process |
 查看当前日志末尾（`-Wait` 可选；在独立查看窗口按 Ctrl+C 只结束查看）：
 
 ```powershell
-$logDir = Join-Path $env:USERPROFILE 'Documents\Codex\2026-10-24\new-chat\work\agent-chat\token-opt'
+$logDir = Join-Path $env:USERPROFILE 'Documents\Codex\2026-10-24\new-chat\work\agent-chat\search-release'
 Get-Content -LiteralPath (Join-Path $logDir 'bot.stdout.log') -Tail 100 -Wait
 ```
 
 导出已有日志不会断开机器人连接，也不需要重启：
 
 ```powershell
-$logDir = Join-Path $env:USERPROFILE 'Documents\Codex\2026-10-24\new-chat\work\agent-chat\token-opt'
+$logDir = Join-Path $env:USERPROFILE 'Documents\Codex\2026-10-24\new-chat\work\agent-chat\search-release'
 $exportDir = Join-Path $env:USERPROFILE ('Desktop\ErikaBot-logs-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
 New-Item -ItemType Directory -Path $exportDir | Out-Null
 Copy-Item -LiteralPath (Join-Path $logDir 'bot.stdout.log'), (Join-Path $logDir 'bot.stderr.log') -Destination $exportDir
@@ -228,6 +262,8 @@ poetry run nb run 1>> $stdoutLog 2>> $stderrLog
 
 插件中 provider/model 留空时由 DSH 决定模型；成对填写时，插件在创建会话时调用 `session/selectModel`。当前没有自动将 DSH 默认模型切换同步到所有既有会话的功能。直接在 DSH 中更换实际模型/服务地址，也不一定触发桥接的配置指纹变化；仍须主动确认实际路由和兼容性。
 
+已兼容 Harness 的 `model-selection / notice` 元数据：管理员切换模型时，运行时插入的通知不会再被误认作其他人抢占输入，也不会发到 QQ。真正来自另一个客户端的聊天输入仍会中止当前请求。请在独立会话测试模型，避免同时在桥接使用的群会话里手动聊天。
+
 建议操作顺序：
 
 1. 记录目前 provider、模型、API 地址及 DSH profile，备份需要改的配置，保留回退方法。备份放在不入 Git、访问权限受限的目录。涉及状态迁移时使用 SQLite backup 接口制作一致快照，不在运行中只复制主数据库文件而遗漏 WAL。
@@ -235,7 +271,7 @@ poetry run nb run 1>> $stdoutLog 2>> $stderrLog
 3. 正式切换时尽量等待当前 AI 回合结束，再在 DSH 修改 Key/API/模型。纯 DSH 变更可以保持 NoneBot 与 NapCat/QQ 在线；如 DSH 要求重启，仅重启 DSH，但此期间 AI 暂时不可用，新请求可能失败。当前没有“只暂停 AI、保持其他插件”的运行时维护开关，不能保证热切换期间零失败。
 4. 若同时修改 `.env.agent_chat`，保存后在正式应用配置时重启 NoneBot；单纯更新 DSH 模型 Key 不需要因此重启 NoneBot。
 5. DSH 恢复后执行 `poetry run python -B scripts/check_agent_chat.py`，检查认证与安全预设。这个命令不调用模型，不能证明模型 Key 正确；需要模型验证时加 `--smoke`，它只新建独立测试会话、产生一次模型调用，不发 QQ 消息。读图还需单独验证视觉能力。
-6. 用 `ai 状态` 查看各群是否暂停。未暂停的会话可在新的合格消息到来时继续；已暂停会话不会因为 Key 修好或重启 NoneBot 就自动解锁，按下面的恢复流程处理。搜索尚未实装，今后搜索凭据应与聊天 API 分别配置，不能跨服务商直接复用 Key。
+6. 用 `ai 状态` 查看各群是否暂停。未暂停的会话可在新的合格消息到来时继续；已暂停会话不会因为 Key 修好或重启 NoneBot 就自动解锁，按下面的恢复流程处理。当前 Bing 搜索不使用聊天 API Key；更换模型后要在独立会话验证搜索协议。若以后增加收费搜索服务，其凭据须与聊天 API 分开，不能跨服务商直接复用 Key。
 
 只换 Key 不应为了“使它生效”随意执行 `ai 重置`。该命令会清除当前映射与本地输入，后续创建新 DSH 会话；旧 DSH 历史保留，但不会自动合并进新会话。需要保留原有连续记忆的模型切换，应先备份并进行经过检查的会话迁移；当前没有现成的无损批量切换/自动解除暂停命令。
 
@@ -272,6 +308,20 @@ DSH 不在线时，AI 会记录连接/协议错误并保持沉默，通常不会
 日常新增群只需改私有白名单并在配置正式应用时重启机器人。修改 Markdown 说明文档不需要重启任何进程。
 
 ## 测试与故障定位
+
+2026-10-25 Bing 搜索更新：99 项 Python 测试、6 项 Node 测试、实际 NoneBot 隔离分发探针与已安装 DSH 工具守卫检查通过。搜索用例覆盖内部动作解析、敏感查询拒绝、固定公网连接、重定向/超大 XML 拒绝、超时、缓存隔离、两轮额度、搜索失败后的正常回复、模型失败暂停、取消/重启及搜索期间新消息的投递进度；另覆盖模型切换通知兼容和真正外来输入继续拦截。
+
+真实 Bing + 独立 DSH 会话验证了普通闲聊一轮、近期问题自主搜索后同会话消化（各两轮）。《STEINS;GATE RE:BOOT》问题附上了检索结果中的官网链接；Bing 未提供具体 VALORANT 补丁时，模型明确表示无法确认，没有编造版本号。查询质量和模型措辞仍会变化，测试不代表所有问题都能找到答案。
+
+可重复运行独立搜索探针（会产生五轮左右的模型调用；不向 QQ 发消息、不停止生产进程）：
+
+```powershell
+poetry run python -B tests/agent_chat_search_probe.py --confirm-model-calls
+```
+
+探针使用临时 SQLite、新 DSH 会话和内存发送器；需要搜索结果确实可用，网络、页面索引或模型策略变化可能导致检查失败。
+
+正式部署时只重启 NoneBot，未重启 DSH、NapCat 或 QQ。部署前发现三个旧会话已因 DSH 断线或模型切换通知暂停；备份后核对原预设、结束回合和空队列，保留原会话与投递进度恢复，没有重发旧回复。该恢复是本次部署的逐项检查，不代表插件新增了自动解锁暂停会话的功能。
 
 ```powershell
 poetry run python -B -m unittest discover -s tests -p "test_agent_chat*.py" -v

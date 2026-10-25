@@ -36,6 +36,11 @@ class Config(BaseModel):
     agent_chat_forward_persona: bool = True
     agent_chat_provider: str = ""
     agent_chat_model: str = ""
+    agent_chat_search_enabled: bool = False
+    agent_chat_search_ambient: bool = False
+    agent_chat_search_proactive: bool = False
+    agent_chat_search_max_per_hour: int = Field(6, ge=1, le=30)
+    agent_chat_search_timeout: float = Field(20, ge=2, le=30)
     agent_chat_images_enabled: bool = False
     agent_chat_image_count: int = Field(2, ge=1, le=4)
     agent_chat_image_max_bytes: int = Field(8_000_000, ge=100_000, le=20_000_000)

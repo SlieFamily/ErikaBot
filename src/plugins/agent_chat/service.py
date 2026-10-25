@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 
 from .domain import ChatMessage, clean_reply, prompt_text
 from .dsh import BridgeError, ImageUnsupported, MissingSession
+from .search import BingSearch, SearchError, decision, instructions, result_prompt, final_answer
 
 
 log = logging.getLogger("agent_chat")
@@ -25,13 +26,14 @@ class Request:
 
 
 class ChatService:
-    def __init__(self, config, store, client):
+    def __init__(self, config, store, client, search=None):
         self.cfg, self.store, self.client = config, store, client
         self.tasks, self.pending = {}, {}
         self.slots = asyncio.Semaphore(config.agent_chat_max_concurrent)
         self.closed = False
         self.started_at = time.time()
         self.proactive_task = None
+        self.search = search or (BingSearch(config) if config.agent_chat_search_enabled else None)
 
     def local_time(self, now=None):
         return datetime.fromtimestamp(time.time() if now is None else now,
@@ -151,6 +153,14 @@ class ChatService:
         elif request.kind == 'ambient' and self.quiet():
             return
         dispatch = self.store.begin(key)
+        followup = None
+        nonce = uuid.uuid4().hex
+        can_search = (self.cfg.agent_chat_search_enabled and self.search is not None and
+            (request.kind == 'direct' or
+             request.kind == 'ambient' and self.cfg.agent_chat_search_ambient or
+             proactive and self.cfg.agent_chat_search_proactive) and
+            self.store.search_count(key) < self.cfg.agent_chat_search_max_per_hour and
+            self.store.calls(key, time.time() - 3600)[0] < self.cfg.agent_chat_max_calls_per_hour)
         try:
             composition, persona = await self.client.policy_with_persona()
             # Mapping is also tied to the DSH origin and pinned model selection.
@@ -178,6 +188,7 @@ class ChatService:
                 seed = forward and (refresh or not delivered or not delivered[2])
                 text = prompt_text(history, str(uuid.uuid4()), proactive=proactive,
                                    persona=persona if seed else "", remind_persona=forward and not seed)
+                text += instructions(nonce, can_search, self.local_time().date().isoformat())
                 images = []
                 if request.prepare and not proactive:
                     # Keep recent-image reference semantics even when text is incremental.
@@ -200,29 +211,76 @@ class ChatService:
                 sid = await self.client.create_session()
                 self.store.bind(key, sid, policy)
                 answer = await ask(sid)
-            answer = clean_reply(answer, self.cfg.agent_chat_max_reply_chars)
+            try:
+                query = decision(answer, nonce, (
+                    self.cfg.agent_chat_dsh_cookie.get_secret_value(),
+                    self.cfg.agent_chat_dsh_token.get_secret_value(), *key.split(':')))
+            except SearchError:
+                query, answer = None, ''
+                log.warning('agent_chat rejected invalid or private search action')
+            if query is not None:
+                # Reserve the second model turn before network I/O. Both turns count.
+                if (not can_search or self.store.calls(key, time.time() - 3600)[0] >=
+                        self.cfg.agent_chat_max_calls_per_hour or
+                        not self.store.begin_search(key, dispatch, self.cfg.agent_chat_search_max_per_hour)):
+                    answer = ''
+                else:
+                    followup = self.store.begin(key)
+                    try:
+                        result = await self.search.search(key, query)
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception:
+                        result = {'status': 'unavailable', 'provider': 'bing', 'results': []}
+                        log.warning('agent_chat search unavailable; asking model to acknowledge missing evidence')
+                    self.store.search_stage(dispatch, 'results_ready')
+                    # Detect compaction between decision and digestion. Do not consume new QQ input.
+                    delivered = self.store.delivery(key, sid)
+                    cut, refresh = await self.client.context_state(sid, delivered[1])
+                    text = result_prompt(result)
+                    if refresh and self.cfg.agent_chat_forward_persona:
+                        text = '管理员部署的固定角色设定：\n' + persona + '\n角色设定结束。\n' + text
+                    self.store.search_stage(dispatch, 'answering')
+                    answer = await self.client.reply(sid, text)
+                    self.store.delivered(key, sid, delivered[0], cut, delivered[2])
+                    self.store.finish(followup, 'completed')
+                    answer = final_answer(answer, result, self.cfg.agent_chat_max_reply_chars)
+                    self.store.search_stage(dispatch, 'answered')
+                    log.info('agent_chat search completed: status=%s results=%d cached=%s',
+                             result['status'], len(result.get('results', ())), result.get('cached', False))
+            else:
+                answer = clean_reply(answer, self.cfg.agent_chat_max_reply_chars)
             if proactive:
                 current = self.store.activity(key)
                 if not current or current[3] != request.generation or self.quiet():
                     self.store.finish(dispatch, 'superseded')
+                    self.store.search_stage(dispatch, 'superseded')
                     return
             # Once attempted, never automatically repeat a QQ send whose acknowledgement was lost.
             self.store.finish(dispatch, "sending" if answer else "silent")
+            self.store.search_stage(dispatch, "sending" if answer else "silent")
             if answer and not self.closed:
                 await send(answer)
                 self.store.finish(dispatch, "sent")
+                self.store.search_stage(dispatch, 'sent')
                 self.store.mark_output(key)
         except asyncio.CancelledError:
             if sid:
                 self.store.suspend(key)
                 await self._stop_best_effort(sid)
             self.store.finish(dispatch, "cancelled")
+            if followup:
+                self.store.finish(followup, 'cancelled')
+            self.store.search_stage(dispatch, 'cancelled')
             raise
         except Exception as error:
             if sid:
                 self.store.suspend(key)
                 await self._stop_best_effort(sid)
             self.store.finish(dispatch, "failed")
+            if followup:
+                self.store.finish(followup, 'failed')
+            self.store.search_stage(dispatch, 'failed')
             code = str(error) if isinstance(error, BridgeError) else "internal_error"
             log.warning("agent_chat request stopped: %s", code)
             # Error details stay local. Silence avoids another send after uncertain delivery.
@@ -254,4 +312,6 @@ class ChatService:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
         await self.client.close()
+        if self.search:
+            await self.search.close()
         self.store.close()

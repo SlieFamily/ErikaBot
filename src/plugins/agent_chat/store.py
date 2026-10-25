@@ -31,12 +31,17 @@ class Store:
                 chat_key TEXT PRIMARY KEY, session_id TEXT NOT NULL,
                 message_seq INTEGER NOT NULL, context_seq INTEGER NOT NULL,
                 persona_sent INTEGER NOT NULL);
+            CREATE TABLE IF NOT EXISTS searches (
+                dispatch_id INTEGER PRIMARY KEY, chat_key TEXT NOT NULL,
+                created REAL NOT NULL, stage TEXT NOT NULL);
         """)
         # An interrupted request is not blindly re-sent after restart.
         with self.db:
             self.db.execute("UPDATE sessions SET suspended=1 WHERE chat_key IN "
                             "(SELECT chat_key FROM dispatches WHERE status='inflight')")
             self.db.execute("UPDATE dispatches SET status='interrupted' WHERE status='inflight'")
+            self.db.execute("UPDATE searches SET stage='interrupted' WHERE stage IN "
+                            "('searching','results_ready','answering')")
 
     def append(self, message):
         with self.db:
@@ -93,7 +98,24 @@ class Store:
         with self.db:
             cur = self.db.execute("INSERT INTO dispatches(chat_key,created,status) VALUES(?,?,'inflight')", (key, time.time()))
             self.db.execute("DELETE FROM dispatches WHERE created<?", (time.time() - 7 * 86400,))
+            self.db.execute("DELETE FROM searches WHERE created<?", (time.time() - 7 * 86400,))
         return cur.lastrowid
+
+    def search_count(self, key):
+        return self.db.execute("SELECT COUNT(*) FROM searches WHERE chat_key=? AND created>?",
+                               (key, time.time() - 3600)).fetchone()[0]
+
+    def begin_search(self, key, dispatch, limit):
+        # Includes cache hits/failures; reset does not replenish the budget.
+        with self.db:
+            cur = self.db.execute("INSERT INTO searches SELECT ?,?,?,'searching' WHERE "
+                "(SELECT COUNT(*) FROM searches WHERE chat_key=? AND created>?) < ?",
+                (dispatch, key, time.time(), key, time.time() - 3600, limit))
+        return cur.rowcount == 1
+
+    def search_stage(self, dispatch, stage):
+        with self.db:
+            self.db.execute("UPDATE searches SET stage=? WHERE dispatch_id=?", (stage, dispatch))
 
     def finish(self, dispatch, status):
         with self.db:
