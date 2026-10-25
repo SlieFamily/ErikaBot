@@ -160,6 +160,105 @@ AGENT_CHAT_UTC_OFFSET_HOURS=8
 
 连接 Cookie 权限较高，只在本机私有配置中保存。插件不会将它、模型 Key 或服务错误详情发送给模型/QQ；不要开启包含原始协议或请求头的调试日志。允许群的文本与有限图片引用元数据会保存到本地；文本和成功取得的图片可进入 DSH 并发送给所选模型服务。禁用插件后停止记录；既有历史需由管理员按需要清理。
 
+## 运行进程与日志
+
+Windows 上用 `poetry run nb run` 启动后，会出现 Poetry、nb 和 Python 的父子进程。实际提供 NoneBot/OneBot 服务的是监听配置端口的 Python 进程；不能只看任务管理器中任意一个 `python.exe`。PID 会随重启变化，查当前进程可在另一个 PowerShell 窗口运行：
+
+```powershell
+$botListener = Get-NetTCPConnection -LocalPort 8080 -State Listen
+$botListener | Select-Object LocalAddress, LocalPort, OwningProcess
+Get-CimInstance Win32_Process |
+  Where-Object { $_.ProcessId -in $botListener.OwningProcess } |
+  Select-Object ProcessId, ParentProcessId, Name, ExecutablePath
+```
+
+8080 是本部署的 NoneBot 端口，其他部署按实际配置替换。DSH Desktop 是独立进程，界面进程与监听本机 API 端口的子进程可能不同；其窗口关闭是否等于退出，要以端口是否还在监听为准。DSH、NoneBot、NapCat/QQ 不是同一个进程。
+
+本机 2026-10-25 部署使用后台启动并重定向输出，日志目录为用户目录下的 `Documents/Codex/2026-10-24/new-chat/work/agent-chat/token-opt/`：
+
+- `bot.stdout.log`：标准输出，包含 NoneBot 启动、插件加载和网关连接等日志。
+- `bot.stderr.log`：标准错误，可能包含警告和错误；文件为空不代表没有发生过业务问题，应同时检查标准输出和 `ai 状态`。
+
+这些文件是本次启动的日志，不是跨所有历史部署的统一日志目录。旧启动可能写入其他目录；日志更新时间也不能单独作为服务是否存活的依据。当前没有启用 `bot.py` 中注释掉的文件日志处理器，也没有内置日志轮转、自动清理或“一键导出”命令；已经重定向的日志可以直接查看和复制。
+
+查看当前日志末尾（`-Wait` 可选；在独立查看窗口按 Ctrl+C 只结束查看）：
+
+```powershell
+$logDir = Join-Path $env:USERPROFILE 'Documents\Codex\2026-10-24\new-chat\work\agent-chat\token-opt'
+Get-Content -LiteralPath (Join-Path $logDir 'bot.stdout.log') -Tail 100 -Wait
+```
+
+导出已有日志不会断开机器人连接，也不需要重启：
+
+```powershell
+$logDir = Join-Path $env:USERPROFILE 'Documents\Codex\2026-10-24\new-chat\work\agent-chat\token-opt'
+$exportDir = Join-Path $env:USERPROFILE ('Desktop\ErikaBot-logs-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+New-Item -ItemType Directory -Path $exportDir | Out-Null
+Copy-Item -LiteralPath (Join-Path $logDir 'bot.stdout.log'), (Join-Path $logDir 'bot.stderr.log') -Destination $exportDir
+```
+
+桥接自身只记录固定错误代码，不把模型内容、认证头或远程错误正文写入错误日志；其他插件和框架日志仍可能包含 QQ 号、聊天内容等信息。对外提供前检查并脱敏，不把 `.env.agent_chat`、DSH 凭据文件或会话数据库当作普通日志一并上传。
+
+今后正式启动时可以统一保存到已被 Git 忽略的 `data/agent_chat/logs/`。以下命令只在原机器人已经正常退出、准备正式启动时使用，不要为了收集日志再开第二个机器人：
+
+```powershell
+Set-Location 'E:\rerika\ErikaBot'
+$logDir = Join-Path (Get-Location).Path 'data\agent_chat\logs'
+New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+$stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+$stdoutLog = Join-Path $logDir ("bot-$stamp.stdout.log")
+$stderrLog = Join-Path $logDir ("bot-$stamp.stderr.log")
+poetry run nb run 1>> $stdoutLog 2>> $stderrLog
+```
+
+不同启动使用不同文件名以保留旧日志；这仍是输出重定向，不是自动轮转或进程托管。
+
+## 更换 API、Key 或模型
+
+先区分两层连接：**NoneBot → 本机 DSH** 使用 `.env.agent_chat` 的 URL/Cookie；**DSH → 模型服务商** 使用 DSH 中配置的 API 地址、模型和 Key。更换模型 API 不等于更换 DSH 连接凭据。
+
+| 变更位置 | NoneBot 是否需要重启 | 会话与生效注意事项 |
+| --- | --- | --- |
+| 只在 DSH 更换同一服务商的模型 API Key | 通常不需要 | 等当前回合完成；按 DSH 的保存/加载机制生效，必要时仅重启 DSH。Key 不在本地会话绑定指纹中 |
+| 在 DSH 更换模型 API 地址、模型或默认路由 | 通常不需要，仅改 DSH 即可 | 先核对协议、模型能力和上下文上限；不要假定“更改默认模型”会同时切换所有已有群会话，应检查各会话实际选择 |
+| 修改 `.env.agent_chat` 中的 DSH Cookie/登录 token | 需要 | 私有配置启动时加载，没有热重载；仅更换认证凭据本身不会改变策略指纹 |
+| 修改插件的 `AGENT_CHAT_PROVIDER` / `AGENT_CHAT_MODEL` 或 DSH URL | 需要 | 它们参与会话绑定指纹；重启加载后，旧群映射会暂停并要求管理员处理，不能自动无缝迁移 |
+| 更换 DSH profile、机器或全新实例 | 视连接配置变化决定 | 原会话数据与编号可能不存在；先安排数据迁移，不能只复制 Key 就认为历史已迁过去 |
+| 修改角色卡、安全预设或守卫 | 按安装流程重启 DSH；部署时安排必要的机器人切换 | 内容变更触发预设指纹变化，旧群映射须核查后重置或迁移 |
+
+插件中 provider/model 留空时由 DSH 决定模型；成对填写时，插件在创建会话时调用 `session/selectModel`。当前没有自动将 DSH 默认模型切换同步到所有既有会话的功能。直接在 DSH 中更换实际模型/服务地址，也不一定触发桥接的配置指纹变化；仍须主动确认实际路由和兼容性。
+
+建议操作顺序：
+
+1. 记录目前 provider、模型、API 地址及 DSH profile，备份需要改的配置，保留回退方法。备份放在不入 Git、访问权限受限的目录。涉及状态迁移时使用 SQLite backup 接口制作一致快照，不在运行中只复制主数据库文件而遗漏 WAL。
+2. 在 DSH 新建独立测试会话验证目标 API 的认证、普通文本、人设、历史承接和图片输入。不要在桥接管理的群会话中手动发送测试问题，也不要改群白名单来绕过隔离。
+3. 正式切换时尽量等待当前 AI 回合结束，再在 DSH 修改 Key/API/模型。纯 DSH 变更可以保持 NoneBot 与 NapCat/QQ 在线；如 DSH 要求重启，仅重启 DSH，但此期间 AI 暂时不可用，新请求可能失败。当前没有“只暂停 AI、保持其他插件”的运行时维护开关，不能保证热切换期间零失败。
+4. 若同时修改 `.env.agent_chat`，保存后在正式应用配置时重启 NoneBot；单纯更新 DSH 模型 Key 不需要因此重启 NoneBot。
+5. DSH 恢复后执行 `poetry run python -B scripts/check_agent_chat.py`，检查认证与安全预设。这个命令不调用模型，不能证明模型 Key 正确；需要模型验证时加 `--smoke`，它只新建独立测试会话、产生一次模型调用，不发 QQ 消息。读图还需单独验证视觉能力。
+6. 用 `ai 状态` 查看各群是否暂停。未暂停的会话可在新的合格消息到来时继续；已暂停会话不会因为 Key 修好或重启 NoneBot 就自动解锁，按下面的恢复流程处理。搜索尚未实装，今后搜索凭据应与聊天 API 分别配置，不能跨服务商直接复用 Key。
+
+只换 Key 不应为了“使它生效”随意执行 `ai 重置`。该命令会清除当前映射与本地输入，后续创建新 DSH 会话；旧 DSH 历史保留，但不会自动合并进新会话。需要保留原有连续记忆的模型切换，应先备份并进行经过检查的会话迁移；当前没有现成的无损批量切换/自动解除暂停命令。
+
+## DSH 关闭、断线与恢复
+
+DSH 不在线时，AI 会记录连接/协议错误并保持沉默，通常不会使整个 NoneBot 退出或主动断开 OneBot 连接。语录、RSS 等其他插件仍按各自逻辑运行。启动 `agent_chat` 时也不会立即连接 DSH，因此 DSH 暂未启动本身不会阻止配置正确的 NoneBot 启动。
+
+| 故障阶段 | 当前处理 | DSH 恢复后的行为 |
+| --- | --- | --- |
+| 尚未取得/校验预设，DSH 就已离线 | 本次尝试标记失败、记录日志、不发 QQ 回复；尚未选择会话，不新设暂停标记 | 原本未暂停的会话可以处理后续新消息；不会立即重放失败请求 |
+| 已选定群会话，读取上下文或生成中断线/超时 | 持久化暂停该群，尝试清空 DSH 队列并取消执行；清理无法确认也保留暂停 | 需要管理员核查；不会自动解除暂停或重复调用模型 |
+| QQ 发送失败或结果不确定 | 不自动重发，并暂停有关会话 | 先确认是否已发送，避免重复发言 |
+| NoneBot 意外退出时存在 `inflight` 调用 | 下次启动将相关旧调用标记为中断，并暂停已绑定会话 | 不重放不确定的请求，需检查后恢复 |
+| 执行 `ai 重置` 时 DSH 仍离线 | 无法确认清空/取消旧任务，重置失败并保留映射 | 先恢复 DSH，再进行清理；不直接删除数据库来绕过确认 |
+
+上述“失败前是否已经选定会话”是当前实现中的区别，不能简单理解成“任何错误都永久暂停”或“DSH 恢复就一切自动恢复”。失败/沉默尝试也计入调用额度；恢复后若触及每小时限制，仍需等待额度恢复。
+
+恢复步骤：先重新打开原 DSH profile，确认模型服务与连接凭据有效；运行只读诊断；再由超级用户查询相关群的 `ai 状态`。该命令展示保存的会话状态和功能开关，**不是实时 DSH 健康检查**。如果已暂停且接受建立新上下文，可在 DSH 正常后执行 `ai 重置`；如果要保留旧会话记忆，应先检查该会话队列、回合和安全预设，再由管理员处理，不要无条件修改数据库中的暂停标记。
+
+当前已具备异常隔离、超时、并发/频率限制、暂停持久化、队列清理和不确定结果不重发；它侧重避免重复或错发。若进程恰好在 QQ 发送阶段崩溃，`sending` 状态不会自动补发，但目前也没有发送确认对账，不能据此声称端到端绝不丢消息。尚未实现全局故障熔断、自动健康探测与退避恢复、运行时 AI 维护开关、自动重启 DSH、无损会话恢复命令或日志轮转。DSH 故障不会自动启动另一个不受限智能体作为替代。
+
+2026-10-25 文档核验时，在独立模拟服务和临时数据库上复跑了 5 项现有断连/重启/清理测试，全部通过；没有关闭真实 DSH、停止 NoneBot 或断开 QQ 来制造故障。模拟结果与代码检查支持上述行为说明，不代替未来对其他故障类型的验证。
+
 ## 保持 QQ 在线的测试与部署
 
 **测试期间不停止、重启或另开一个生产机器人，不断开现有 OneBot WebSocket，也不重启生产 DSH、NapCat 或 QQ 客户端。只在正式实装后重启需要加载变更的进程。**
@@ -214,6 +313,7 @@ poetry run python -B tests/agent_chat_live_probe.py --confirm-model-calls
 | `safe_preset_missing` / `unsafe_preset_composition` | 检查是否装在当前 profile、是否重启、是否被额外插件改变 |
 | `dsh_auth_failed` / `dsh_auth_expired` | 刷新私有配置的 DSH 凭据并重启机器人 |
 | `dsh_http_error` | 检查端口、Desktop 浏览器访问设置及 DSH 状态 |
+| `dsh_unreachable` / `dsh_transport_or_protocol_error` / `dsh_stream_disconnected` | 检查 DSH 是否退出、端口和网络；恢复后按故障阶段区分是否需要处理暂停，不盲目重发 |
 | `dsh_ws_redirect_rejected` | 使用真实回环监听地址，不使用重定向代理 |
 | `dsh_context_timeout` / `invalid_context_page` / `invalid_context_cursor` | 核对 DSH 历史接口版本与连通性，先保留暂停状态，不绕过历史连续性验证 |
 | `concurrent_session_input` | 检查桥接会话是否被手动聊天或其他程序使用；已关联的自动压缩检查点会正常处理 |
