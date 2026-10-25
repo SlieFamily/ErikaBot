@@ -1,5 +1,7 @@
 """Pure routing/serialization helpers, deliberately independent of NoneBot."""
 import json
+import html
+import re
 from dataclasses import asdict, dataclass
 
 
@@ -32,8 +34,38 @@ def prompt_text(messages, nonce):
     )
 
 
+_REASON_TAG = re.compile(r"<\s*(/?)\s*(think(?:ing)?|analysis|reasoning)\b[^<>]*?>", re.I)
+_ESCAPED_TAG = re.compile(r"&lt;\s*/?\s*(?:think(?:ing)?|analysis|reasoning)\b.*?&gt;", re.I)
+
+
+def strip_reasoning(text):
+    """Fail closed on orphan closing tags and unfinished reasoning, before truncation."""
+    for _ in range(2):
+        text = _ESCAPED_TAG.sub(lambda match: html.unescape(match.group()), text)
+    output, depth, end = [], 0, 0
+    for match in _REASON_TAG.finditer(text):
+        if depth == 0:
+            output.append(text[end:match.start()])
+        if match.group(1):
+            if depth:
+                depth -= 1
+            else:
+                # Some providers return the tail of reasoning without its opening tag.
+                output.clear()
+        elif not match.group().rstrip().endswith('/>'):
+            depth += 1
+        end = match.end()
+    if depth == 0:
+        output.append(text[end:])
+    value = ''.join(output)
+    fragment = re.search(r"<\s*(/?)\s*(?:think(?:ing)?|analysis|reasoning)\b[^>]*$", value, re.I)
+    if fragment:
+        value = '' if fragment.group(1) else value[:fragment.start()]
+    return value
+
+
 def clean_reply(text, limit):
-    value = text.strip()
+    value = strip_reasoning(text).strip()
     if not value or value == "[SILENT]":
         return ""
     # Never parse model text as CQ code. Further enforced by MessageSegment.text.
