@@ -21,3 +21,13 @@
 1. 运行napcat，如 Windows系统下运行`napcat.quick.bat`
 2. 进入bot虚拟环境 `poetry shell` 或 `poetry env activate`
 3. `nb run`运行机器人即可
+
+## 可选：启用 DSH 角色聊天
+
+基础机器人成功连接 NapCat 后，再按 [agent_chat 安装说明](agent_chat.md) 配置 DSH 模型、安装专用安全预设，并创建私有 `.env.agent_chat`。LLM API Key 填在 DSH；插件配置仅保存本机 DSH 连接凭据、允许群和功能开关。`.env.prod` 已被 Git 跟踪，不要将 DSH 凭据或模型 Key 写入其中。
+
+默认角色是 [古户绘梨花](../roles/古户绘梨花.md)。安装预设后，按需打开读图、随机接话与自主发言；每个群有独立持久会话，人设首次载入、普通轮次增量发送。角色替换和追加群的步骤见 [角色设置说明](../roles/README.md)。
+
+日常启动也可以直接使用 `poetry run nb run`，无须手动进入虚拟环境。
+
+开发测试期间保持现有机器人和 QQ 网关在线：离线测试使用临时数据库与模拟收发，真实 DSH 联调用独立会话。只在代码、配置或预设正式部署完成且验证通过后安排重启，具体步骤见 [在线测试与部署](agent_chat.md#保持-qq-在线的测试与部署)。本轮仅修改文档时无需重启。
