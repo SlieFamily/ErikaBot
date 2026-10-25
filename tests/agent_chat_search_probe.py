@@ -31,8 +31,8 @@ async def run(env_file):
         async def record_reply(sid, text, images=None):
             prompts.append((sid, text))
             return await original_reply(sid, text, images)
-        async def record_search(chat, query):
-            result = await original_search(chat, query)
+        async def record_search(chat, query, focus=''):
+            result = await original_search(chat, query, focus=focus)
             queries.append({'query': query, 'status': result['status'], 'results': len(result['results'])})
             return result
         client.reply, backend.search = record_reply, record_search

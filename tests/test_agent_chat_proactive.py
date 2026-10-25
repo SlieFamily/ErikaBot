@@ -8,6 +8,15 @@ import test_agent_chat as core
 
 
 class ProactiveTests(unittest.IsolatedAsyncioTestCase):
+    async def test_equal_quiet_boundaries_allow_every_hour_without_changing_limits(self):
+        self.service.cfg.agent_chat_quiet_start = 0
+        self.service.cfg.agent_chat_quiet_end = 0
+        for hour in range(24):
+            self.assertFalse(self.service.quiet(datetime(2026,10,25,hour,tzinfo=timezone.utc).timestamp()))
+        self.idle()
+        self.assertTrue(self.service.schedule_proactive(self.key, self.send))
+        await self.drain()
+        self.assertFalse(self.service.schedule_proactive(self.key, self.send))
     send = core.ServiceTests.send
     submit = core.ServiceTests.submit
 

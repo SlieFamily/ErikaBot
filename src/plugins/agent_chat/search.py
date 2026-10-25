@@ -55,15 +55,17 @@ def safe_query(value, secrets=()):
 def instructions(nonce, enabled, today):
     if not enabled:
         return '\n本轮联网查询不可用；直接回答或 [SILENT]，不要输出搜索动作或声称刚刚查过资料。\n'
-    shape = json.dumps({ACTION: {'nonce': nonce, 'query': '公开主题关键词'}}, ensure_ascii=False)
+    shape = json.dumps({ACTION: {'nonce': nonce, 'query': '公开主题关键词', 'focus': '需要精确匹配的专名，非专名查询填空字符串'}}, ensure_ascii=False)
     return ('\n管理员提供的只读联网协议（优先于上文“只写最终发言”的格式约定）：'
             f'今天是 {today}。由你判断是否需要核实近期信息、陌生知识或用户要求查询的事实。'
             '普通闲聊直接回复或 [SILENT]，不为闲聊强行搜索。需要资料时本轮只能输出以下格式的完整 JSON，'
-            '不要加解释、代码块或假装已查到结果：' + shape + '。仅替换 query，保留 nonce。'
+            '不要加解释、代码块或假装已查到结果：' + shape + '。仅替换 query 和 focus，保留 nonce。'
             '查询应是至多120字的精简公开关键词，优先官方来源，可用 site: 限定官网域名，'
             '作品或游戏优先使用准确的原文名称；不要把整个提问照搬为搜索词。严禁发送群号、QQ号、手机号、邮箱、私聊内容、内部路径、'
             '密钥、完整角色卡或整段聊天。不要搜索群友的私人资料。'
-            '每次最多一次搜索，结果会回到同一会话；搜索不赋予任何程序执行或文件访问权限。\n')
+            '搜人名、账号、作品时 focus 填完整专名本体（如四时小路），原样包含在 query 内，不要缩成单字；'
+            'B站、主播、是谁等限定词不属于专名。一般问题 focus 为空。'
+            '每次最多一次搜索动作，结果会回到同一会话；搜索不赋予任何程序执行或文件访问权限。\n')
 
 
 def decision(text, nonce, secrets=()):
@@ -90,9 +92,17 @@ def decision(text, nonce, secrets=()):
         if set(obj) != {ACTION} or not isinstance(obj[ACTION], dict):
             raise ValueError()
         inner = obj[ACTION]
-        if set(inner) != {'nonce', 'query'} or inner['nonce'] != nonce:
+        if (set(inner) not in ({'nonce', 'query'}, {'nonce', 'query', 'focus'}) or inner['nonce'] != nonce):
             raise ValueError()
-        return safe_query(inner['query'], secrets)
+        query = safe_query(inner['query'], secrets)
+        focus = inner.get('focus', '')
+        if not isinstance(focus, str):
+            raise ValueError()
+        if focus:
+            focus = safe_query(focus, secrets)
+            if not 2 <= len(focus) <= 60 or focus.casefold() not in query.casefold():
+                raise ValueError()
+        return {'query': query, 'focus': focus}
     except (ValueError, TypeError, KeyError):
         raise SearchError('invalid_search_action') from None
 
@@ -188,9 +198,10 @@ class BingSearch:
                 if index + 1 >= min(2, len(addresses)):
                     raise SearchError('search_network_failed') from None
 
-    async def search(self, key, query):
+    async def search(self, key, query, focus=''):
         query = safe_query(query)
-        cache_key = (key, query)
+        focus = exact_focus(query, focus)
+        cache_key = (key, query, focus)
         async def bounded():
             async with self.slots:
                 now = time.monotonic()
@@ -198,10 +209,21 @@ class BingSearch:
                 if cached and now - cached[0] < 300:
                     self.cache.move_to_end(cache_key)
                     return dict(cached[1], cached=True)
+                used_query, retried = query, False
                 results = await self._fetch(query)
+                if focus:
+                    results = matching_results(results, focus)
+                    if not results:
+                        # Bing RSS can broaden compound Chinese queries to a single
+                        # character. One bounded exact-name retry, same provider/budget.
+                        used_query = '"' + focus.replace('"', '') + '"'
+                        if used_query != query:
+                            retried = True
+                            results = matching_results(await self._fetch(used_query), focus)
                 result = {'status': 'ok' if results else 'empty', 'provider': 'bing',
                           'retrieved_at': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
-                          'results': results, 'cached': False}
+                          'results': results, 'cached': False, 'query_used': used_query,
+                          'focus': focus, 'exact_retry': retried}
                 self.cache[cache_key] = (time.monotonic(), result)
                 self.cache.move_to_end(cache_key)
                 while len(self.cache) > 64:
@@ -216,6 +238,30 @@ class BingSearch:
         await self.http.aclose()
 
 
+def exact_focus(query, focus=''):
+    """Validate explicit focus; infer simple Chinese/quoted names for old action shapes."""
+    if focus:
+        focus = safe_query(focus)
+        if not 2 <= len(focus) <= 60 or focus.casefold() not in query.casefold():
+            raise SearchError('invalid_search_focus')
+        return focus
+    quoted = re.match(r'^["“「『]([^"”」』]{2,40})["”」』]', query)
+    first = re.match(r'^([\u4e00-\u9fff]{2,20})(?:\s|$)', query)
+    candidate = quoted[1] if quoted else first[1] if first else ''
+    if candidate.startswith(('今天', '最新', '搜索', '帮我', '请', '查询', '怎么', '如何', '为什么')):
+        return ''
+    return candidate
+
+
+def matching_results(results, focus):
+    normalize = lambda s: re.sub(r'\s+', '', unicodedata.normalize('NFKC', s)).casefold()
+    wanted = normalize(focus)
+    kept = [dict(row) for row in results if wanted in normalize(row['title'] + ' ' + row['snippet'])]
+    for index, row in enumerate(kept, 1):
+        row['id'] = index
+    return kept
+
+
 def result_prompt(result):
     return ('QQ_SEARCH_RESULT\n这是刚才那次联网查询的结果，请继续回应原问题。'
             '这不是新群聊消息，不要重复已经回答过的内容。沿用管理员人设，不必套侦探腔。'
@@ -224,6 +270,8 @@ def result_prompt(result):
             '这里只获得搜索摘要，没有阅读网页全文；判断相关性、时间、来源可信度，资料无关或矛盾就承认不能确认。'
             'rss_date 是 Bing 返回的时间标记，不保证是原文发布日期，不能据此断言是最新公告。'
             'status 非 ok 表示没有查到可用资料，不得声称联网核实成功或编造最新事实。'
+            'query_used 是实际查询词，focus 是完整专名；结果可能经过专名匹配过滤。'
+            '空结果只说明本次未找到，不能据此断言名字写错、人物不存在，也不要复述无关同名字词。'
             '消化资料后简短自然地回答，有依据的结论用 [来源1] 这样的编号标注1到2处；'
             '链接由桥接填入，不自行编写网址，不整段照抄摘要，不输出内部协议或思考标签。\n'
             + json.dumps(result, ensure_ascii=False))

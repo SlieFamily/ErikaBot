@@ -23,15 +23,25 @@ def action(nonce, query='命运石之门 官方网站'):
 
 
 class ProtocolTests(unittest.TestCase):
+    def test_focus_must_preserve_complete_public_query_subject(self):
+        value = json.loads(action('n', '四时小路 B站 UP主'))
+        value[web.ACTION]['focus'] = '四时小路'
+        parsed = web.decision(json.dumps(value, ensure_ascii=False), 'n')
+        self.assertEqual(parsed['focus'], '四时小路')
+        for invalid in ['四', '另一人', '13812345678', [], 'x' * 61]:
+            value[web.ACTION]['focus'] = invalid
+            with self.subTest(focus=invalid), self.assertRaises(web.SearchError):
+                web.decision(json.dumps(value, ensure_ascii=False), 'n')
+
     def test_exact_fresh_action_only(self):
-        self.assertEqual(web.decision('<thinking>hidden</thinking>' + action('n'), 'n'), '命运石之门 官方网站')
+        self.assertEqual(web.decision('<thinking>hidden</thinking>' + action('n'), 'n')['query'], '命运石之门 官方网站')
         self.assertIsNone(web.decision('我今天不想打瓦', 'n'))
         for text in [action('old'), '先搜\n' + action('n'), '```json\n' + action('n') + '\n```',
                      '{"agent_chat_search": []}', '{"agent_chat_search":',
                      action('n').replace('"query":', '"url":'), action('n')[:-1] + ',"exec":"x"}']:
             with self.subTest(text=text), self.assertRaises(web.SearchError):
                 web.decision(text, 'n')
-        self.assertEqual(web.decision(action('n').replace('agent_chat_search', '\\u0061gent_chat_search'), 'n'),
+        self.assertEqual(web.decision(action('n').replace('agent_chat_search', '\\u0061gent_chat_search'), 'n')['query'],
                          '命运石之门 官方网站')
         with self.assertRaises(web.SearchError):
             web.decision(action('n').replace('"query":', '"nonce":"n","query":'), 'n')
@@ -82,9 +92,9 @@ class TransportTests(unittest.IsolatedAsyncioTestCase):
         async def resolve(host): return ['8.8.8.8']
         backend = web.BingSearch(cfg(), httpx.AsyncClient(transport=httpx.MockTransport(respond)), resolve)
         try:
-            await backend.search('bot:group:1', '公开主题')
-            self.assertTrue((await backend.search('bot:group:1', '公开主题'))['cached'])
-            await backend.search('bot:group:2', '公开主题')
+            await backend.search('bot:group:1', 'public topic')
+            self.assertTrue((await backend.search('bot:group:1', 'public topic'))['cached'])
+            await backend.search('bot:group:2', 'public topic')
             self.assertEqual(len(requests), 2)
         finally: await backend.close()
 
@@ -107,6 +117,52 @@ class TransportTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaisesRegex(web.SearchError, 'search_timeout'): await backend.search('g', 'public')
         finally: await backend.close()
 
+    async def test_bing_single_character_broadening_retries_exact_name_once(self):
+        backend = web.BingSearch(cfg())
+        seen = []
+        async def fetch(query):
+            seen.append(query)
+            if len(seen) == 1:
+                return [{'id':1,'title':'四（汉字）','snippet':'数字四','url':'https://example.com/four'}]
+            return [{'id':1,'title':'四（汉字）','snippet':'数字四','url':'https://example.com/four'},
+                    {'id':2,'title':'四时小路Komichi的个人空间','snippet':'B站主页','url':'https://example.com/komichi'}]
+        backend._fetch = fetch
+        try:
+            result = await backend.search('g', '四时小路 B站 UP主 site:bilibili.com', focus='四时小路')
+            self.assertEqual(seen, ['四时小路 B站 UP主 site:bilibili.com', '"四时小路"'])
+            self.assertEqual(len(result['results']), 1)
+            self.assertEqual(result['results'][0]['id'], 1)
+            self.assertEqual(result['focus'], '四时小路')
+            self.assertTrue(result['exact_retry'])
+            self.assertTrue((await backend.search('g', seen[0], focus='四时小路'))['cached'])
+            self.assertEqual(len(seen), 2)
+        finally: await backend.close()
+
+    async def test_unrelated_results_never_filled_as_other_person_and_no_loop(self):
+        backend = web.BingSearch(cfg()); seen = []
+        async def fetch(query):
+            seen.append(query)
+            return [{'id':1,'title':'闪闪','snippet':'同名字词','url':'https://example.com/wrong'}]
+        backend._fetch = fetch
+        try:
+            result = await backend.search('g', '"闪闪闪闪星" B站 主播')
+            self.assertEqual(result['status'], 'empty')
+            self.assertEqual(result['results'], [])
+            self.assertEqual(len(seen), 2)
+        finally: await backend.close()
+
+    async def test_matching_primary_results_do_not_repeat_network_query(self):
+        backend = web.BingSearch(cfg()); seen = []
+        async def fetch(query):
+            seen.append(query)
+            return [{'id':1,'title':'四时小路','snippet':'主页','url':'https://example.com/correct'}]
+        backend._fetch = fetch
+        try:
+            result = await backend.search('g', '四时小路')
+            self.assertFalse(result['exact_retry'])
+            self.assertEqual(len(seen), 1)
+        finally: await backend.close()
+
 
 class SearchClient(FakeClient):
     async def reply(self, sid, text):
@@ -120,7 +176,7 @@ class SearchClient(FakeClient):
 
 class FakeSearch:
     def __init__(self): self.calls = []; self.error = None; self.callback = None
-    async def search(self, key, query):
+    async def search(self, key, query, focus=''):
         self.calls.append((key, query))
         if self.callback: self.callback()
         if self.error: raise self.error
@@ -184,7 +240,7 @@ class ServiceSearchTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_cancel_during_search_suspends_and_never_sends(self):
         entered = asyncio.Event()
-        async def block(key, query):
+        async def block(key, query, focus=''):
             entered.set()
             await asyncio.Event().wait()
         self.backend.search = block

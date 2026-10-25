@@ -229,7 +229,7 @@ class ChatService:
                 else:
                     followup = self.store.begin(key)
                     try:
-                        result = await self.search.search(key, query)
+                        result = await self.search.search(key, query['query'], focus=query['focus'])
                     except asyncio.CancelledError:
                         raise
                     except Exception:

@@ -172,11 +172,13 @@ async def administer(bot: Bot, event: MessageEvent, args: Message = CommandArg()
         status = "未创建会话" if not bound else ("已暂停，需要检查 DSH 后重置" if bound[2] else "会话已保存")
         row = service.store.activity(key)
         used = row[6] if row and row[5] == service.local_time().date().isoformat() else 0
+        quiet_label = (f'{config.agent_chat_quiet_start}:00—{config.agent_chat_quiet_end}:00'
+                       if config.agent_chat_quiet_start != config.agent_chat_quiet_end else '关闭（全天可接话）')
         await admin.finish("AI 桥接：" + status +
             f"\nBing 搜索：{'开启' if config.agent_chat_search_enabled else '关闭'}；近一小时尝试 {service.store.search_count(key)}/{config.agent_chat_search_max_per_hour}" +
             f"\n读图：{'开启' if config.agent_chat_images_enabled else '关闭'}；随机接话：{config.agent_chat_ambient_probability:.0%}" +
             f"\n自主发言：{'开启' if config.agent_chat_proactive_enabled and service.proactive_group(key) else '关闭'}；今日尝试 {used}/{config.agent_chat_proactive_daily_limit}" +
-            f"\n安静时段：{config.agent_chat_quiet_start}:00—{config.agent_chat_quiet_end}:00；语音识别暂未启用。")
+            f"\n安静时段：{quiet_label}；语音识别暂未启用。")
     if command in {"重置", "reset"}:
         try:
             await service.reset(key)
