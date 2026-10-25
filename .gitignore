@@ -6,3 +6,9 @@
 /docker-compose.yml
 /src/plugins/rss_helper/biliCookie.json
 /src/plugins/rss_helper/*.png
+# agent_chat private configuration and runtime state
+/.env.agent_chat
+/.env.agent_chat.local
+/data/agent_chat/
+__pycache__/
+*.py[cod]

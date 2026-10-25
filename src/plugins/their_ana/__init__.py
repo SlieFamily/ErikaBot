@@ -14,6 +14,7 @@ from nonebot.message import run_postprocessor
 from nonebot.matcher import Matcher
 from nonebot_plugin_saa import Text, Image, MessageFactory, AggregatedMessageFactory
 from . import model
+from utils.agent_chat_routing import ai_owns_mention, mark_handled
 import random
 from utils.QImage import *
 
@@ -44,6 +45,10 @@ SuperList = on_command("侦探的魔女名单",priority=3,permission=GROUP_ADMIN
 abuse = on_regex("[\s\S]*",rule=to_me(),priority=5)
 abuse_on = on_command("开启嘲讽状态",priority=1,permission=GROUP_ADMIN|GROUP_OWNER|PRIVATE_FRIEND|SUPERUSER)
 abuse_off = on_command("关闭嘲讽状态",priority=1,permission=GROUP_ADMIN|GROUP_OWNER|PRIVATE_FRIEND|SUPERUSER)
+
+# Passive observers only claim an event when they actually send a quotation.
+SuperAna.agent_chat_passive = True
+abuse.agent_chat_passive = True
 
 # enable_auto_select_bot() #为ssa插件自动获取bot
 
@@ -241,13 +246,16 @@ async def handle(bot: Bot, event: Event ,ana = RegexGroup()):
     await FindAna.finish()
 
 @abuse.handle()
-async def handle(bot: Bot, event: GroupMessageEvent,at_me=EventToMe() ):
+async def handle(bot: Bot, event: GroupMessageEvent, state: T_State, at_me=EventToMe() ):
+    if ai_owns_mention(state):
+        await abuse.finish()
     name = "Erika"
     group = event.get_session_id()
     if not group.isdigit():
         group = group.split('_')[1]
     my_ana = model.GetAna(name,group)
     if my_ana and at_me:
+        mark_handled(state)
         await abuse.finish(Message(my_ana))
     await abuse.finish()
 
@@ -277,7 +285,9 @@ async def handle(bot: Bot, event: Event ):
         await abuse_on.finish()
 
 @SuperAna.handle()
-async def handle(bot: Bot, event: Event):
+async def handle(bot: Bot, event: Event, state: T_State):
+    if ai_owns_mention(state):
+        await SuperAna.finish()
     msg = event.get_message()
     group = event.get_session_id()
     if not group.isdigit():
@@ -292,6 +302,7 @@ async def handle(bot: Bot, event: Event):
     name = name[0]+"<高级>"
     ana = model.GetAna(name,group)
     if ana:
+        mark_handled(state)
         await SuperAna.finish(Message(ana))
     await SuperAna.finish()
 
