@@ -63,3 +63,5 @@ _✨ 基于NoneBot2的绘梨花多功能Bot，自用 ✨_
 ## DSH 角色聊天桥接
 
 新增 `agent_chat` 插件，由 DSH 管理模型与持久会话，支持白名单、群内角色对话及与语录插件的消息仲裁。默认关闭；配置、工具执行限制与测试方法见 [agent_chat 文档](docs/agent_chat.md)。
+
+默认人设为 [古户绘梨花](roles/古户绘梨花.md)，使用独立 Markdown 文件保存；修改或替换方法见 [角色设置说明](roles/README.md)。下一阶段功能见 [agent_chat 后续计划](docs/agent_chat_roadmap.md)。

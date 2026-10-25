@@ -10,7 +10,8 @@ if (!process.argv[2]) throw new Error('Pass the installed DSH node_modules direc
 const require = createRequire(path.resolve(process.argv[2], '../agent-chat-probe.cjs'));
 const load = name => import(pathToFileURL(require.resolve(name)).href);
 const {Context} = await load('@deepseek-ai/cordis');
-const {default: SystemPrompt} = await load('@deepseek-ai/dsh-system-prompt');
+const {default: SystemPrompt, renderPrompt} = await load('@deepseek-ai/dsh-system-prompt');
+const {apply: applyPersona} = await load('@deepseek-ai/dsh-persona');
 const {default: Tools} = await load('@deepseek-ai/dsh-tools');
 const {createScope} = await load('@deepseek-ai/dsh-scope');
 
@@ -27,6 +28,10 @@ const definition = name => ({
 root.tools.register(definition('global_canary'));
 const agent = {id: 'agent-chat-guard-probe'};
 const scope = createScope(root, agent);
+root.systemPrompt.section({name: 'probe:host-identity', order: 100, text: 'Generic coding assistant'});
+applyPersona(scope.ctx, {prefix: 'Dedicated QQ role and fixed protocol', complete: true, includeRuntimeContext: false});
+const assembly = await scope.ctx.systemPrompt.assemble({scope: agent, agent, signal: new AbortController().signal});
+assert.equal(renderPrompt(assembly), 'Dedicated QQ role and fixed protocol');
 apply(scope.ctx);
 assert.equal(scope.ctx.tools.get('global_canary', agent), undefined);
 // Local tools bypass inherited-tool visibility masks, but MUST still hit the guard.
@@ -42,3 +47,4 @@ for (const name of ['global_canary', 'local_canary', 'future_unknown_tool', 'run
 assert.equal(invoked, 0);
 await scope.dispose();
 console.log('PASS: installed DSH engine hides inherited tools and denies global/local/unknown/Code Mode execution; canary never ran');
+console.log('PASS: complete persona excludes inherited system-prompt identity sections');

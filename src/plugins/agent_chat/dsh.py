@@ -72,9 +72,10 @@ def validate_preset(content):
             set(children[0]) - {"id", "name"} or children[0].get("name") != "@deepseek-ai/dsh-compaction-basic"):
         raise BridgeError("unsafe_compaction_configuration")
     persona = rows[1].get("config", {})
-    if not isinstance(persona, dict) or set(persona) != {"prefix", "includeRuntimeContext"}:
+    if not isinstance(persona, dict) or set(persona) != {"prefix", "includeRuntimeContext", "complete"}:
         raise BridgeError("unsafe_persona_configuration")
-    if persona["includeRuntimeContext"] is not False or not isinstance(persona["prefix"], str):
+    if (persona["includeRuntimeContext"] is not False or persona["complete"] is not True or
+            not isinstance(persona["prefix"], str)):
         raise BridgeError("unsafe_persona_configuration")
     if "{{" in persona["prefix"]:
         raise BridgeError("persona_templates_not_allowed")
