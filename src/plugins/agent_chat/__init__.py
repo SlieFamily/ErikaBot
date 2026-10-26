@@ -18,7 +18,7 @@ from .dsh import BridgeError, DshClient
 from .service import ChatService
 from .store import Store
 from .media import MediaResolver, allowed_url, safe_file_ref
-from .presentation import segments as output_segments
+from .interactions import qq_message
 from .forwards import ForwardResolver, forward_refs, forward_context
 from .knowledge_bridge import install_route
 from .knowledge_admin import handle as knowledge_command
@@ -41,7 +41,7 @@ def chat_key(bot, event):
 
 
 def outgoing_message(value):
-    return Message([MessageSegment(row['type'],row['data']) for row in output_segments(value)])
+    return qq_message(value)
 
 
 def readable(message):
@@ -84,7 +84,9 @@ def proactive_sender(key):
         bot = get_bots().get(bot_id)
         if not bot or not service or service.closed or not service.proactive_group(key):
             raise RuntimeError('proactive_target_unavailable')
-        await bot.send_group_msg(group_id=int(group_id), message=outgoing_message(text))
+        async def send_message(value):
+            await bot.send_group_msg(group_id=int(group_id), message=outgoing_message(value))
+        return await service.social.send(bot,key,text,send_message)
     return send
 
 
@@ -168,8 +170,10 @@ async def dispatch_chat(bot: Bot, event: MessageEvent, state: T_State):
         return
 
     async def send(text):
-        # Only validated reply/face metadata creates segments; CQ text is never parsed.
-        await bot.send(event, outgoing_message(text))
+        # Native NoneBot factories and Bot APIs only; never interpret model CQ.
+        async def send_message(value):
+            await bot.send(event, outgoing_message(value))
+        return await service.social.send(bot,message.key,text,send_message)
 
     if media_resolver or config.agent_chat_forwards_enabled:
         async def prepare(history,pending):

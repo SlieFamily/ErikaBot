@@ -49,6 +49,11 @@ class Config(BaseModel):
     agent_chat_forward_persona: bool = True
     agent_chat_reply_enabled: bool = True
     agent_chat_faces_enabled: bool = True
+    agent_chat_mentions_enabled: bool = True
+    agent_chat_reactions_enabled: bool = True
+    agent_chat_poke_enabled: bool = True
+    agent_chat_reaction_cooldown: float = Field(30, ge=5, le=3600)
+    agent_chat_poke_cooldown: float = Field(300, ge=30, le=86400)
     agent_chat_forwards_enabled: bool = True
     agent_chat_provider: str = ""
     agent_chat_model: str = ""

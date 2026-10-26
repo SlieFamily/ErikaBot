@@ -31,6 +31,9 @@ class Store:
                 chat_key TEXT PRIMARY KEY, session_id TEXT NOT NULL,
                 message_seq INTEGER NOT NULL, context_seq INTEGER NOT NULL,
                 persona_sent INTEGER NOT NULL);
+            CREATE TABLE IF NOT EXISTS social_actions (
+                chat_key TEXT NOT NULL, kind TEXT NOT NULL, target TEXT NOT NULL, created REAL NOT NULL,
+                PRIMARY KEY(chat_key,kind,target));
             CREATE TABLE IF NOT EXISTS searches (
                 dispatch_id INTEGER PRIMARY KEY, chat_key TEXT NOT NULL,
                 created REAL NOT NULL, stage TEXT NOT NULL);
@@ -121,6 +124,20 @@ class Store:
     def finish(self, dispatch, status):
         with self.db:
             self.db.execute("UPDATE dispatches SET status=? WHERE id=?", (status, dispatch))
+
+    def reserve_interaction(self, key, kind, target, cooldown, now=None):
+        """Claim before I/O: failures/timeouts consume cooldown and are never retried."""
+        if kind not in {'reaction','poke'}: raise ValueError('invalid_social_action')
+        now = time.time() if now is None else now
+        with self.db:
+            self.db.execute('DELETE FROM social_actions WHERE created<?',(now-86400,))
+            if self.db.execute('SELECT 1 FROM social_actions WHERE chat_key=? AND kind=? AND created>?',
+                               (key,kind,now-cooldown)).fetchone(): return False
+            if kind=='reaction' and self.db.execute('SELECT 1 FROM social_actions WHERE chat_key=? AND kind=? AND target=?',
+                                                    (key,kind,target)).fetchone(): return False
+            self.db.execute('INSERT INTO social_actions VALUES(?,?,?,?) ON CONFLICT(chat_key,kind,target) '
+                            'DO UPDATE SET created=excluded.created',(key,kind,target,now))
+        return True
 
     def reset(self, key):
         with self.db:

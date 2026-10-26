@@ -12,6 +12,7 @@ from .domain import ChatMessage, prompt_text, strip_reasoning
 from .dsh import BridgeError, ImageUnsupported, MissingSession
 from .search import instructions, final_answer
 from . import presentation
+from .interactions import SocialActions
 from .knowledge import KnowledgeStore
 from .knowledge_bridge import KnowledgeHub
 from .memory import MemoryManager, requested_memory, memory_instructions, honest_memory_answer
@@ -37,6 +38,7 @@ class Request:
 class ChatService:
     def __init__(self, config, store, client):
         self.cfg, self.store, self.client = config, store, client
+        self.social = SocialActions(config,store)
         self.tasks, self.pending = {}, {}
         self.recovering = set()
         self.slots = asyncio.Semaphore(config.agent_chat_max_concurrent)
@@ -266,7 +268,9 @@ class ChatService:
         started=time.monotonic();model_ms=0
         searched = False
         sending = False
+        delivered_output = False
         targets = set()
+        social_scope = None
         can_search = (self.cfg.agent_chat_search_enabled and
             (request.kind == 'direct' or
              request.kind == 'ambient' and self.cfg.agent_chat_search_ambient or
@@ -297,7 +301,7 @@ class ChatService:
             memory_scope=None
             memory_requested=False
             async def ask(session_id):
-                nonlocal targets,model_ms,memory_scope,memory_requested
+                nonlocal targets,social_scope,model_ms,memory_scope,memory_requested
                 delivered = self.store.delivery(key, session_id)
                 previous_cut = delivered[1] if delivered else None
                 cut, refresh = await self.client.context_state(session_id, previous_cut)
@@ -320,7 +324,9 @@ class ChatService:
                 text += instructions(can_search, self.local_time().date().isoformat())
                 targets = (presentation.reply_targets(self.store.recent(key,self.cfg.agent_chat_context_messages)+direct,key)
                            if self.cfg.agent_chat_reply_enabled and not proactive else set())
-                text += presentation.instructions(targets,self.cfg.agent_chat_faces_enabled)
+                social_scope = presentation.social_targets(self.store.recent(key,self.cfg.agent_chat_context_messages)+direct,
+                                                           key,self.cfg,proactive)
+                text += presentation.instructions(targets,self.cfg.agent_chat_faces_enabled,social_scope)
                 knowledge_args={}
                 stamp=None
                 if self.knowledge:
@@ -375,14 +381,17 @@ class ChatService:
                 self.store.search_stage(dispatch, 'answered')
                 log.info('agent_chat native search completed: provider=anysearch calls=%d sources=%d',
                          getattr(answer, 'searches', 0), len(sources))
-            plan = presentation.parse(answer,targets,self.cfg.agent_chat_faces_enabled)
+            plan = presentation.parse(answer,targets,self.cfg.agent_chat_faces_enabled,social_scope)
             intentional_silence = strip_reasoning(plan).strip() == '[SILENT]'
             visible = final_answer(plan, sources, searched, self.cfg.agent_chat_max_reply_chars)
             if memory_requested and not (memory_scope and memory_scope.memory_writes):
                 visible=honest_memory_answer(visible)
             # A rejected tool/protocol body cannot escape filtering via a face.
             faces = plan.faces if not intentional_silence and (visible or not str(plan).strip()) else ()
-            answer = presentation.Outgoing(visible,plan.reply_to if visible or faces else '',faces)
+            publish = not intentional_silence and (bool(visible) or not str(plan).strip())
+            answer = presentation.Outgoing(visible,plan.reply_to if visible or faces else '',faces,
+                plan.mentions if publish and (visible or faces) else (),
+                plan.reaction if publish else (),plan.poke if publish else '')
             if not answer and not intentional_silence and request.kind == 'direct':
                 # A completed turn containing only reasoning is a failed answer, not
                 # deliberate silence. Never recover/publish reasoning or retry the model.
@@ -403,14 +412,14 @@ class ChatService:
             if answer and not self.closed:
                 await self._finish_progress(request)
                 sending = True
-                await send(answer)
-                self.store.finish(dispatch, "sent")
+                delivered_output = await send(answer) is not False
+                self.store.finish(dispatch, "sent" if delivered_output else "silent")
                 sending = False
-                self.store.search_stage(dispatch, 'sent')
-                self.store.mark_output(key)
+                self.store.search_stage(dispatch, 'sent' if delivered_output else 'silent')
+                if delivered_output: self.store.mark_output(key)
             log.info('agent_chat turn completed: kind=%s batch=%d queued_ms=%d model_ms=%d elapsed_ms=%d sent=%s',
                      request.kind,1+len(request.batched),round((started-request.enqueued_at)*1000),
-                     model_ms,round((time.monotonic()-started)*1000),bool(answer))
+                     model_ms,round((time.monotonic()-started)*1000),delivered_output)
         except asyncio.CancelledError:
             if sid:
                 self.store.suspend(key)

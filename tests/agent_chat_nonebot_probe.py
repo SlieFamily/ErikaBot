@@ -29,9 +29,12 @@ async def main():
         ai.config.agent_chat_groups = frozenset({42})
 
         class FakeService:
-            def __init__(self): self.observed = []; self.scheduled = []; self.recovered=[]; self.learned=[]; self.knowledge=None
+            def __init__(self):
+                from src.plugins.agent_chat.interactions import SocialActions
+                self.observed = []; self.scheduled = []; self.recovered=[]; self.learned=[]; self.knowledge=None
+                self.store=ai.Store(Path(td)/'social.sqlite3'); self.social=SocialActions(ai.config,self.store)
             def allowed(self, bot_id, group_id, user_id): return group_id == 42 and str(user_id) != str(bot_id)
-            def observe(self, message): self.observed.append(message); return True
+            def observe(self, message): self.observed.append(message); self.store.append(message); return True
             def schedule(self, message, send, prepare=None): self.scheduled.append((message, send)); self.prepare = prepare
             async def recover(self,key):self.recovered.append(key);return 'resumed'
             def learn_message(self,message,plain):self.learned.append((message.message_id,plain))
@@ -252,6 +255,23 @@ async def main():
         assert len(json.dumps({k:sent_report[k] for k in ('source','news','summary','prompt')},ensure_ascii=False).encode())<512
         assert len([f for f in wire if f['action']=='send_group_forward_msg'])==1
         adapter.connections.clear()
+        # Exercise optional actions through a real NoneBot Bot/Adapter connection.
+        from dataclasses import replace
+        from src.plugins.agent_chat.presentation import social_targets
+        native_record=replace(observed,key='101:group:42')
+        service.store.append(native_record)
+        scope=social_targets([native_record.payload()],native_record.key,ai.config)
+        plan=parse('QQ_REPLY '+json.dumps({'text':'接住啦🙂','reply_to':'','faces':[],
+            'mentions':['7'],'reaction':{'message_id':str(observed.message_id),'emoji':'👍'},'poke':'7'}),set(),True,scope)
+        adapter.connections['101']=CaptureSocket();wire.clear()
+        async def normal_send(value):
+            await native_bot.send_group_msg(group_id=42,message=ai.outgoing_message(value))
+        assert await service.social.send(native_bot,native_record.key,plan,normal_send)
+        assert [f['action'] for f in wire]==['send_group_msg','set_msg_emoji_like','group_poke']
+        assert wire[0]['params']['message'][0]=={'type':'at','data':{'qq':'7'}}
+        assert wire[1]['params']=={'message_id':int(observed.message_id),'emoji_id':'128077','set':True,'_timeout':5}
+        assert wire[2]['params']=={'group_id':42,'user_id':7,'_timeout':5}
+        adapter.connections.clear()
         # A gateway failure returns one short notice, never a multi-message plain-text flood or retry.
         original_call=bot.call_api;failed=[]
         async def reject_forward(api,**data):
@@ -263,13 +283,13 @@ async def main():
         assert len(failed)==1 and len(sent)==before+1 and '合并转发未确认' in str(sent[-1])
         bot.call_api=original_call
         assert service.knowledge.learning_count()==0
-        service.knowledge=None;db.close()
+        service.knowledge=None;db.close();service.store.db.close()
         ai.config.agent_chat_images_enabled = False
         ai.media_resolver = None
         ai.service = None
         await handle_event(bot, event("你好", directed=True))
         assert sent, "disabled AI retains old @ reply"
-        print("PASS: real NoneBot dispatch, SuperAna arbitration, mention recovery, literal CQ, image/forward routing, reply+face segments, SUPERUSER recovery, remote slang review, grouped forward wire, failure no-flood, allowlist, disabled fallback")
+        print("PASS: real NoneBot dispatch, SuperAna arbitration, mention recovery, literal CQ, image/forward routing, reply+face segments, SUPERUSER recovery, remote slang review, grouped forward wire, native mention/reaction/poke APIs, failure no-flood, allowlist, disabled fallback")
         os.chdir(ROOT)
 
 
