@@ -1,12 +1,14 @@
-"""Pure command rendering; callers must enforce NoneBot SUPERUSER and chat allowlist."""
+"""Pure command rendering; callers enforce SUPERUSER; only slang moderation may bypass the chat allowlist."""
 import re
 from .knowledge import KnowledgeError, category_value
+from .slang_report import build_report, USAGE
 
 HELP=('记忆开关：ai 记忆状态；ai 即时记忆 开/关；ai 后台记忆 开/关；ai 记忆开关 开/关（总开关）；加 全群 可统一设置。\n'
       '记忆：ai 记忆 [activeTopic/pendingThought/memberImpression]；ai 忘记 编号；ai 清空记忆 [类别]\n'
-      '黑话：ai 黑话 [候选/已确认/已拒绝]；ai 黑话确认 编号 [解释]；批量：ai 黑话确认 1 2 3（使用各自已有解释）；ai 黑话拒绝 编号；'
+      '黑话：ai 黑话 [候选/已确认/已拒绝] [全部] [页码]（按来源群合并转发，默认至少2次）；ai 黑话确认 编号 [解释]；批量：ai 黑话确认 1 2 3（使用各自已有解释）；ai 黑话拒绝 编号；'
       'ai 黑话删除 编号；ai 黑话添加 词语 | 解释\n'
       '多行自填：ai 黑话确认 后换行，每行 编号 | 解释；每次最多30条，逐条返回结果。\n'
+      '超级用户可在任意群汇总、确认/拒绝/删除黑话，不会为该群开启AI；词条编号跨群唯一。\n'
       '确认/添加/修改的解释供所有白名单群共享，不共享原始聊天；ai 重置保留轻量记忆与词库。')
 
 
@@ -35,15 +37,15 @@ def confirmation_entries(tail):
     return list(result.items())
 
 
-def confirm_many(store,key,tail):
+def confirm_many(store,key,tail,admin_bot=None):
     entries=confirmation_entries(tail)  # Validate syntax before changing any row.
     confirmed,failed=[],[]
     for entry_id,meaning in entries:
         try:
-            term=store.review_slang(key,entry_id,'confirm',meaning)
+            term=store.review_slang(key,entry_id,'confirm',meaning,admin_bot=admin_bot)
             confirmed.append(f'#{entry_id}「{term}」')
         except KnowledgeError as error:
-            reason={'slang_not_visible_here':'编号不存在或不属于当前群',
+            reason={'slang_not_visible_here':('编号不存在或不属于当前机器人收集的词条' if admin_bot is not None else '编号不存在或不属于当前群'),
                     'slang_meaning_required':'缺少解释，请先填写或等待研究'}.get(str(error),'解释不符合要求')
             failed.append(f'#{entry_id}：{reason}')
     parts=[f'已确认 {len(confirmed)} 条'+('：'+'、'.join(confirmed) if confirmed else '。')]
@@ -52,16 +54,17 @@ def confirm_many(store,key,tail):
     return '\n'.join(parts)
 
 
-def handle(store,key,command,memory=None):
+def handle(store,key,command,memory=None,admin_bot=None):
     parts=command.split(None,1)
     head=parts[0] if parts else ''
     tail=parts[1].strip() if len(parts)==2 else ''
-    if head not in {'记忆','忘记','清空记忆','黑话','黑话确认','黑话拒绝','黑话删除','黑话添加','学习帮助','记忆状态','即时记忆','后台记忆','记忆开关'}:
+    if head not in {'记忆','忘记','清空记忆','黑话','黑话确认','黑话拒绝','黑话删除','黑话添加','学习帮助','记忆状态','即时记忆','后台记忆','记忆开关','黑话帮助'}:
         return None
     if not store:return '轻量记忆与黑话功能未启用。'
     try:
         if head=='学习帮助':return HELP
-        if head in {'记忆状态','即时记忆','后台记忆','记忆开关'}:
+        if head=='黑话帮助':return USAGE
+        if head in {'记忆状态','即时记忆','后台记忆','记忆开关','黑话帮助'}:
             if not memory:return '记忆控制未启用。'
             if head=='记忆状态':return memory.describe(key)
             args=tail.split();glob=any(a in ('全群','全局') for a in args)
@@ -83,26 +86,16 @@ def handle(store,key,command,memory=None):
             category_value(tail,optional=True)
             if memory:memory.invalidate(key)
             return f"已清理当前群 {store.clear_memory(key,tail)['removed']} 条记忆；其他群不变。"
-        if head=='黑话':
-            status={'':'candidate','候选':'candidate','已确认':'confirmed','已拒绝':'rejected'}.get(tail)
-            if status is None:return HELP
-            rows=store.slang_for_admin(key,status)
-            if not rows:return '暂无对应黑话词条。'
-            lines=[]
-            for r in rows:
-                lines.append(f"#{r['id']} {r['content']}（累计 {r['count']} 次）\n解释：{r['meaning'] or '待研究/待填写'}"+
-                    (f"\n注意：{r['risk']}" if r['risk'] else '')+
-                    ('\n来源：'+' '.join(r['sources']) if r['sources'] else ''))
-            return ('黑话'+(tail or '候选')+'（研究草稿须管理员确认；已确认解释全群共享）：\n'+'\n\n'.join(lines))[:3500]
+        if head=='黑话':return build_report(store,admin_bot or key.split(':',1)[0],tail)
         if head=='黑话添加':
             term,sep,meaning=tail.partition('|')
             if not sep:return HELP
             term=store.add_manual_slang(term.strip(),meaning.strip())
             return f'已添加/修改共享黑话「{term}」，状态：已确认。'
-        if head=='黑话确认':return confirm_many(store,key,tail)
+        if head=='黑话确认':return confirm_many(store,key,tail,admin_bot)
         raw_id,_,meaning=tail.partition(' ')
         action={'黑话拒绝':'reject','黑话删除':'delete'}[head]
-        term=store.review_slang(key,int(raw_id),action,meaning.strip() or None)
+        term=store.review_slang(key,int(raw_id),action,meaning.strip() or None,admin_bot=admin_bot)
         return f'已处理「{term}」。确认后的解释供所有白名单群共享。'
     except (KnowledgeError,ValueError):
         return '操作未完成：请核对编号、类别、解释长度和词条所属群。确认候选前需有解释；批量可用 1 2 3 或每行 编号 | 解释（最多30条）；输入 ai 学习帮助 查看用法。'

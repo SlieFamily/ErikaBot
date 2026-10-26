@@ -137,7 +137,7 @@ class KnowledgeTests(unittest.TestCase):
         self.assertIn('0 条',admin.handle(self.store,KEY,f'忘记 {i}'))
         self.assertEqual(len(self.store.memory(OTHER)),1)
         self.assertIn('已确认',admin.handle(self.store,KEY,'黑话添加 芜湖起飞 | 兴奋时的调侃'))
-        self.assertIn('兴奋时的调侃',admin.handle(self.store,OTHER,'黑话 已确认'))
+        self.assertIn('兴奋时的调侃','\n'.join(admin.handle(self.store,OTHER,'黑话 已确认 全部').nodes))
 
 
 class BridgeTests(unittest.IsolatedAsyncioTestCase):

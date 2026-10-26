@@ -1,4 +1,5 @@
 """ErikaBot ↔ DSH bridge. Disabled unless explicitly configured by the owner."""
+import asyncio
 from typing import Optional
 
 from nonebot import get_bots, get_driver, on_command
@@ -21,6 +22,7 @@ from .presentation import segments as output_segments
 from .forwards import ForwardResolver, forward_refs
 from .knowledge_bridge import install_route
 from .knowledge_admin import handle as knowledge_command
+from .slang_report import SlangReport, SLANG_COMMANDS, send_report
 
 
 driver = get_driver()
@@ -190,11 +192,23 @@ async def administer(bot: Bot, event: MessageEvent, args: Message = CommandArg()
         await admin.finish("AI 桥接未启用。")
     key = chat_key(bot, event)
     command = args.extract_plain_text().strip()
-    if (isinstance(event,GroupMessageEvent) and event.group_id in config.agent_chat_groups or
-            isinstance(event,PrivateMessageEvent) and event.user_id in config.agent_chat_private_users):
-        rendered=knowledge_command(service.knowledge,key,command,memory=getattr(service,'memory_manager',None))
+    head=command.split(None,1)[0] if command else ''
+    allowed=(isinstance(event,GroupMessageEvent) and event.group_id in config.agent_chat_groups or
+             isinstance(event,PrivateMessageEvent) and event.user_id in config.agent_chat_private_users)
+    remote_slang=isinstance(event,GroupMessageEvent) and head in SLANG_COMMANDS
+    if allowed or remote_slang:
+        rendered=knowledge_command(service.knowledge,key,command,memory=getattr(service,'memory_manager',None),
+                                   admin_bot=str(bot.self_id) if head in SLANG_COMMANDS else None)
+        if isinstance(rendered,SlangReport):
+            try:await asyncio.wait_for(send_report(bot,event,rendered),20)
+            except Exception:
+                logger.warning('agent_chat slang report forward failed; no automatic retry or text expansion')
+                await admin.finish('合并转发未确认发送成功；未展开成多条消息。请稍后重试 ai 黑话。')
+            await admin.finish()
         if rendered is not None:
             await admin.finish(Message(MessageSegment.text(rendered)))
+    if not allowed:
+        await admin.finish('此群未开启 AI 聊天。超级用户可使用 ai 黑话 及黑话审核命令；其他 AI 管理命令仅限已开启的对话。')
     if command in {"状态", "status"}:
         bound = service.store.session(key)
         status = "未创建会话" if not bound else ("已暂停，修复 DSH/API 后可尝试 ai 恢复" if bound[2] else "会话已保存")

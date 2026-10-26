@@ -43,6 +43,7 @@ async def main():
         class FakeBot(Bot):
             async def call_api(self, api, **data):
                 api_calls.append((api,data))
+                if api == 'send_group_forward_msg':return {'message_id':991,'forward_id':'local-test'}
                 if api == 'get_forward_msg':
                     return {'messages':[{'sender':{'nickname':'转发成员'},'message':[
                         {'type':'text','data':{'text':'转发测试内容'}},
@@ -193,13 +194,62 @@ async def main():
         before=len(service.learned)
         await handle_event(bot,event('普通的新聊天'))
         assert len(service.learned)==before+1, 'memory-only mode still receives unmentioned text'
+        # Remote moderation in a non-AI group must not activate chat or collect its history.
+        from src.plugins.agent_chat.slang_report import send_report,build_report
+        remote_id=service.knowledge.submit_slang('100:group:43','另群测试词',[
+            dict(key='100:group:43',message_id=str(i),text='秘密原文 另群测试词',name='私有昵称',user_id='771122') for i in range(2)])['id']
+        with db:db.execute("UPDATE knowledge_slang SET meaning='字面[CQ:at,qq=all] 解释' WHERE id=?",(remote_id,))
+        outsider_id=service.knowledge.submit_slang('101:group:43','其他账号私词',[
+            dict(key='101:group:43',message_id='900',text='其他账号私词',name='成员',user_id='8')])['id']
+        before_api=len(api_calls);before_observed=len(service.observed);before_learned=len(service.learned)
+        await handle_event(bot,event('ai 黑话 全部',uid=7,group=99))
+        assert len(api_calls)==before_api, 'ordinary members cannot export reports'
+        await handle_event(bot,event('ai 黑话 全部',uid=1,group=99))
+        api,data=api_calls[-1]
+        assert api=='send_group_forward_msg' and data['group_id']==99
+        assert len(data['messages'])>=3, 'one forwarded container has header and separate source-group nodes'
+        exported='\n'.join(str(node.data['content']) for node in data['messages'])
+        assert '来源群 42' in exported and '来源群 43' in exported
+        assert '秘密原文' not in exported and '私有昵称' not in exported and '其他账号私词' not in exported
+        assert all(node.type=='node' and node.data['user_id']=='100' and
+                   len(node.data['content'])==1 and node.data['content'][0].type=='text' for node in data['messages'])
+        await handle_event(bot,event(f'ai 黑话确认 {remote_id}',uid=7,group=99))
+        assert db.execute('SELECT status FROM knowledge_slang WHERE id=?',(remote_id,)).fetchone()[0]=='candidate'
+        await handle_event(bot,event(f'ai 黑话确认 {remote_id}',uid=1,group=99))
+        assert db.execute('SELECT status FROM knowledge_slang WHERE id=?',(remote_id,)).fetchone()[0]=='confirmed'
+        await handle_event(bot,event(f'ai 黑话确认 {outsider_id}',uid=1,group=99))
+        assert db.execute('SELECT status FROM knowledge_slang WHERE id=?',(outsider_id,)).fetchone()[0]=='candidate'
+        before_recover=len(service.recovered)
+        await handle_event(bot,event('ai 恢复',uid=1,group=99))
+        await handle_event(bot,event('ai 后台记忆 全群 开',uid=1,group=99))
+        await handle_event(bot,event('普通聊天',directed=True,uid=1,group=99))
+        assert len(service.recovered)==before_recover and len(service.observed)==before_observed and len(service.learned)==before_learned
+        assert ai.config.agent_chat_groups==frozenset({42})
+        # Check exact OneBot wire JSON for native custom forward nodes.
+        adapter.connections['101']=CaptureSocket();wire.clear()
+        await send_report(native_bot,event('ai 黑话',uid=1,group=99),build_report(service.knowledge,'100','全部'))
+        assert wire[-1]['action']=='send_group_forward_msg' and wire[-1]['params']['group_id']==99
+        assert all(node['type']=='node' and node['data']['user_id']=='101' and
+            node['data']['content'][0]['type']=='text' for node in wire[-1]['params']['messages'])
+        adapter.connections.clear()
+        # A gateway failure returns one short notice, never a multi-message plain-text flood or retry.
+        original_call=bot.call_api;failed=[]
+        async def reject_forward(api,**data):
+            if api=='send_group_forward_msg':failed.append(api);raise RuntimeError('simulated gateway failure')
+            return await original_call(api,**data)
+        bot.call_api=reject_forward
+        before=len(sent)
+        await handle_event(bot,event('ai 黑话 全部',uid=1,group=99))
+        assert len(failed)==1 and len(sent)==before+1 and '合并转发未确认' in str(sent[-1])
+        bot.call_api=original_call
+        assert service.knowledge.learning_count()==0
         service.knowledge=None;db.close()
         ai.config.agent_chat_images_enabled = False
         ai.media_resolver = None
         ai.service = None
         await handle_event(bot, event("你好", directed=True))
         assert sent, "disabled AI retains old @ reply"
-        print("PASS: real NoneBot dispatch, SuperAna arbitration, mention recovery, literal CQ, image/forward routing, reply+face segments, SUPERUSER recovery, allowlist, disabled fallback")
+        print("PASS: real NoneBot dispatch, SuperAna arbitration, mention recovery, literal CQ, image/forward routing, reply+face segments, SUPERUSER recovery, remote slang review, grouped forward wire, failure no-flood, allowlist, disabled fallback")
         os.chdir(ROOT)
 
 

@@ -312,11 +312,41 @@ class KnowledgeStore:
         return [dict(id=i, content=t, meaning=m, usage=u, example=e, risk=r, sources=json.loads(src), count=n,status=st)
                 for i,t,m,u,e,r,src,n,st in rows]
 
-    def review_slang(self, key, entry_id, action, meaning=None):
+    def slang_origins(self, bot_id, entry_id=None):
+        """Host-only report scope; retained evidence counts, never raw messages."""
+        bot_id=str(bot_id)
+        if not re.fullmatch(r'[0-9]{1,20}',bot_id):raise KnowledgeError('invalid_admin_bot')
+        rows=self.db.execute('SELECT slang_id,chat_key,COUNT(*) FROM ('
+            'SELECT slang_id,chat_key,message_id FROM knowledge_seen '
+            'UNION SELECT slang_id,chat_key,message_id FROM knowledge_evidence) '
+            'WHERE (? IS NULL OR slang_id=?) AND chat_key LIKE ? GROUP BY slang_id,chat_key',
+            (entry_id,entry_id,bot_id+':group:%')).fetchall()
+        return [(i,key,n) for i,key,n in rows if re.fullmatch(re.escape(bot_id)+r':group:[0-9]{1,20}',key)]
+
+    def slang_report_rows(self, bot_id):
+        origins={}
+        for entry_id,key,count in self.slang_origins(bot_id):
+            origins.setdefault(entry_id,[]).append((key,count))
+        rows=self.db.execute('SELECT id,term,meaning,usage,example,risk,sources,count,status,origin '
+                             'FROM knowledge_slang ORDER BY count DESC,id').fetchall()
+        result=[]
+        for i,t,m,u,e,r,src,n,st,origin in rows:
+            groups=origins.get(i,[])
+            if not groups and origin!='manual':continue
+            result.append(dict(id=i,content=t,meaning=m,usage=u,example=e,risk=r,sources=json.loads(src),
+                               count=n,status=st,groups=groups,manual=origin=='manual'))
+        return result
+
+    def review_slang(self, key, entry_id, action, meaning=None, *, admin_bot=None):
         row = self.db.execute('SELECT term,meaning,status,origin FROM knowledge_slang WHERE id=?',(entry_id,)).fetchone()
-        if not row or (row[2] != 'confirmed' and row[3] != 'manual' and not self.db.execute(
-                'SELECT 1 FROM knowledge_evidence WHERE slang_id=? AND chat_key=?',(entry_id,key)).fetchone()):
-            raise KnowledgeError('slang_not_visible_here')
+        if admin_bot is not None:
+            # Only the SUPERUSER handler supplies the actual connected bot ID.
+            origins=self.slang_origins(admin_bot,entry_id)
+            visible=bool(row and (row[3]=='manual' or origins))
+        else:
+            visible=bool(row and (row[2]=='confirmed' or row[3]=='manual' or self.db.execute(
+                'SELECT 1 FROM knowledge_evidence WHERE slang_id=? AND chat_key=?',(entry_id,key)).fetchone()))
+        if not visible:raise KnowledgeError('slang_not_visible_here')
         if action not in ('confirm','reject','delete'):
             raise KnowledgeError('invalid_slang_review')
         with self.db:
