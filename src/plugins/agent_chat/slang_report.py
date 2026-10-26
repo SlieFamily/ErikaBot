@@ -79,10 +79,9 @@ def build_report(store,bot_id,tail):
 
 
 async def send_report(bot,event,report):
-    from nonebot.adapters.onebot.v11 import Message,MessageSegment,GroupMessageEvent
-    # Literal text only: learned text cannot inject CQ nodes, mentions, images or fake senders.
-    nodes=[MessageSegment.node_custom(int(bot.self_id),'黑话审核汇总',Message(MessageSegment.text(text)))
-           for text in report.nodes]
-    if isinstance(event,GroupMessageEvent):
-        return await bot.call_api('send_group_forward_msg',group_id=event.group_id,messages=nodes)
-    return await bot.call_api('send_private_forward_msg',user_id=event.user_id,messages=nodes)
+    from nonebot.adapters.onebot.v11 import GroupMessageEvent
+    from nonebot_plugin_saa import AggregatedMessageFactory,Text,TargetQQGroup,TargetQQPrivate
+    # Same adapter path as their_ana.AnaList: real login identity and one aggregated Message.
+    # Text keeps CQ-looking strings literal; one requested page produces one forward only.
+    target=TargetQQGroup(group_id=event.group_id) if isinstance(event,GroupMessageEvent) else TargetQQPrivate(user_id=event.user_id)
+    await AggregatedMessageFactory([Text(text) for text in report.nodes]).send_to(target,bot=bot)

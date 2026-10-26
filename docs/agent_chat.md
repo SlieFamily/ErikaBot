@@ -335,7 +335,7 @@ Get-CimInstance Win32_Process |
 
 8080 是本部署的 NoneBot 端口，其他部署按实际配置替换。DSH Desktop 是独立进程，界面进程与监听本机 API 端口的子进程可能不同；其窗口关闭是否等于退出，要以端口是否还在监听为准。DSH、NoneBot、NapCat/QQ 不是同一个进程。
 
-本机 2026-10-26 部署使用后台启动并重定向输出，日志目录为用户目录下的 `Documents/Codex/2026-10-24/new-chat/work/agent-chat/slang-review-release/`：
+本机 2026-10-26 部署使用后台启动并重定向输出，日志目录为用户目录下的 `Documents/Codex/2026-10-24/new-chat/work/agent-chat/forward-fix-release/`：
 
 - `bot.stdout.log`：标准输出，包含 NoneBot 启动、插件加载和网关连接等日志。
 - `bot.stderr.log`：标准错误，可能包含警告和错误；文件为空不代表没有发生过业务问题，应同时检查标准输出和 `ai 状态`。
@@ -345,14 +345,14 @@ Get-CimInstance Win32_Process |
 查看当前日志末尾（`-Wait` 可选；在独立查看窗口按 Ctrl+C 只结束查看）：
 
 ```powershell
-$logDir = Join-Path $env:USERPROFILE 'Documents\Codex\2026-10-24\new-chat\work\agent-chat\slang-review-release'
+$logDir = Join-Path $env:USERPROFILE 'Documents\Codex\2026-10-24\new-chat\work\agent-chat\forward-fix-release'
 Get-Content -LiteralPath (Join-Path $logDir 'bot.stdout.log') -Tail 100 -Wait
 ```
 
 导出已有日志不会断开机器人连接，也不需要重启：
 
 ```powershell
-$logDir = Join-Path $env:USERPROFILE 'Documents\Codex\2026-10-24\new-chat\work\agent-chat\slang-review-release'
+$logDir = Join-Path $env:USERPROFILE 'Documents\Codex\2026-10-24\new-chat\work\agent-chat\forward-fix-release'
 $exportDir = Join-Path $env:USERPROFILE ('Desktop\ErikaBot-logs-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
 New-Item -ItemType Directory -Path $exportDir | Out-Null
 Copy-Item -LiteralPath (Join-Path $logDir 'bot.stdout.log'), (Join-Path $logDir 'bot.stderr.log') -Destination $exportDir
@@ -426,11 +426,13 @@ poetry run nb run 1>> $stdoutLog 2>> $stderrLog
 
 ### 阅读合并转发
 
-`AGENT_CHAT_FORWARDS_ENABLED=true` 时，仅在已触发 AI 回合之后展开本轮新增消息或其引用中真实的 `forward` 消息段；不会因为群里出现转发就额外调用模型，也不会依据群友贴出的文字 ID / CQ 字符串去查询记录。普通消息是否触发仍遵循 @、引用、随机接话和插件仲裁。
+`AGENT_CHAT_FORWARDS_ENABLED=true` 时，在已触发 AI 回合后展开新增消息或引用里的真实 `forward` 消息段。先发转发、稍后再 @ 说“读一下上面的聊天记录”“总结这个内容”等，也会从当前群本地最近200条消息中寻找转发引用（仍限最近10分钟），不受正文最近20条窗口限制。普通文字上下文仍沿用原先的20条增量窗口，不把200条聊天全部送给模型；无关的普通问答不重复附带旧转发。更早的记录可直接引用该转发再 @，由当前引用提供真实资源标识。
+
+QQ 消息时间允许领先本机最多120秒，与接收/引用校验保持一致，避免正常时钟偏差把刚收到的转发过滤掉。转发本身不会额外触发模型；@、引用、随机接话和插件仲裁仍决定是否响应。只读取实际消息段或引用所提供的资源，不根据文字 ID、伪造 CQ 或任意链接查询。
 
 兼容 NapCat `messages` 数组与标准 OneBot `node` 数组，读取文字、发送者名称、QQ 表情占位及图片。图片走原有受限下载与像素校验，并共用每轮图片数量上限；关闭读图时仍可读转发文字。语音、视频与文件仅标记类型，不假装理解内容。
 
-每轮最多两个外层转发、四次查询、两层深度（外层加一层嵌套）、30 个节点和 6000 字符摘录；单次查询最多 8 秒，总展开预算 20 秒。循环引用去重，超限或失败时明确标记截断/未读取，不发送原始错误或媒体签名 URL。此处限制的是模型输入与处理工作量，OneBot 网关收到完整响应的底层开销仍由网关承担。
+每轮最多两个外层转发、四次查询、两层深度（外层加一层嵌套）、30 个节点和 6000 字符摘录；网关 API 单次等待15秒、外围等待16秒，总展开预算35秒。循环引用去重，超限或失败时明确标记截断/未读取，不发送原始错误或媒体签名 URL。此处限制的是模型输入与处理工作量，OneBot 网关收到完整响应的底层开销仍由网关承担。
 
 转发来源和内容都可能伪造，只作待分析资料，不视为当前群友的新指令或已确认事实。展开内容不单独存成长期词库；进入模型的摘录会按 DSH 会话规则留存。实现按 [OneBot 11](https://github.com/botuniverse/onebot-11/blob/master/api/public.md#get_forward_msg-获取合并转发消息) 和本机 NapCat 接口校验。
 
@@ -476,7 +478,7 @@ DSH 不在线时，AI 会记录连接/协议错误并保持沉默，通常不会
 
 默认“高频”为累计学习次数至少2次，包含候选、已确认和已拒绝。`ai 黑话 候选` 只看待审高频词；`ai 黑话 候选 全部` 也包含只记录过1次的候选；`ai 黑话 全部` 还显示无来源记录的共享手工词条。这里的频率来自现有学习记录，**不是所有群消息的实时词频统计**：没有被学习器提取的发言不计入，已确认词的原有累计次数可能不再增长；每群显示的是受留存上限影响的来源记录条数。
 
-每次最多10个转发节点（1个说明节点 + 9个分组段），每段最多1800字符，不再把超出词条直接截断。超过一页会在说明节点给出下一页命令，例如 `ai 黑话 候选 全部 2`；一次只发送请求的这一页。没有符合条件的词、页码错误时只返回一条简短说明。网关失败或超时不自动重发，也不回退成大量普通消息。
+每次最多10个转发节点（1个说明节点 + 9个分组段），每段最多1800字符，不再把超出词条直接截断。超过一页会在说明节点给出下一页命令，例如 `ai 黑话 候选 全部 2`；一次只发送请求的这一页。没有符合条件的词、页码错误时只返回一条简短说明。网关失败或超时不自动重发，也不回退成大量普通消息。发送已复用 `their_ana.AnaList` 同款 SAA `AggregatedMessageFactory` / `Text` 适配：获取真实机器人昵称，构造聚合 `Message`，调用 OneBot 合并转发接口。整条发送流程上限60秒，底层各 API 仍受适配器超时限制；日志记录异常类型和返回码，不记录词库正文或凭据。
 
 同一词在多个来源群出现时，在各组分别展示但共用同一个编号和词义；确认一次后仍按现有设计供所有 AI 群使用。来源包含当前机器人已保存的历史群记录，不因某群后来移出 AI 白名单而丢失审核入口；其他机器人账号的私有候选不会出现在本账号报告或被跨账号确认。
 
@@ -575,3 +577,5 @@ poetry run python -B tests/agent_chat_live_probe.py --confirm-model-calls
 2026-10-26 即时/后台记忆更新：176 项 Python 回归测试、4 项安装器测试与实际 NoneBot 分发探针通过，验证超级用户开关、仅记忆模式收集和语录插件配合。独立 DSH 合成群聊实测通过即时原生工具入库、未 @ 消息的后台归纳和关闭后不再调用；没有向 QQ 发送测试消息或使用生产群会话。关闭中途任务、旧批次失效、失败保留、原文来源校验和原子进度提交均有离线覆盖。
 
 2026-10-26 黑话集中审核更新：184 项 Python 回归与实际 NoneBot 分发探针通过，包含非 AI 群 SUPERUSER 汇总/跨群确认、普通成员拒绝、机器人账号范围隔离、分页完整性和失败不刷屏。合并转发经过真实 Bot→Adapter→JSON 序列化测试，并核对本机 NapCat 的 send_group_forward_msg 与自定义节点字段；仅替换发送连接，没有向生产群发测试消息。真实词库只读抽查通过分组、分页及长度检查；本次无需重启或修改 DSH。
+
+2026-10-26 合并转发修复：189 项 Python 回归及真实 NoneBot 分发探针通过。此前版本直接构造节点调用接口，并只记录笼统失败，无法从旧日志还原该次网关错误码；此次统一改用语录插件同款 SAA 适配，并补充安全诊断。按用户此前授权，在818353963测试群实际发送一份两节点的合成合并转发，网关成功返回并读回全部节点；字面CQ没有成为@动作。另只读取回现有真实转发，在隔离聊天服务中确认时间偏差和“先转发、已投递、后询问”场景的摘录进入模型输入，未调用LLM或触碰生产DSH会话。生产机器人在测试期间保持在线。

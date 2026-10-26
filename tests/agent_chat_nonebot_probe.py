@@ -43,6 +43,7 @@ async def main():
         class FakeBot(Bot):
             async def call_api(self, api, **data):
                 api_calls.append((api,data))
+                if api == 'get_login_info':return {'user_id':int(self.self_id),'nickname':'古户绘梨花'}
                 if api == 'send_group_forward_msg':return {'message_id':991,'forward_id':'local-test'}
                 if api == 'get_forward_msg':
                     return {'messages':[{'sender':{'nickname':'转发成员'},'message':[
@@ -124,6 +125,13 @@ async def main():
         assert observed.forwards==('observed-forward',)
         _,notes=await service.prepare([observed.payload()],[observed.payload()])
         assert '转发测试内容' in notes and any(a=='get_forward_msg' for a,_ in api_calls)
+        # A later direct question has no new forward segment but must still resolve the earlier one.
+        followup=event('读一下上面的聊天记录',directed=True)
+        await handle_event(bot,followup)
+        later,_=service.scheduled.pop()
+        _,notes=await service.prepare([observed.payload(),later.payload()],[later.payload()])
+        assert '转发测试内容' in notes
+
         from src.plugins.agent_chat.presentation import parse
         import json
         await send(parse('QQ_REPLY '+json.dumps({'text':'哼😏','reply_to':str(observed.message_id),'faces':['捂脸']}),{str(observed.message_id)}))
@@ -137,7 +145,7 @@ async def main():
             async def send(self,raw):
                 frame=json.loads(raw);wire.append(frame)
                 asyncio.get_running_loop().call_soon(adapter._result_store.add_result,
-                    {'status':'ok','retcode':0,'data':{'message_id':999},'echo':frame['echo']})
+                    {'status':'ok','retcode':0,'data':({'user_id':101,'nickname':'古户绘梨花'} if frame['action']=='get_login_info' else {'message_id':999}),'echo':frame['echo']})
         adapter.connections['101']=CaptureSocket()
         native_bot=Bot(adapter,'101')
         for raw,expected in [
@@ -211,7 +219,7 @@ async def main():
         exported='\n'.join(str(node.data['content']) for node in data['messages'])
         assert '来源群 42' in exported and '来源群 43' in exported
         assert '秘密原文' not in exported and '私有昵称' not in exported and '其他账号私词' not in exported
-        assert all(node.type=='node' and node.data['user_id']=='100' and
+        assert all(node.type=='node' and node.data['user_id']=='100' and node.data['nickname']=='古户绘梨花' and
                    len(node.data['content'])==1 and node.data['content'][0].type=='text' for node in data['messages'])
         await handle_event(bot,event(f'ai 黑话确认 {remote_id}',uid=7,group=99))
         assert db.execute('SELECT status FROM knowledge_slang WHERE id=?',(remote_id,)).fetchone()[0]=='candidate'
@@ -229,7 +237,7 @@ async def main():
         adapter.connections['101']=CaptureSocket();wire.clear()
         await send_report(native_bot,event('ai 黑话',uid=1,group=99),build_report(service.knowledge,'100','全部'))
         assert wire[-1]['action']=='send_group_forward_msg' and wire[-1]['params']['group_id']==99
-        assert all(node['type']=='node' and node['data']['user_id']=='101' and
+        assert all(node['type']=='node' and node['data']['user_id']=='101' and node['data']['nickname']=='古户绘梨花' and
             node['data']['content'][0]['type']=='text' for node in wire[-1]['params']['messages'])
         adapter.connections.clear()
         # A gateway failure returns one short notice, never a multi-message plain-text flood or retry.

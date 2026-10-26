@@ -19,7 +19,7 @@ from .service import ChatService
 from .store import Store
 from .media import MediaResolver, allowed_url, safe_file_ref
 from .presentation import segments as output_segments
-from .forwards import ForwardResolver, forward_refs
+from .forwards import ForwardResolver, forward_refs, forward_context
 from .knowledge_bridge import install_route
 from .knowledge_admin import handle as knowledge_command
 from .slang_report import SlangReport, SLANG_COMMANDS, send_report
@@ -173,7 +173,7 @@ async def dispatch_chat(bot: Bot, event: MessageEvent, state: T_State):
 
     if media_resolver or config.agent_chat_forwards_enabled:
         async def prepare(history,pending):
-            forward_images,forward_notes=(await ForwardResolver(config).prepare(pending,bot.call_api)
+            forward_images,forward_notes=(await ForwardResolver(config).prepare(forward_context(history,pending),bot.call_api)
                                           if config.agent_chat_forwards_enabled else ([],''))
             images,notes=(await media_resolver.prepare(forward_images+history,bot.call_api)
                           if media_resolver else ([],''))
@@ -200,9 +200,10 @@ async def administer(bot: Bot, event: MessageEvent, args: Message = CommandArg()
         rendered=knowledge_command(service.knowledge,key,command,memory=getattr(service,'memory_manager',None),
                                    admin_bot=str(bot.self_id) if head in SLANG_COMMANDS else None)
         if isinstance(rendered,SlangReport):
-            try:await asyncio.wait_for(send_report(bot,event,rendered),20)
-            except Exception:
-                logger.warning('agent_chat slang report forward failed; no automatic retry or text expansion')
+            try:await asyncio.wait_for(send_report(bot,event,rendered),60)
+            except Exception as error:
+                code=getattr(error,'info',{}).get('retcode') if isinstance(getattr(error,'info',None),dict) else None
+                logger.warning('agent_chat slang report forward failed: kind={} retcode={}; no retry or text expansion',type(error).__name__,code)
                 await admin.finish('合并转发未确认发送成功；未展开成多条消息。请稍后重试 ai 黑话。')
             await admin.finish()
         if rendered is not None:
