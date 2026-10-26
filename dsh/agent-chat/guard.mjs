@@ -1,8 +1,9 @@
 // Host-side enforcement. A QQ prompt can never grant a capability.
 // ToolRegistry API reference: DeepSeek Harness; qq-bridge's guard pattern (MIT).
 import {registerKnowledge, knowledgeTools, memoryTools, slangTools} from './knowledge.mjs';
+import {offloadPreviousImages} from './image-history.mjs';
 export const name = 'erika-agent-chat-guard';
-export const inject = ['tools', 'web'];
+export const inject = ['tools', 'web', 'sessions'];
 
 export const CONTROL_PREFIX = 'QQ_BRIDGE_SEARCH_POLICY ';
 const MAX_CALLS = 2;
@@ -32,7 +33,12 @@ function controlFor(session, event) {
   } catch { return null; }
 }
 
-export function apply(ctx) {
+export function apply(ctx, config={}) {
+  if (Object.keys(config).some(k=>k!=='imageHistory') ||
+      (config.imageHistory!==undefined && config.imageHistory!=='omit-previous')) throw new Error('Invalid image history policy');
+  if (config.imageHistory && !ctx.sessions?.messageProjections?.some(p=>p.type==='image/offload')) {
+    throw new Error('agent_chat requires the host native dsh-compaction-image-offload plugin');
+  }
   if (typeof ctx.tools?.guard !== 'function' || typeof ctx.tools?.restrict !== 'function' ||
       typeof ctx.tools?.presentAs !== 'function' || typeof ctx.on !== 'function') {
     throw new Error('agent_chat requires scoped native tools and session events');
@@ -65,6 +71,19 @@ export function apply(ctx) {
       const state = turns.get(session);
       if (state) state.control = controlFor(session, event);
     }
+  });
+  if (config.imageHistory) ctx.on('agent/pre-step', async ({agent,signal},next) => {
+    // DSH admits user/message only AFTER pre-step. Validate the accepted inbox
+    // messages here; persisted turn controls are still empty at this point.
+    const decision=await next();
+    if (decision.kind==='reject' || signal?.aborted || !admitted.has(agent)) return decision;
+    const users=decision.messages.filter(m=>m.source?.kind==='user');
+    if (users.length && users.every(data=>controlFor(agent.session,{surfaceOp:'append',data}))) {
+      const nodes=agent.session.surface.nodes;
+      const boundary=nodes.length ? nodes[nodes.length-1]+1 : 0;
+      offloadPreviousImages(agent.session,boundary,CONTROL_PREFIX);
+    }
+    return decision;
   });
   ctx.tools.guard(exec => {
     if (knowledgeTools.includes(exec?.name) && admitted.has(exec.agent) && exec.parent===undefined) {

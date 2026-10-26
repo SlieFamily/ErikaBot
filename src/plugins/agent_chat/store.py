@@ -31,6 +31,10 @@ class Store:
                 chat_key TEXT PRIMARY KEY, session_id TEXT NOT NULL,
                 message_seq INTEGER NOT NULL, context_seq INTEGER NOT NULL,
                 persona_sent INTEGER NOT NULL);
+            CREATE TABLE IF NOT EXISTS image_reads (
+                chat_key TEXT NOT NULL, session_id TEXT NOT NULL, identity TEXT NOT NULL,
+                digest TEXT NOT NULL, message_id TEXT NOT NULL, summary TEXT NOT NULL, created REAL NOT NULL,
+                PRIMARY KEY(chat_key,session_id,identity));
             CREATE TABLE IF NOT EXISTS prompt_seeds (
                 chat_key TEXT PRIMARY KEY, session_id TEXT NOT NULL, version TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS social_actions (
@@ -93,6 +97,26 @@ class Store:
                                 "session_id=excluded.session_id,version=excluded.version",
                                 (key, session_id, prompt_version))
 
+    def image_records(self, key, session_id):
+        result = {}
+        for identity,digest,summary in self.db.execute(
+                "SELECT identity,digest,summary FROM image_reads WHERE chat_key=? AND session_id=? AND created>? ORDER BY created",
+                (key,session_id,time.time()-86400)):
+            result[identity]=result[digest]={'summary':summary}
+        return result
+
+    def images_completed(self, key, session_id, receipts, notes, reply):
+        # Only successful DSH turns may mark pixels as read; summaries remain untrusted.
+        with self.db:
+            for receipt in receipts[:4]:
+                summary = receipt.get('summary',notes.get(receipt['name'],reply))[:200]
+                self.db.execute('INSERT INTO image_reads VALUES(?,?,?,?,?,?,?) ON CONFLICT(chat_key,session_id,identity) '
+                    'DO UPDATE SET digest=excluded.digest,message_id=excluded.message_id,summary=excluded.summary,created=excluded.created',
+                    (key,session_id,receipt['identity'],receipt['digest'],str(receipt['message_id']),summary,time.time()))
+            self.db.execute('DELETE FROM image_reads WHERE created<?',(time.time()-86400,))
+            self.db.execute('DELETE FROM image_reads WHERE chat_key=? AND rowid NOT IN '
+                '(SELECT rowid FROM image_reads WHERE chat_key=? ORDER BY created DESC,rowid DESC LIMIT 256)',(key,key))
+
     def session(self, key):
         return self.db.execute("SELECT session_id,policy,suspended FROM sessions WHERE chat_key=?", (key,)).fetchone()
 
@@ -100,6 +124,7 @@ class Store:
         with self.db:
             self.db.execute("DELETE FROM delivery WHERE chat_key=?", (key,))
             self.db.execute("DELETE FROM prompt_seeds WHERE chat_key=?", (key,))
+            self.db.execute("DELETE FROM image_reads WHERE chat_key=?", (key,))
             self.db.execute("INSERT INTO sessions VALUES(?,?,?,0) ON CONFLICT(chat_key) DO UPDATE SET "
                             "session_id=excluded.session_id,policy=excluded.policy,suspended=0", (key, session_id, policy))
 
@@ -155,6 +180,7 @@ class Store:
         with self.db:
             self.db.execute("DELETE FROM delivery WHERE chat_key=?", (key,))
             self.db.execute("DELETE FROM prompt_seeds WHERE chat_key=?", (key,))
+            self.db.execute("DELETE FROM image_reads WHERE chat_key=?", (key,))
             self.db.execute("DELETE FROM sessions WHERE chat_key=?", (key,))
             self.db.execute("DELETE FROM messages WHERE chat_key=?", (key,))
             self.db.execute("UPDATE dispatches SET status='reset_abandoned' WHERE chat_key=? "
@@ -176,6 +202,7 @@ class Store:
                 raise ValueError('recovery_state_changed')
             self.db.execute("UPDATE sessions SET suspended=0 WHERE chat_key=?", (key,))
             self.db.execute("DELETE FROM prompt_seeds WHERE chat_key=?", (key,))
+            self.db.execute("DELETE FROM image_reads WHERE chat_key=?", (key,))
             self.db.execute("INSERT INTO delivery VALUES(?,?,?,?,0) ON CONFLICT(chat_key) DO UPDATE SET "
                             "message_seq=MAX(delivery.message_seq,excluded.message_seq),"
                             "context_seq=excluded.context_seq,persona_sent=0", (key,bound[0],boundary,context_seq))

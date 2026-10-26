@@ -106,7 +106,7 @@ class IncrementalTests(unittest.IsolatedAsyncioTestCase):
     async def test_image_lookup_still_sees_recent_context(self):
         await self.submit(core.message(mid='picture'))
         seen = []
-        async def prepare(history,pending):
+        async def prepare(history,pending,context=None):
             seen.extend(m['message_id'] for m in history)
             return [], ''
         msg = core.message(mid='ask-picture')

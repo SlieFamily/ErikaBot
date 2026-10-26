@@ -17,7 +17,7 @@ from .domain import ChatMessage
 from .dsh import BridgeError, DshClient
 from .service import ChatService
 from .store import Store
-from .media import MediaResolver, allowed_url, safe_file_ref
+from .media import PreparedMedia, MediaResolver, allowed_url, safe_file_ref
 from .interactions import qq_message
 from .forwards import ForwardResolver, forward_refs, forward_context
 from .knowledge_bridge import install_route
@@ -176,12 +176,16 @@ async def dispatch_chat(bot: Bot, event: MessageEvent, state: T_State):
         return await service.social.send(bot,message.key,text,send_message)
 
     if media_resolver or config.agent_chat_forwards_enabled:
-        async def prepare(history,pending):
-            forward_images,forward_notes=(await ForwardResolver(config).prepare(forward_context(history,pending),bot.call_api)
+        async def prepare(history,pending,context):
+            direct_ids=set(context["direct_ids"])
+            active=[m for m in pending if not direct_ids or m["message_id"] in direct_ids]
+            forward_images,forward_notes=(await ForwardResolver(config).prepare(forward_context(history,active),bot.call_api)
                                           if config.agent_chat_forwards_enabled else ([],''))
-            images,notes=(await media_resolver.prepare(forward_images+history,bot.call_api)
-                          if media_resolver else ([],''))
-            return images,'\n'.join(part for part in (forward_notes,notes) if part)
+            for m in forward_images:m['key']=context['key']
+            prepared=(await media_resolver.prepare(history,bot.call_api,pending=pending,context=context,extra=forward_images)
+                      if media_resolver else PreparedMedia([],''))
+            prepared.notes='\n'.join(part for part in (forward_notes,prepared.notes) if part)
+            return prepared
         service.schedule(message, send, prepare)
     else:
         service.schedule(message, send)

@@ -63,6 +63,8 @@ class Config(BaseModel):
     agent_chat_search_max_per_hour: int = Field(6, ge=1, le=30)
     agent_chat_images_enabled: bool = False
     agent_chat_image_count: int = Field(2, ge=1, le=4)
+    agent_chat_image_cache_ttl: int = Field(600, ge=0, le=3600)
+    agent_chat_image_cache_bytes: int = Field(32_000_000, ge=0, le=128_000_000)
     agent_chat_image_max_bytes: int = Field(8_000_000, ge=100_000, le=20_000_000)
     agent_chat_image_max_pixels: int = Field(20_000_000, ge=100_000, le=40_000_000)
     agent_chat_image_cache_roots: Tuple[Path, ...] = ()

@@ -8,7 +8,8 @@
         plugins:
           - id: agent-chat-guard
             name: erika-agent-chat-dsh/guard.mjs
-            config: {}
+            config:
+              imageHistory: omit-previous
           - id: persona
             name: '@deepseek-ai/dsh-persona'
             config:

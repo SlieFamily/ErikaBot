@@ -72,7 +72,7 @@ def validate_preset(content):
     for row, name in zip(rows[:2], expected):
         if not isinstance(row, dict) or row.get("name") != name or set(row) - {"id", "name", "config"}:
             raise BridgeError("unsafe_preset_composition")
-    if rows[0].get("config", {}) != {}:
+    if rows[0].get("config", {}) not in ({}, {"imageHistory":"omit-previous"}):
         raise BridgeError("unsafe_preset_configuration")
     compression = rows[2]
     if (not isinstance(compression, dict) or

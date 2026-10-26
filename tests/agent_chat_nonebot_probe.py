@@ -97,7 +97,8 @@ async def main():
         assert len(service.observed) == before, "non-allowed groups and bot echoes excluded"
         ai.config.agent_chat_images_enabled = True
         class FakeMedia:
-            async def prepare(self, history, call_api): return [], 'checked'
+            async def prepare(self, history, call_api, **kwargs):
+                return ai.PreparedMedia([], 'checked')
         ai.media_resolver = FakeMedia()
         picture = event('这是什么图', directed=True)
         picture.message.append(MessageSegment.image('a' * 32 + '.jpg'))
@@ -126,13 +127,13 @@ async def main():
         await handle_event(bot,forwarded)
         observed,send=service.scheduled.pop()
         assert observed.forwards==('observed-forward',)
-        _,notes=await service.prepare([observed.payload()],[observed.payload()])
+        _,notes=await service.prepare([observed.payload()],[observed.payload()],{"key":observed.key,"direct_ids":[observed.message_id],"seen":{}})
         assert '转发测试内容' in notes and any(a=='get_forward_msg' for a,_ in api_calls)
         # A later direct question has no new forward segment but must still resolve the earlier one.
         followup=event('读一下上面的聊天记录',directed=True)
         await handle_event(bot,followup)
         later,_=service.scheduled.pop()
-        _,notes=await service.prepare([observed.payload(),later.payload()],[later.payload()])
+        _,notes=await service.prepare([observed.payload(),later.payload()],[later.payload()],{"key":later.key,"direct_ids":[later.message_id],"seen":{}})
         assert '转发测试内容' in notes
 
         from src.plugins.agent_chat.presentation import parse

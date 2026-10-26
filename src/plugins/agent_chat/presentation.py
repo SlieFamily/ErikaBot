@@ -13,10 +13,11 @@ PREFIX = 'QQ_REPLY '
 
 
 class Outgoing(str):
-    def __new__(cls, text, reply_to='', faces=(), mentions=(), reaction=(), poke=''):
+    def __new__(cls, text, reply_to='', faces=(), mentions=(), reaction=(), poke='', image_notes=None):
         value = super().__new__(cls, text)
         value.reply_to, value.faces = reply_to, tuple(faces)
         value.mentions, value.reaction, value.poke = tuple(mentions), tuple(reaction), poke
+        value.image_notes = dict(image_notes or {})
         return value
 
     def __bool__(self):
@@ -58,6 +59,7 @@ PRESENTATION_RULES = (
     'faces最多两个QQ表情名；mentions最多两个QQ号字符串；reaction为{"message_id":"消息ID","emoji":"👍"}或null；'
     'poke为一个QQ号或空串。mentions/reaction/poke可省略，其余字段必填。只贴表情或戳人可无正文，实质问题仍要回答。'
     '引用/互动目标仅限最新 QQ_ALLOWED 对应列表，空列表表示禁止；faces=false禁止QQ表情，禁止@全体或转发内部ID。'
+    '附图时可加可选image_notes对象，键为本轮附件名、值为至多200字的可见内容记录；它不发送到QQ。'
     '动作由桥接校验、冷却后执行，别声称已经成功。不要代码围栏、额外字段、CQ码；[SILENT]取消全部动作。'
     'QQ表情：' + '、'.join(FACES) + '；贴表情：' + '、'.join(REACTIONS) + '。'
 )
@@ -71,7 +73,7 @@ def instructions(targets, faces=True, social=None, seed_rules=True):
             + 'QQ_ALLOWED ' + json.dumps(allowed, ensure_ascii=False, separators=(',', ':')) + '\n')
 
 
-def parse(text, targets, faces=True, social=None):
+def parse(text, targets, faces=True, social=None, images=()):
     value = strip_reasoning(text).strip()
     if 'QQ_REPLY' in text and not value.startswith(PREFIX):
         return Outgoing('')
@@ -80,10 +82,14 @@ def parse(text, targets, faces=True, social=None):
         return Outgoing('' if value.startswith('QQ_REPLY') else value)
     try:
         obj = json.loads(value[len(PREFIX):])
-        if not isinstance(obj,dict) or not {'text','reply_to','faces'} <= set(obj) or set(obj)-{'text','reply_to','faces','mentions','reaction','poke'}: raise ValueError()
+        if not isinstance(obj,dict) or not {'text','reply_to','faces'} <= set(obj) or set(obj)-{'text','reply_to','faces','mentions','reaction','poke','image_notes'}: raise ValueError()
         if not isinstance(obj['text'],str) or not isinstance(obj['reply_to'],str): raise ValueError()
         if not isinstance(obj['faces'],list) or len(obj['faces'])>2: raise ValueError()
         if any(not isinstance(f,str) for f in obj['faces']): raise ValueError()
+        image_notes=obj.get('image_notes',{})
+        names={im.get('name') for im in images}
+        if (not isinstance(image_notes,dict) or len(image_notes)>4 or
+                any(k not in names or not isinstance(v,str) or len(v)>200 for k,v in image_notes.items())):raise ValueError()
         mentions = obj.get('mentions',[])
         reaction = obj.get('reaction')
         poke = obj.get('poke','')
@@ -98,7 +104,7 @@ def parse(text, targets, faces=True, social=None):
         selected_reaction = ((reaction['message_id'],REACTIONS[reaction['emoji']])
             if reaction and reaction['message_id'] in scope['reaction'] and reaction['emoji'] in REACTIONS else ())
         return Outgoing(obj['text'],obj['reply_to'] if obj['reply_to'] in targets else '',selected_faces,
-                        selected_mentions,selected_reaction,poke if poke in scope['poke'] else '')
+                        selected_mentions,selected_reaction,poke if poke in scope['poke'] else '',image_notes)
     except (ValueError,TypeError):
         return Outgoing('')
 

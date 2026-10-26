@@ -27,7 +27,7 @@ def forward_context(history,pending):
     """Current attachments first; follow-up reading may use bounded same-chat references."""
     fresh=[m for m in pending if m.get('forwards')]
     if fresh:return fresh
-    asks=any(m.get('directed') and re.search(r'转发|聊天记录|上[面边]|前[面边]|这[个段份]|里面|内容|看|读|总结',m.get('text',''))
+    asks=any(m.get('directed') and re.search(r'转发|聊天记录|[上前这那].{0,5}记录|刚才那段|上面那段|那份记录|里面的消息',m.get('text',''))
              for m in pending)
     return [m for m in history if m.get('forwards')] if asks else []
 

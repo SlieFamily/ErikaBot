@@ -45,7 +45,7 @@ class ForwardHistoryTests(unittest.IsolatedAsyncioTestCase):
   self.service.observe(first)
   for i in range(2,40):self.service.observe(replace(message(mid=str(i),directed=False),text='无关背景'+str(i)))
   latest=replace(message(mid='40'),text='总结一下上面的聊天记录')
-  async def prepare(history,pending):
+  async def prepare(history,pending,context=None):
    self.assertIn('earlier-forward',[ref for m in history for ref in m.get('forwards',[])])
    self.assertLessEqual(len(pending),20)
    async def api(action,**params):return {'messages':[{'sender':{'nickname':'转发者'},'message':[{'type':'text','data':{'text':'转发里的重要结论'}}]}]}

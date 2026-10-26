@@ -160,7 +160,7 @@ class BatchTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_accepted_image_question_survives_history_eviction_for_media_preparation(self):
         self.store.history_limit=2;seen=[]
-        async def prepare(recent,pending):
+        async def prepare(recent,pending,context=None):
             seen.extend(m['message_id'] for m in recent if m.get('media'));return [],''
         msg=replace(core.message(mid='image-question'),media=({'url':'https://example.invalid/image'},))
         self.service.observe(msg);self.service.schedule(msg,self.send,prepare)

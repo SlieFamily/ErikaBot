@@ -9,7 +9,7 @@ const bundleName = 'erika-agent-chat-dsh';
 const source = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../dsh/agent-chat');
 export const defaultRole = path.resolve(source, '../../roles/古户绘梨花.md');
 const roleMarker = '                __AGENT_CHAT_ROLE_CARD__';
-const files = ['package.json', 'guard.mjs', 'knowledge.mjs', 'preset.patch.yml', 'learner.patch.yml'];
+const files = ['package.json', 'guard.mjs', 'image-history.mjs', 'knowledge.mjs', 'preset.patch.yml', 'learner.patch.yml'];
 const object = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 
 export function renderPreset(template, role) {

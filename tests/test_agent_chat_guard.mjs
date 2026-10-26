@@ -6,7 +6,7 @@ import {knowledgeTools} from '../dsh/agent-chat/knowledge.mjs';
 function fixture() {
   let guard, observe, created, filter, mode;
   const web = {config: {searchProvider: {get: () => 'anysearch'}}};
-  apply({web, on: (event, fn) => {if(event === 'session/event') observe = fn; else if(event === 'agent/created') created=fn; else assert.fail(event);},
+  apply({web, on: (event, fn) => {if(event === 'session/event') observe = fn; else if(event === 'agent/created') created=fn; else if(event!=='agent/pre-step') assert.fail(event);},
     tools: {register(){},guard: fn => {guard = fn;}, restrict: x => {filter = x;}, presentAs: x => {mode = x;}}});
   assert.equal(mode, 'native');
   const session = {id:'s'};
@@ -92,4 +92,27 @@ test('knowledge needs an explicit family grant, is bounded, and learner search c
   f.permit(true,{researchTerm:'芜湖起飞'});
   assert.equal(typeof f.call({arguments:{queries:['这里是整段群聊']}}),'string');
   assert.equal(f.call({arguments:{queries:['芜湖起飞 是什么梗']}}),undefined);
+});
+
+test('image omission validates accepted inbox before commit and keeps current images across tools',async()=>{
+  const events={}, written=[];
+  const ctx={sessions:{messageProjections:[{type:'image/offload'}]},web:{config:{searchProvider:{get:()=> 'anysearch'}}},
+    tools:{register(){},guard(){},restrict(){},presentAs(){}},on:(name,fn)=>{events[name]=fn;}};
+  assert.throws(()=>apply({...ctx,sessions:{messageProjections:[]}}, {imageHistory:'omit-previous'}),/native/);
+  assert.throws(()=>apply(ctx,{imageHistory:'arbitrary'}),/Invalid/);
+  apply(ctx,{imageHistory:'omit-previous'});
+  const control={version:1,sessionId:'s',rpcId:'old',enabled:false,expires:Date.now()+300000};
+  const old={seq:1,type:'user/message',surfaceOp:'append',data:{source:{kind:'user',rpcId:'old'},content:[
+    {type:'text',text:CONTROL_PREFIX+JSON.stringify(control)},{type:'image',offloaded:false}]}};
+  const session={id:'s',surface:{nodes:[1]},eventAt:()=>old,deriveEventMessage:e=>e.data,append:(...args)=>written.push(args)};
+  const agent={session,ctx:{tools:{restrict(){}}}};
+  events['agent/created']({agent});events['session/event'](session,{type:'turn/start',data:{turn:1}});
+  const step=(messages=[],kind='enter')=>events['agent/pre-step']({agent,signal:{aborted:false}},async()=>({kind,messages}));
+  await step();assert.equal(written.length,0);
+  const current={source:{kind:'user',rpcId:'current'},content:[{type:'text',text:CONTROL_PREFIX+JSON.stringify({...control,rpcId:'current'})}]};
+  await step([current],'reject');assert.equal(written.length,0);
+  await step([{...current,source:{kind:'user',rpcId:'foreign'}}]);assert.equal(written.length,0);
+  await step([current]);assert.deepEqual(written,[['image/offload',{targets:[{seq:1,imageIndexes:[0]}]}]]);
+  events['session/event'](session,{...old,seq:3,data:current});
+  await step();assert.equal(written.length,1);
 });
