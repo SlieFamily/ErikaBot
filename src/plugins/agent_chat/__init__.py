@@ -85,7 +85,7 @@ def proactive_sender(key):
         if not bot or not service or service.closed or not service.proactive_group(key):
             raise RuntimeError('proactive_target_unavailable')
         async def send_message(value):
-            await bot.send_group_msg(group_id=int(group_id), message=outgoing_message(value))
+            return await bot.send_group_msg(group_id=int(group_id), message=outgoing_message(value))
         return await service.social.send(bot,key,text,send_message)
     return send
 
@@ -172,7 +172,7 @@ async def dispatch_chat(bot: Bot, event: MessageEvent, state: T_State):
     async def send(text):
         # Native NoneBot factories and Bot APIs only; never interpret model CQ.
         async def send_message(value):
-            await bot.send(event, outgoing_message(value))
+            return await bot.send(event, outgoing_message(value))
         return await service.social.send(bot,message.key,text,send_message)
 
     if media_resolver or config.agent_chat_forwards_enabled:
@@ -232,8 +232,9 @@ async def administer(bot: Bot, event: MessageEvent, args: Message = CommandArg()
             f"\n读图：{'开启' if config.agent_chat_images_enabled else '关闭'}；随机接话：{config.agent_chat_ambient_probability:.0%}" +
             f"\n主动引用：{'开启' if config.agent_chat_reply_enabled else '关闭'}；QQ表情：{'开启' if config.agent_chat_faces_enabled else '关闭'}；合并转发：{'开启' if config.agent_chat_forwards_enabled else '关闭'}" +
             f"\n自主发言：{'开启' if config.agent_chat_proactive_enabled and service.proactive_group(key) else '关闭'}；今日尝试 {used}/{config.agent_chat_proactive_daily_limit}" +
-            f"\n安静时段：{quiet_label}；语音识别暂未启用。"+
-            (f"\n轻量记忆：{service.knowledge.status(key)['memory']} 条；共享已确认黑话：{service.knowledge.status(key)['confirmed']} 条；"
+            f"\n安静时段：{quiet_label}；随机接话夜间限制：{'开启' if config.agent_chat_ambient_quiet_enabled else '关闭'}。"+
+            "\n"+service.observer.describe(key)+
+            (f"\n轻量记忆：{service.knowledge.status(key)['memory']} 条；共享黑话：自动{service.knowledge.status(key)['learned']}条，锁定{service.knowledge.status(key)['confirmed']}条；"
              f"后台学习近一小时：{service.knowledge.learning_count()}/{config.agent_chat_learning_max_per_hour}。ai 学习帮助 查看管理命令。"
              if service.knowledge else ''))
     if command in {"恢复", "resume", "recover"}:

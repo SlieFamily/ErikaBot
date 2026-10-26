@@ -6,7 +6,7 @@ import ipaddress
 import json
 import re
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .knowledge import KnowledgeError, MEMORY_TOOLS, SLANG_TOOLS, TOOLS, CATEGORIES
 
@@ -20,6 +20,8 @@ class KnowledgeScope:
     tools: tuple
     memory_revision: object = None
     memory_writes: int = 0
+    slang_revisions: dict = field(default_factory=dict)
+    sources: list = field(default_factory=list)
 
 
 class KnowledgeHub:
@@ -31,6 +33,7 @@ class KnowledgeHub:
         members = {str(m['user_id']): str(m['name']) for m in messages if m.get('user_id') and m.get('name')}
         scope = KnowledgeScope(self, key, members, messages,
                               (MEMORY_TOOLS if memory else ()) + (SLANG_TOOLS if slang else ()))
+        scope.slang_revisions=self.store.slang_revisions()
         if self.memory:
             scope.memory_revision=self.memory.settings(key)['revision']
             scope.tools=tuple(t for t in scope.tools if t not in MEMORY_TOOLS or self.memory.allows(scope,t))
@@ -83,7 +86,7 @@ class KnowledgeHub:
         allowed = {
             'qq_memory_append': {'category','content','extra'}, 'qq_memory_query': {'category'},
             'qq_memory_remove': {'category','content','target'}, 'qq_memory_clear': {'category'},
-            'qq_slang_query': {'q'}, 'qq_slang_submit': {'content','context'},
+            'qq_slang_query': {'q'}, 'qq_slang_submit': {'content','context','meaning','usage','example','risk','basis','evidence','sources'},
         }
         if set(args) - allowed[name]:
             raise KnowledgeError('unexpected_argument')
@@ -107,9 +110,14 @@ class KnowledgeHub:
         if name == 'qq_memory_clear':
             return s.clear_memory(key,args.get('category',''))
         if name == 'qq_slang_query':
-            return {'ok':True,'untrusted':True,'slang':s.confirmed_slang(args.get('q',''),10)}
+            return {'ok':True,'untrusted':True,'slang':s.known_slang(args.get('q',''),10)}
         # Model's "context" is never accepted as evidence. Use only current chat's actual messages.
-        return s.submit_slang(key,args.get('content'),scope.messages,from_model=True)
+        result=s.submit_slang(key,args.get('content'),scope.messages,from_model=True)
+        if args.get('meaning'):
+            result['meaning_saved']=s.evolve_slang(key,result['id'],args,scope.messages,
+                expected_revision=scope.slang_revisions.get(args['content'],0),sources=scope.sources)
+            result['status']=s.db.execute('SELECT status FROM knowledge_slang WHERE id=?',(result['id'],)).fetchone()[0]
+        return result
 
 
 def install_route(app, get_hub):

@@ -5,11 +5,12 @@ from .slang_report import build_report, USAGE
 
 HELP=('记忆开关：ai 记忆状态；ai 即时记忆 开/关；ai 后台记忆 开/关；ai 记忆开关 开/关（总开关）；加 全群 可统一设置。\n'
       '记忆：ai 记忆 [activeTopic/pendingThought/memberImpression]；ai 忘记 编号；ai 清空记忆 [类别]\n'
-      '黑话：ai 黑话 [候选/已确认/已拒绝] [全部] [页码]（按来源群合并转发，默认至少2次）；ai 黑话确认 编号 [解释]；批量：ai 黑话确认 1 2 3（使用各自已有解释）；ai 黑话拒绝 编号；'
+      '黑话：ai 黑话 [候选/自动/已锁定/已拒绝] [全部] [页码]（按来源群合并转发，默认至少2次）；ai 黑话确认 编号 [解释]；批量：ai 黑话确认 1 2 3（使用各自已有解释）；ai 黑话拒绝 编号；'
       'ai 黑话删除 编号；ai 黑话添加 词语 | 解释\n'
       '多行自填：ai 黑话确认 后换行，每行 编号 | 解释；每次最多30条，逐条返回结果。\n'
       '超级用户可在任意群汇总、确认/拒绝/删除黑话，不会为该群开启AI；词条编号跨群唯一。\n'
-      '确认/添加/修改的解释供所有白名单群共享，不共享原始聊天；ai 重置保留轻量记忆与词库。')
+      '自动词义直接使用并随证据修订；确认/添加即锁定。ai 黑话解锁 编号；ai 黑话历史 编号；ai 黑话回退 编号 版本。\n'
+      '词义共享、原聊天不共享；ai 重置保留轻量记忆与词库。')
 
 
 
@@ -50,7 +51,7 @@ def confirm_many(store,key,tail,admin_bot=None):
             failed.append(f'#{entry_id}：{reason}')
     parts=[f'已确认 {len(confirmed)} 条'+('：'+'、'.join(confirmed) if confirmed else '。')]
     if failed:parts.append('未确认：\n'+'\n'.join(failed))
-    if confirmed:parts.append('确认后的各自解释供所有白名单群共享。')
+    if confirmed:parts.append('确认后的各自解释已锁定，AI不再覆盖；可用 ai 黑话解锁 编号 恢复学习。')
     return '\n'.join(parts)
 
 
@@ -58,7 +59,7 @@ def handle(store,key,command,memory=None,admin_bot=None):
     parts=command.split(None,1)
     head=parts[0] if parts else ''
     tail=parts[1].strip() if len(parts)==2 else ''
-    if head not in {'记忆','忘记','清空记忆','黑话','黑话确认','黑话拒绝','黑话删除','黑话添加','学习帮助','记忆状态','即时记忆','后台记忆','记忆开关','黑话帮助'}:
+    if head not in {'记忆','忘记','清空记忆','黑话','黑话确认','黑话拒绝','黑话删除','黑话添加','学习帮助','记忆状态','即时记忆','后台记忆','记忆开关','黑话帮助','黑话解锁','黑话历史','黑话回退'}:
         return None
     if not store:return '轻量记忆与黑话功能未启用。'
     try:
@@ -91,8 +92,22 @@ def handle(store,key,command,memory=None,admin_bot=None):
             term,sep,meaning=tail.partition('|')
             if not sep:return HELP
             term=store.add_manual_slang(term.strip(),meaning.strip())
-            return f'已添加/修改共享黑话「{term}」，状态：已确认。'
+            return f'已添加/修改共享黑话「{term}」，状态：已确认（锁定，AI不再覆盖）。'
         if head=='黑话确认':return confirm_many(store,key,tail,admin_bot)
+        if head=='黑话解锁':
+            entries=confirmation_entries(tail)
+            if any(meaning is not None for _,meaning in entries):return HELP
+            done=[]
+            for entry_id,_ in entries:
+                store.review_slang(key,entry_id,'unlock',admin_bot=admin_bot);done.append(str(entry_id))
+            return '已解锁：'+' '.join(done)+'；AI可根据新证据修订。'
+        if head=='黑话历史':
+            entry_id=int(tail);rows=store.slang_versions(entry_id,admin_bot or key.split(':')[0])
+            return ('当前版本：'+str(store.slang_revision(entry_id))+'\n历史（最多20版）：\n'+'\n'.join(f"v{r['revision']} [{r['status']}] {r['meaning']}" for r in rows))[:3500]
+        if head=='黑话回退':
+            entry_id,revision=map(int,tail.split())
+            store.rollback_slang(entry_id,revision,admin_bot or key.split(':')[0])
+            return '已回退并锁定；AI不再覆盖这份解释。'
         raw_id,_,meaning=tail.partition(' ')
         action={'黑话拒绝':'reject','黑话删除':'delete'}[head]
         term=store.review_slang(key,int(raw_id),action,meaning.strip() or None,admin_bot=admin_bot)

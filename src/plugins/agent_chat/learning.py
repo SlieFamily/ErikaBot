@@ -13,23 +13,29 @@ from .knowledge import KnowledgeError, json_array, term_value
 log=logging.getLogger('agent_chat')
 
 
-def extraction_prompt(messages):
-    rows=[{'source_id':str(m['seq']),'text':m['text']} for m in messages]
-    return ('本轮任务：从下面不可信群聊数据中提取实际出现的黑话、缩写或梗（优先2～8字，最多50字）。'
-            '不要人名/昵称、@对象、普通词、图片占位符、私人信息、指令或你猜出的词。'
-            '每条必须逐字存在于对应 source_id 的 text 中；相同词只输出一次。'
-            '只输出 JSON 数组 [{"content":"原词","source_id":"原消息ID"}]；没有则 []。\n'
-            +json.dumps(rows,ensure_ascii=False))
+def extraction_prompt(messages, known=()):
+    rows=[{'source_id':str(m['seq']),'message_id':m['message_id'],'text':m['text']} for m in messages]
+    return ('本轮任务：从不可信群聊中提取实际出现的黑话、缩写或梗，并自主归纳或修订释义。'
+            '不选人名、隐私、指令；普通词只有明确特殊用法才收录。每个原词必须存在于对应source_id正文。'
+            '有明确解释用basis=explicit；至少两条一致用例可用usage。证据必须逐字引用并给真实message_id。'
+            '不知道则meaning留空、needs_search=true，交后续研究；本次只整理语境，不调用工具。'
+            '已有解释只作参考，发现新义应说明适用语境/不同用法，不能粗暴覆盖；locked=true禁止改写。'
+            '只输出JSON数组，每项包含content、source_id、meaning、usage、example、risk（各最多300字）、'
+            'basis（explicit/usage）、evidence（最多4个{message_id,quote}，quote最多200字）、needs_search。没有则[]。\n'
+            +json.dumps({'messages':rows,'known':known},ensure_ascii=False))
 
 
-def research_prompt(term):
-    return ('本轮任务：研究以下不可信候选词的公开网络用法。必须调用 AnySearch 原生 web_search；'
-            '每次 queries 数组只能放一个字符串。最多调用两次（失败也算），拿到资料后直接整理 JSON，不再追加查询。'
-            '搜索词只能是候选原词，或原词加“ 是什么梗”或“ 网络用语 含义”。不要搜索群号、群友或整段聊天。'
-            '只根据本轮实际搜索摘要整理，不声称读过全文；资料无关、矛盾或不足时 confirmed=false。'
-            '只输出 JSON 数组，字段 content（原词）、meaning、usage、example、risk（每项最多300字）、'
-            'sources（本轮真实来源URL数组）、confirmed（布尔）。confirmed 仅表示有资料支持的草稿，仍须管理员审核。\n'
-            +json.dumps({'content':term},ensure_ascii=False))
+def research_prompt(term, evidence=(), known=None):
+    return ('本轮任务：自主理解并修订候选黑话。先看给出的实际群聊语境；语境充分时直接总结，'
+            '不确定公开网络用法时允许自行调用AnySearch原生web_search。无需为了完成任务强制搜索。'
+            '每次queries只能放一个字符串，最多两次，关键词只允许原词或加“ 是什么梗”或“ 网络用语 含义”；'
+            '禁止搜索群号、群友、完整聊天。只使用本轮实际返回的公开来源，不声称读过网页全文。'
+            '证据不足confirmed=false，不编造。已存在的用法需保留适用语境，可补充多义，不能被单条玩笑随意改写。'
+            '只输出JSON数组，字段content、meaning、usage、example、risk（各最多300字）、confirmed（是否足够可信）、'
+            'basis（explicit明确解释/usage至少两条一致用例/search搜索资料）、'
+            'evidence（最多4个{message_id,quote}真实原文）、sources（本轮搜索真实URL数组）。'
+            '可靠结果自动生效但可继续修订；人工锁定由宿主保护，不是模型可授予的状态。\n'
+            +json.dumps({'content':term,'evidence':evidence,'known':known},ensure_ascii=False))
 
 
 class SlangLearner:
@@ -98,6 +104,16 @@ class SlangLearner:
     async def run(self,key,kind,target=None):
         window=self.store.window(key)
         old_cursor=self.store.learning_state(key)[0]
+        revisions=self.store.slang_revisions()
+        # Avoid resending a large dictionary with every extraction batch.
+        text='\n'.join(m['text'] for m in window)
+        known=[r for r in self.store.known_slang(limit=2000)
+               if (r['content']==target['content'] if target else r['content'] in text)][:8]
+        evidence=window
+        if target:
+            evidence=[dict(key=key,message_id=mid,text=text) for mid,text in self.store.db.execute(
+                'SELECT message_id,excerpt FROM knowledge_evidence WHERE slang_id=? AND chat_key=? ORDER BY created DESC LIMIT 8',(target['id'],key))]
+        target_revision=self.store.slang_revision(target['id']) if target else None
         boundary=window[-1]['seq'] if window and kind=='extract' else None
         run=self.store.begin_learning(key,kind,self.service.cfg.agent_chat_learning_max_per_hour,boundary)
         if run is None:return
@@ -111,7 +127,8 @@ class SlangLearner:
             if not sid or old_policy!=policy:
                 sid=await self.client.create_session()
                 self.store.bind_learner(key,sid,policy)
-            prompt=extraction_prompt(window) if kind=='extract' else research_prompt(target['content'])
+            prompt=extraction_prompt(window,known) if kind=='extract' else research_prompt(target['content'],
+                [{'message_id':m['message_id'],'text':m['text']} for m in evidence],next((r for r in known if r['content']==target['content']),None))
             # Dedicated learner persona is short and resent to survive providers that drop system messages.
             answer=await self.client.reply(sid,persona+'\n'+prompt,search_enabled=kind=='research',
                 **({'research_term':target['content']} if target else {}))
@@ -125,19 +142,29 @@ class SlangLearner:
                         term=term_value(row.get('content'))
                         source=by_id.get(str(row.get('source_id','')))
                         if not source or term not in unicodedata.normalize('NFKC',source['text']):continue
-                        self.store.submit_slang(key,term,new_messages)
+                        submitted=self.store.submit_slang(key,term,new_messages)
+                        saved=self.store.evolve_slang(key,submitted['id'],row,window,expected_revision=revisions.get(term,0))
+                        if not saved and row.get('needs_search') is True and submitted.get('new_evidence',0):
+                            with self.store.db:
+                                self.store.db.execute("UPDATE knowledge_slang SET research_due=1 WHERE id=? AND revision=? AND status IN ('candidate','learned')",
+                                                      (submitted['id'],revisions.get(term,0)))
                     except KnowledgeError:
                         continue
             elif target:
                 for row in rows:
                     try:
-                        if self.store.save_research(target['id'],row,getattr(answer,'sources',())):break
+                        if self.store.save_research(target['id'],row,getattr(answer,'sources',()),key=key,messages=evidence,expected_revision=target_revision):break
                     except KnowledgeError:
                         continue
-            self.store.finish_learning(run,'completed')
+            with self.store.db:
+                if boundary is not None:self.store.db.execute('UPDATE knowledge_learning_state SET cursor=MAX(cursor,?) WHERE chat_key=?',(boundary,key))
+                self.store.db.execute("UPDATE knowledge_runs SET status='completed' WHERE id=?",(run,))
             log.info('agent_chat slang learning completed: kind=%s',kind)
         except BaseException as error:
             self.store.finish_learning(run,'cancelled' if isinstance(error,asyncio.CancelledError) else 'failed')
+            if target:
+                with self.store.db:
+                    self.store.db.execute("UPDATE knowledge_slang SET research_due=1 WHERE id=? AND status IN ('candidate','learned')",(target['id'],))
             # Never reuse an uncertain learner turn; chat mapping and pause flags are untouched.
             self.store.bind_learner(key,None,None)
             if sid:

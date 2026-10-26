@@ -94,7 +94,7 @@ class KnowledgeTests(unittest.TestCase):
         self.assertEqual(result['new_evidence'],20)
         self.assertEqual(self.store.submit_slang(KEY,'芜湖起飞',rows)['new_evidence'],0)
         self.assertEqual(self.store.slang_for_admin(OTHER),[])
-        self.assertEqual(self.store.confirmed_slang(),[])
+        self.assertEqual(self.store.known_slang(),[])
         with self.assertRaises(k.KnowledgeError):self.store.review_slang(OTHER,i,'confirm','解释')
         with self.assertRaises(k.KnowledgeError):self.store.submit_slang(KEY,'凭空编造',rows)
         self.store.review_slang(KEY,i,'confirm','开心或起飞的调侃')
@@ -106,7 +106,7 @@ class KnowledgeTests(unittest.TestCase):
 
     def test_research_thresholds_attempt_backoff_and_manual_confirmation(self):
         i=self.store.submit_slang(KEY,'芜湖起飞',[self.sample()])['id']
-        self.assertEqual(self.store.research_targets(KEY),[])
+        self.assertEqual(self.store.research_targets(KEY)[0]['id'],i)
         self.store.submit_slang(KEY,'芜湖起飞',[self.sample('2')])
         self.assertEqual(self.store.research_targets(KEY)[0]['id'],i)
         self.store.research_attempted(i,2)
@@ -114,9 +114,9 @@ class KnowledgeTests(unittest.TestCase):
         result={'content':'芜湖起飞','confirmed':True,'meaning':'调侃成功','sources':['https://example.com/source']}
         self.assertFalse(self.store.save_research(i,result,[]))
         self.assertTrue(self.store.save_research(i,result,result['sources']))
-        self.assertEqual(self.store.confirmed_slang(),[])
+        self.assertFalse(self.store.known_slang()[0]['locked'])
         self.store.review_slang(KEY,i,'confirm')
-        self.assertEqual(self.store.confirmed_slang()[0]['meaning'],'调侃成功')
+        self.assertEqual(self.store.known_slang()[0]['meaning'],'调侃成功')
 
     def test_model_submit_rate_limit_and_sensitive_data(self):
         for n in range(2):self.store.submit_slang(KEY,'芜湖起飞',[self.sample(str(n))],from_model=True)
@@ -205,7 +205,7 @@ class LearningTests(unittest.IsolatedAsyncioTestCase):
             m=domain.ChatMessage(KEY,str(i),'7','群友','芜湖起飞',time.time())
             self.service.learn_message(m,m.text)
 
-    async def test_extraction_is_grounded_and_research_stays_draft(self):
+    async def test_extraction_is_grounded_and_research_becomes_usable(self):
         self.feed()
         rows=self.service.knowledge.window(KEY)
         self.fake.answer=json.dumps([{'content':'芜湖起飞','source_id':str(rows[0]['seq'])},
@@ -216,8 +216,8 @@ class LearningTests(unittest.IsolatedAsyncioTestCase):
         result[0].update(confirmed=True,meaning='兴奋的调侃',sources=['https://example.com/source'])
         self.fake.answer=dsh.ReplyText(json.dumps([result[0]]),1,result[0]['sources'])
         self.assertTrue(await self.learner.tick())
-        self.assertEqual(self.service.knowledge.confirmed_slang(),[])
-        self.assertEqual(self.service.knowledge.slang_for_admin(KEY)[0]['meaning'],'兴奋的调侃')
+        self.assertFalse(self.service.knowledge.known_slang()[0]['locked'])
+        self.assertEqual(self.service.knowledge.slang_for_admin(KEY,'learned')[0]['meaning'],'兴奋的调侃')
         self.assertFalse(await self.learner.tick())
 
     async def test_learning_failure_quota_restart_and_chat_priority(self):
@@ -228,6 +228,7 @@ class LearningTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(await self.learner.tick())
         self.assertEqual(self.store.session(KEY),('chat-session','original-policy',0))
         self.assertEqual(self.service.knowledge.learning_count(),1)
+        self.assertEqual(self.service.knowledge.learning_state(KEY)[0],0)
         self.assertFalse(await self.learner.tick())
         self.assertIsNone(self.service.knowledge.learning_state(KEY)[2])
         self.assertIsNone(self.service.knowledge.begin_learning(KEY,'extract',1))

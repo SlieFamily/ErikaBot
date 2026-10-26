@@ -58,7 +58,9 @@ class SocialActions:
         body = Outgoing(str(value),value.reply_to,value.faces,mentions if str(value) or value.faces else ())
         sent = False
         if segments(body):
-            await send_message(body)
+            receipt=await send_message(body)
+            if isinstance(receipt,dict) and str(receipt.get('message_id','')).lstrip('-').isdigit():
+                value.sent_message_id=str(receipt['message_id'])
             sent = True
         # These are public OneBot extension actions sent through the installed Bot.
         # No HTTP client, packet construction, raw CQ or model-selected API names.

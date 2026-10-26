@@ -69,19 +69,19 @@ async def run(env_file,port,provider='',model=''):
             learner=core('learning').SlangLearner(service)
             # Preserve production's bounded90s learner timeout; an upstream failure must fail this probe.
             await learner.run(key,'extract')
-            candidates=service.knowledge.slang_for_admin(key)
+            candidates=service.knowledge.slang_for_admin(key)+service.knowledge.slang_for_admin(key,'learned')
             chosen=next((row for row in candidates if row['content']=='芜湖起飞'),None)
             assert chosen,'live extractor failed to ground the actual phrase'
             result['grounded_extraction']=True
             print('PASS: learner extracted a phrase present in synthetic chat',flush=True)
             await learner.run(key,'research',chosen)
-            draft=next(row for row in service.knowledge.slang_for_admin(key) if row['id']==chosen['id'])
-            assert draft['meaning'] and draft['sources'],'AnySearch research did not produce a sourced draft'
-            assert not service.knowledge.confirmed_slang(),'research bypassed administrator review'
+            draft=next(row for row in service.knowledge.slang_for_admin(key,'learned') if row['id']==chosen['id'])
+            assert draft['meaning'],'research did not produce a grounded definition'
+            assert service.knowledge.known_slang(),'automatic definition not available'
             service.knowledge.review_slang(key,draft['id'],'confirm')
-            assert service.knowledge.confirmed_slang()[0]['meaning']==draft['meaning']
+            assert service.knowledge.known_slang()[0]['meaning']==draft['meaning']
             result.update(anysearch_draft=True,manual_confirmation=True,qq_sends=0)
-            print('PASS: AnySearch draft required manual confirmation; no QQ sends',flush=True)
+            print('PASS: Autonomous definition usable before human locking; no QQ sends',flush=True)
             print(json.dumps(result),flush=True)
         finally:
             for sid in sessions:

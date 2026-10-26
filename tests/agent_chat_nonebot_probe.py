@@ -188,6 +188,15 @@ async def main():
         await handle_event(bot,event(command,uid=1))
         assert db.execute("SELECT COUNT(*) FROM knowledge_slang WHERE status='confirmed'").fetchone()[0]==2
         assert '已确认 2 条' in str(sent[-1])
+        await handle_event(bot,event(f'ai 黑话解锁 {ids[0]}',uid=7,group=99))
+        assert service.knowledge.known_slang()[0]['locked']
+        await handle_event(bot,event(f'ai 黑话解锁 {ids[0]}',uid=1,group=99))
+        assert not next(r for r in service.knowledge.known_slang() if r['id']==ids[0])['locked']
+        await handle_event(bot,event(f'ai 黑话历史 {ids[0]}',uid=1,group=99))
+        assert '历史' in str(sent[-1])
+        await handle_event(bot,event(f'ai 黑话回退 {ids[0]} 1',uid=1,group=99))
+        assert next(r for r in service.knowledge.known_slang() if r['id']==ids[0])['locked']
+
         from src.plugins.agent_chat.memory import MemoryManager
         ai.config.agent_chat_memory_enabled=True
         ai.config.agent_chat_memory_background_enabled=True
@@ -266,8 +275,9 @@ async def main():
             'mentions':['7'],'reaction':{'message_id':str(observed.message_id),'emoji':'👍'},'poke':'7'}),set(),True,scope)
         adapter.connections['101']=CaptureSocket();wire.clear()
         async def normal_send(value):
-            await native_bot.send_group_msg(group_id=42,message=ai.outgoing_message(value))
+            return await native_bot.send_group_msg(group_id=42,message=ai.outgoing_message(value))
         assert await service.social.send(native_bot,native_record.key,plan,normal_send)
+        assert plan.sent_message_id=='999', 'native receipt must reach observation anchors'
         assert [f['action'] for f in wire]==['send_group_msg','set_msg_emoji_like','group_poke']
         assert wire[0]['params']['message'][0]=={'type':'at','data':{'qq':'7'}}
         assert wire[1]['params']=={'message_id':int(observed.message_id),'emoji_id':'128077','set':True,'_timeout':5}

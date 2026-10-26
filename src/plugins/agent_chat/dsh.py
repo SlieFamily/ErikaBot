@@ -569,6 +569,7 @@ class DshClient:
                 value = self.frame(raw, stream)
                 if value and value.get("type") == "event":
                     reply = collector.push(value.get("event", {}))
+                    if knowledge is not None:knowledge.sources=list(collector.sources)
                     if reply is not None:
                         return reply
             raise BridgeError("dsh_stream_ended")

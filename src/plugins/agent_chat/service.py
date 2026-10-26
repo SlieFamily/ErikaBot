@@ -14,6 +14,8 @@ from .search import SEARCH_RULES, instructions, final_answer
 from . import presentation
 from .interactions import SocialActions
 from .knowledge import KnowledgeStore
+from .slang_evolution import SLANG_RULES
+from .observation import ReplyObserver
 from .knowledge_bridge import KnowledgeHub
 from .memory import MEMORY_RULES, MemoryManager, requested_memory, memory_instructions, honest_memory_answer
 
@@ -39,6 +41,7 @@ class ChatService:
     def __init__(self, config, store, client):
         self.cfg, self.store, self.client = config, store, client
         self.social = SocialActions(config,store)
+        self.observer = ReplyObserver(config,store)
         self.tasks, self.pending = {}, {}
         self.recovering = set()
         self.slots = asyncio.Semaphore(config.agent_chat_max_concurrent)
@@ -169,6 +172,10 @@ class ChatService:
     def schedule(self, message, send, prepare=None):
         if self.closed:
             return False
+        if not message.directed:
+            generation=self.observer.offer(message)
+            if generation is not None:
+                return self._enqueue(Request(message,send,prepare,'followup',generation=generation))
         if not message.directed and (self.ambient_quiet() or random.random() >= self.cfg.agent_chat_ambient_probability):
             return False
         return self._enqueue(Request(message, send, prepare, 'direct' if message.directed else 'ambient'))
@@ -254,6 +261,7 @@ class ChatService:
         message, send = request.message, request.send
         key, sid = message.key, None
         proactive = request.kind == 'proactive'
+        if request.kind=='followup' and not self.observer.claim(message,request.generation):return
         if proactive:
             row = self.store.activity(key)
             if not self.due(row, time.time()) or row[3] != request.generation:
@@ -276,7 +284,7 @@ class ChatService:
         social_scope = None
         can_search = (self.cfg.agent_chat_search_enabled and
             (request.kind == 'direct' or
-             request.kind == 'ambient' and self.cfg.agent_chat_search_ambient or
+             request.kind in ('ambient','followup') and self.cfg.agent_chat_search_ambient or
              proactive and self.cfg.agent_chat_search_proactive) and
             self.store.search_count(key) < self.cfg.agent_chat_search_max_per_hour)
         def search_started():
@@ -324,11 +332,13 @@ class ChatService:
                 forward = self.cfg.agent_chat_forward_persona
                 seed = forward and (refresh or not delivered or not delivered[2])
                 protocol = hashlib.sha256((CHAT_RULES + presentation.PRESENTATION_RULES +
-                                           SEARCH_RULES + MEMORY_RULES).encode()).hexdigest()
+                                           SEARCH_RULES + MEMORY_RULES + SLANG_RULES).encode()).hexdigest()
                 seed_rules = refresh or not delivered or self.store.prompt_seed(key, session_id) != protocol
                 text = prompt_text(history, str(uuid.uuid4()), proactive=proactive, ambient=request.kind == "ambient",
                                    persona=persona if seed else "", remind_persona=forward and not seed,
                                    direct_ids=[m['message_id'] for m in direct], seed_rules=seed_rules)
+                if request.kind=='followup':
+                    text+='\n发送后观察：有群友在你发言后继续说话。只在延续刚才话题、回应你或需要澄清时自然续聊；无关、结束或无须参与就输出[SILENT]结束观察。不催人回复，不重复旧答案。\n'
                 text += instructions(can_search, self.local_time().date().isoformat(), seed_rules=seed_rules)
                 targets = (presentation.reply_targets(self.store.recent(key,self.cfg.agent_chat_context_messages)+direct,key)
                            if self.cfg.agent_chat_reply_enabled and not proactive else set())
@@ -345,6 +355,7 @@ class ChatService:
                     memory=modes['enabled']
                     slang=self.cfg.agent_chat_slang_enabled and ':group:' in key
                     text+=memory_instructions(memory,modes['immediate'],requested_memory(direct),seed_rules=seed_rules)
+                    if slang and seed_rules:text+='\n'+SLANG_RULES+'\n'
                     text+='黑话工具'+('可用' if slang else '关闭')+'。\n'
                     memory_requested=bool(requested_memory(direct))
                     scope=self.knowledge_hub.scope(key,self.knowledge.window(key),memory,slang)
@@ -401,6 +412,7 @@ class ChatService:
                          getattr(answer, 'searches', 0), len(sources))
             plan = presentation.parse(answer,targets,self.cfg.agent_chat_faces_enabled,social_scope,input_images)
             intentional_silence = strip_reasoning(plan).strip() == '[SILENT]'
+            if request.kind=='followup' and intentional_silence:self.observer.close(key)
             visible = final_answer(plan, sources, searched, self.cfg.agent_chat_max_reply_chars)
             if media_receipts:
                 image_notes={k:strip_reasoning(v).strip()[:200] for k,v in plan.image_notes.items()}
@@ -410,6 +422,7 @@ class ChatService:
             # A rejected tool/protocol body cannot escape filtering via a face.
             faces = plan.faces if not intentional_silence and (visible or not str(plan).strip()) else ()
             publish = not intentional_silence and (bool(visible) or not str(plan).strip())
+            natural_reply = publish and bool(visible or faces)
             answer = presentation.Outgoing(visible,plan.reply_to if visible or faces else '',faces,
                 plan.mentions if publish and (visible or faces) else (),
                 plan.reaction if publish else (),plan.poke if publish else '')
@@ -437,7 +450,10 @@ class ChatService:
                 self.store.finish(dispatch, "sent" if delivered_output else "silent")
                 sending = False
                 self.store.search_stage(dispatch, 'sent' if delivered_output else 'silent')
-                if delivered_output: self.store.mark_output(key)
+                if delivered_output:
+                    self.store.mark_output(key)
+                    if natural_reply:
+                        self.observer.opened(key,sid,[r.message for r in [request]+request.batched],answer,request.kind)
             log.info('agent_chat turn completed: kind=%s batch=%d queued_ms=%d model_ms=%d elapsed_ms=%d sent=%s',
                      request.kind,1+len(request.batched),round((started-request.enqueued_at)*1000),
                      model_ms,round((time.monotonic()-started)*1000),delivered_output)
@@ -498,6 +514,7 @@ class ChatService:
             return False
 
     async def reset(self, key):
+        self.observer.close(key)
         if key in self.recovering:
             raise BridgeError('recovery_in_progress')
         task = self.tasks.get(key)
@@ -511,6 +528,7 @@ class ChatService:
         self.store.reset(key)
 
     async def recover(self, key):
+        self.observer.close(key)
         if key in self.recovering or key in self.tasks:
             raise BridgeError('recovery_busy')
         bound = self.store.session(key)
@@ -543,6 +561,7 @@ class ChatService:
             self.recovering.discard(key)
 
     async def close(self):
+        self.observer.clear()
         self.closed = True
         if self.learner:
             await self.learner.close()
