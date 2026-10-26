@@ -21,9 +21,9 @@ class IncrementalTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('ADMIN_ROLE_CANARY', self.payloads(0))
         self.assertNotIn('ADMIN_ROLE_CANARY', self.payloads(1))
         self.assertIn('完整角色设定', self.payloads(1))
-        self.assertNotIn('"message_id": "one"', self.payloads(1))
+        self.assertNotIn('"message_id":"one"', self.payloads(1))
         for mid in ('passive', 'two'):
-            self.assertIn('"message_id": "' + mid + '"', self.payloads(1))
+            self.assertIn('"message_id":"' + mid + '"', self.payloads(1))
 
     async def test_restart_retains_delivery_marker(self):
         await self.submit(core.message(mid='one'))
@@ -35,7 +35,7 @@ class IncrementalTests(unittest.IsolatedAsyncioTestCase):
         await self.submit(core.message(mid='two'))
         self.assertEqual(len(self.client.created), 1)
         self.assertNotIn('ADMIN_ROLE_CANARY', self.payloads(1))
-        self.assertNotIn('"message_id": "one"', self.payloads(1))
+        self.assertNotIn('"message_id":"one"', self.payloads(1))
 
     async def test_compaction_refreshes_role_but_not_already_seen_chat(self):
         await self.submit(core.message(mid='one'))
@@ -43,7 +43,7 @@ class IncrementalTests(unittest.IsolatedAsyncioTestCase):
         self.client.context_state = compacted
         await self.submit(core.message(mid='two'))
         self.assertIn('ADMIN_ROLE_CANARY', self.payloads(1))
-        self.assertNotIn('"message_id": "one"', self.payloads(1))
+        self.assertNotIn('"message_id":"one"', self.payloads(1))
 
     async def test_missing_session_rebuilds_full_prompt_and_context(self):
         await self.submit(core.message(mid='one'))
@@ -55,8 +55,8 @@ class IncrementalTests(unittest.IsolatedAsyncioTestCase):
         await self.submit(core.message(mid='two'))
         self.assertEqual(len(self.client.created), 2)
         self.assertIn('ADMIN_ROLE_CANARY', self.payloads(1))
-        self.assertIn('"message_id": "one"', self.payloads(1))
-        self.assertIn('"message_id": "two"', self.payloads(1))
+        self.assertIn('"message_id":"one"', self.payloads(1))
+        self.assertIn('"message_id":"two"', self.payloads(1))
 
     async def test_failed_turn_does_not_advance_delivery(self):
         await self.submit(core.message(mid='one'))
@@ -77,8 +77,8 @@ class IncrementalTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(self.sent), 1)  # Direct silence produces a clarification.
         self.client.reply = original
         await self.submit(core.message(mid='two'))
-        self.assertNotIn('"message_id": "one"', self.payloads(1))
-        self.assertIn('"message_id": "arrived-later"', self.payloads(1))
+        self.assertNotIn('"message_id":"one"', self.payloads(1))
+        self.assertIn('"message_id":"arrived-later"', self.payloads(1))
         self.assertNotIn('ADMIN_ROLE_CANARY', self.payloads(1))
 
     async def test_legacy_session_bootstraps_without_rotating_or_resetting(self):
@@ -89,7 +89,7 @@ class IncrementalTests(unittest.IsolatedAsyncioTestCase):
         await self.submit(core.message(mid='two'))
         self.assertEqual(len(self.client.created), 1)
         self.assertIn('ADMIN_ROLE_CANARY', self.payloads(1))
-        self.assertIn('"message_id": "one"', self.payloads(1))
+        self.assertIn('"message_id":"one"', self.payloads(1))
 
     async def test_reset_and_forward_toggle_require_new_seed(self):
         self.service.cfg.agent_chat_forward_persona = False
@@ -101,7 +101,7 @@ class IncrementalTests(unittest.IsolatedAsyncioTestCase):
         await self.service.reset(core.message().key)
         await self.submit(core.message(mid='three'))
         self.assertIn('ADMIN_ROLE_CANARY', self.payloads(2))
-        self.assertNotIn('"message_id": "one"', self.payloads(2))
+        self.assertNotIn('"message_id":"one"', self.payloads(2))
 
     async def test_image_lookup_still_sees_recent_context(self):
         await self.submit(core.message(mid='picture'))
@@ -113,4 +113,4 @@ class IncrementalTests(unittest.IsolatedAsyncioTestCase):
         self.service.observe(msg); self.service.schedule(msg, self.send, prepare)
         await asyncio.gather(*list(self.service.tasks.values()))
         self.assertEqual(seen, ['picture', 'ask-picture'])
-        self.assertNotIn('"message_id": "picture"', self.payloads(1))
+        self.assertNotIn('"message_id":"picture"', self.payloads(1))

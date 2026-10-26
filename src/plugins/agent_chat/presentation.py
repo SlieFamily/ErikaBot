@@ -51,24 +51,24 @@ def social_targets(messages, key, config, proactive=False, now=None):
     return scope
 
 
-def instructions(targets, faces=True, social=None):
+PRESENTATION_RULES = (
+    '表达：普通发言直接写正文，可自然用少量 Unicode emoji。可自主选择引用、QQ表情、@、贴表情或戳一戳，'
+    '友好克制，不催回复、不骚扰，也不必每句都做。需要动作时输出 QQ_REPLY 加 JSON：'
+    '{"text":"最终发言","reply_to":"消息ID或空串","faces":[],"mentions":[],"reaction":null,"poke":""}。'
+    'faces最多两个QQ表情名；mentions最多两个QQ号字符串；reaction为{"message_id":"消息ID","emoji":"👍"}或null；'
+    'poke为一个QQ号或空串。mentions/reaction/poke可省略，其余字段必填。只贴表情或戳人可无正文，实质问题仍要回答。'
+    '引用/互动目标仅限最新 QQ_ALLOWED 对应列表，空列表表示禁止；faces=false禁止QQ表情，禁止@全体或转发内部ID。'
+    '动作由桥接校验、冷却后执行，别声称已经成功。不要代码围栏、额外字段、CQ码；[SILENT]取消全部动作。'
+    'QQ表情：' + '、'.join(FACES) + '；贴表情：' + '、'.join(REACTIONS) + '。'
+)
+
+
+def instructions(targets, faces=True, social=None, seed_rules=True):
     scope = social or {'mentions':set(), 'reaction':set(), 'poke':set()}
-    return ('\n管理员允许的 QQ 表达方式：普通发言直接写正文，可自然使用 Unicode emoji，少量即可。'
-        '你可自行选择引用、QQ表情、@某个群友、给对方消息贴一个表情回应、轻轻戳一下。'
-        '按聊天氛围选择，不必等别人要求，不要每句都做；自然有趣、友好，不用互动动作骚扰或催回复。'
-        '仅在需要这些动作时，输出 QQ_REPLY 后跟一个 JSON 对象：'
-        '{"text":"最终发言","reply_to":"消息ID或空字符串","faces":[],"mentions":[],"reaction":null,"poke":""}。'
-        'text 可含emoji；faces最多两个；mentions最多两个本轮允许的QQ号字符串，用于明确接谁的话。'
-        'reaction 可为 {"message_id":"本轮消息ID","emoji":"👍"}，是贴到那条消息上的回应，区别于正文表情；'
-        'poke填一个允许的QQ号或空字符串。无需动作的字段留空；新增的mentions/reaction/poke字段也可省略。'
-        '只贴表情或戳人时text可为空；对实质提问仍应回答，别只戳一下敷衍。'
-        '不得编造已执行成功的动作；实际发送由桥接校验，冷却或接口失败时可能跳过。'
-        '不要代码围栏、额外字段或CQ码。完全不回应时只输出 [SILENT]，它会取消所有动作。'
-        '本轮可引用ID：'+json.dumps(sorted(targets))+'；禁止其他ID、转发内部节点或其他群消息。'
-        '可选QQ表情：'+('、'.join(FACES) if faces else '无，faces必须为空')+'。'
-        '可贴表情：'+'、'.join(REACTIONS)+'；可贴的消息ID：'+json.dumps(sorted(scope['reaction']))+'。'
-        '可@的QQ号：'+json.dumps(sorted(scope['mentions']))+'；可戳的QQ号：'+json.dumps(sorted(scope['poke']))+'。'
-        '空列表表示本轮不允许；禁止@全体。戳人和贴表情都有本地冷却，不能连续操作或重复回应同一条消息。\n')
+    allowed = {'reply_to': sorted(targets), 'faces': bool(faces),
+               **{k: sorted(scope[k]) for k in ('mentions', 'reaction', 'poke')}}
+    return ('\n' + (PRESENTATION_RULES + '\n' if seed_rules else '')
+            + 'QQ_ALLOWED ' + json.dumps(allowed, ensure_ascii=False, separators=(',', ':')) + '\n')
 
 
 def parse(text, targets, faces=True, social=None):

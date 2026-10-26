@@ -37,6 +37,14 @@
             config:
               - id: compaction-basic
                 name: '@deepseek-ai/dsh-compaction-basic'
+                config:
+                  thresholdRatio: 0.25
+                  headroomTokens: 8192
+                  retainTokens: 8192
+                  maxTokens: 4096
+                  compactionRetries: 0
+              - id: command-compact
+                name: '@deepseek-ai/dsh-command-compact'
           - id: agent-chat-web
             name: '@deepseek-ai/dsh-tool-web'
             config:

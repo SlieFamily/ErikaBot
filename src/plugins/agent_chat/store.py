@@ -31,6 +31,8 @@ class Store:
                 chat_key TEXT PRIMARY KEY, session_id TEXT NOT NULL,
                 message_seq INTEGER NOT NULL, context_seq INTEGER NOT NULL,
                 persona_sent INTEGER NOT NULL);
+            CREATE TABLE IF NOT EXISTS prompt_seeds (
+                chat_key TEXT PRIMARY KEY, session_id TEXT NOT NULL, version TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS social_actions (
                 chat_key TEXT NOT NULL, kind TEXT NOT NULL, target TEXT NOT NULL, created REAL NOT NULL,
                 PRIMARY KEY(chat_key,kind,target));
@@ -74,13 +76,22 @@ class Store:
         return self.db.execute("SELECT message_seq,context_seq,persona_sent FROM delivery "
                                "WHERE chat_key=? AND session_id=?", (key, session_id)).fetchone()
 
-    def delivered(self, key, session_id, message_seq, context_seq, persona_sent):
+    def prompt_seed(self, key, session_id):
+        row = self.db.execute("SELECT version FROM prompt_seeds WHERE chat_key=? AND session_id=?",
+                              (key, session_id)).fetchone()
+        return row[0] if row else None
+
+    def delivered(self, key, session_id, message_seq, context_seq, persona_sent, prompt_version=""):
         # Only called after DSH confirms a completed turn, including deliberate silence.
         with self.db:
             self.db.execute("INSERT INTO delivery VALUES(?,?,?,?,?) ON CONFLICT(chat_key) DO UPDATE SET "
                             "session_id=excluded.session_id,message_seq=excluded.message_seq,"
                             "context_seq=excluded.context_seq,persona_sent=excluded.persona_sent",
                             (key, session_id, message_seq, context_seq, int(persona_sent)))
+            if prompt_version:
+                self.db.execute("INSERT INTO prompt_seeds VALUES(?,?,?) ON CONFLICT(chat_key) DO UPDATE SET "
+                                "session_id=excluded.session_id,version=excluded.version",
+                                (key, session_id, prompt_version))
 
     def session(self, key):
         return self.db.execute("SELECT session_id,policy,suspended FROM sessions WHERE chat_key=?", (key,)).fetchone()
@@ -88,6 +99,7 @@ class Store:
     def bind(self, key, session_id, policy):
         with self.db:
             self.db.execute("DELETE FROM delivery WHERE chat_key=?", (key,))
+            self.db.execute("DELETE FROM prompt_seeds WHERE chat_key=?", (key,))
             self.db.execute("INSERT INTO sessions VALUES(?,?,?,0) ON CONFLICT(chat_key) DO UPDATE SET "
                             "session_id=excluded.session_id,policy=excluded.policy,suspended=0", (key, session_id, policy))
 
@@ -142,6 +154,7 @@ class Store:
     def reset(self, key):
         with self.db:
             self.db.execute("DELETE FROM delivery WHERE chat_key=?", (key,))
+            self.db.execute("DELETE FROM prompt_seeds WHERE chat_key=?", (key,))
             self.db.execute("DELETE FROM sessions WHERE chat_key=?", (key,))
             self.db.execute("DELETE FROM messages WHERE chat_key=?", (key,))
             self.db.execute("UPDATE dispatches SET status='reset_abandoned' WHERE chat_key=? "
@@ -162,6 +175,7 @@ class Store:
             if self.session(key) != bound or self.recovery_boundary(key) is None:
                 raise ValueError('recovery_state_changed')
             self.db.execute("UPDATE sessions SET suspended=0 WHERE chat_key=?", (key,))
+            self.db.execute("DELETE FROM prompt_seeds WHERE chat_key=?", (key,))
             self.db.execute("INSERT INTO delivery VALUES(?,?,?,?,0) ON CONFLICT(chat_key) DO UPDATE SET "
                             "message_seq=MAX(delivery.message_seq,excluded.message_seq),"
                             "context_seq=excluded.context_seq,persona_sent=0", (key,bound[0],boundary,context_seq))

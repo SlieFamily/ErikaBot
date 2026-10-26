@@ -48,7 +48,7 @@ class ProactiveTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(self.service.schedule_proactive(self.key, self.send))
         await self.drain()
         self.assertEqual(len(self.sent), 1)
-        self.assertIn('自主发言机会', self.client.prompts[0][1])
+        self.assertIn('自主发言：', self.client.prompts[0][1])
         self.assertFalse(self.service.schedule_proactive(self.key, self.send))
         path = self.store.db.execute('PRAGMA database_list').fetchone()[2]
         self.store.close(); self.store = core.Store(path); self.service.store = self.store

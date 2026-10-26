@@ -131,7 +131,7 @@ class InteractionServiceTests(unittest.IsolatedAsyncioTestCase):
   self.client.answer=envelope(mentions=['7'],reaction={'message_id':'1','emoji':'👍'},poke='7')
   await self.submit(message())
   self.assertEqual(self.sent[0].mentions,('7',));self.assertEqual(self.sent[0].reaction,('1','128077'));self.assertEqual(self.sent[0].poke,'7')
-  self.assertEqual(len(self.client.prompts),1);self.assertIn('可@的QQ号：["7"]',self.client.prompts[0][1])
+  self.assertEqual(len(self.client.prompts),1);self.assertIn('"mentions":["7"]',self.client.prompts[0][1])
  async def test_reaction_only_is_not_replaced_with_empty_answer_warning(self):
   self.client.answer='QQ_REPLY '+json.dumps(dict(text='',reply_to='',faces=[],reaction={'message_id':'1','emoji':'👍'}))
   await self.submit(message());self.assertEqual(str(self.sent[0]),'');self.assertEqual(self.sent[0].reaction,('1','128077'))

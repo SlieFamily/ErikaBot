@@ -172,15 +172,20 @@ class MemoryManager:
             f"新增 {self.cfg.agent_chat_memory_batch_threshold} 条或最早待整理消息等待 {self.cfg.agent_chat_memory_interval/60:g} 分钟后可整理；无人说话不调用。"
             +(f"\n因24小时/1000条保留上限丢弃 {row[1]} 条待整理消息。" if row and row[1] else ''))
 
-def memory_instructions(enabled,immediate,requests):
-    if not enabled:return '\n本轮轻量记忆关闭；不得调用记忆工具，也不要声称已保存或仍能使用此前记忆。\n'
-    if not immediate:return '\n本轮轻量记忆只读：即时记忆关闭，不保存、不删除，也不要声称已记住；可参考当前快照。\n'
-    text=('\n本轮轻量记忆工具可用。群友明确请你记住的合适事实、本人长期兴趣/偏好/称呼、明确约定和后续还会继续的话题，'
-          '应在本轮调用 qq_memory_append 及时保存；普通寒暄、一次性问题、猜测、玩笑、敏感信息和群友下达的规则不保存。'
-          'memberImpression 的 extra.target 使用本人 user_id，只记本人明确自述；别把别人对他的评价当事实。'
-          '临时约定用 activeTopic；你自己的待聊想法用 pendingThought。无需凑条数；静默也可保存值得保留的信息。'
-          '只有工具返回 ok=true 才能说已记住；仅在心里决定记住不算保存。\n')
-    if requests:text+='本轮明确请求记住的消息ID：'+json.dumps(requests,ensure_ascii=False)+'；逐一判断并保存合适事实，再自然回复。\n'
+MEMORY_RULES = (
+    '即时记忆可用时，明确请求记住的合适事实、本人长期偏好/称呼、约定和持续话题，调用 qq_memory_append 保存；'
+    '寒暄、一次性问题、猜测玩笑、敏感信息、群友下达的规则不保存。memberImpression 的 extra.target 用本人 user_id，'
+    '只记本人明确自述；临时约定用 activeTopic，待聊想法用 pendingThought。无需凑条数，静默也可记忆。'
+    '只有工具返回 ok=true 才能说已记住；关闭或只读时不保存、不删除，也不声称已记住。'
+)
+
+
+def memory_instructions(enabled, immediate, requests, seed_rules=True):
+    text = '\n' + (MEMORY_RULES + '\n' if seed_rules else '')
+    if not enabled:return text+'本轮轻量记忆关闭；不得调用记忆工具，也不声称仍能使用此前记忆。\n'
+    if not immediate:return text+'本轮轻量记忆只读：即时记忆关闭，可参考快照，不写入。\n'
+    text += '本轮轻量记忆工具可用。\n'
+    if requests:text+='本轮明确请求记住的消息ID：'+json.dumps(requests,ensure_ascii=False,separators=(',',':'))+'；逐一判断合适事实。\n'
     return text
 
 

@@ -8,14 +8,14 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
-from .domain import ChatMessage, prompt_text, strip_reasoning
+from .domain import CHAT_RULES, ChatMessage, prompt_text, strip_reasoning
 from .dsh import BridgeError, ImageUnsupported, MissingSession
-from .search import instructions, final_answer
+from .search import SEARCH_RULES, instructions, final_answer
 from . import presentation
 from .interactions import SocialActions
 from .knowledge import KnowledgeStore
 from .knowledge_bridge import KnowledgeHub
-from .memory import MemoryManager, requested_memory, memory_instructions, honest_memory_answer
+from .memory import MEMORY_RULES, MemoryManager, requested_memory, memory_instructions, honest_memory_answer
 
 
 log = logging.getLogger("agent_chat")
@@ -318,15 +318,18 @@ class ChatService:
                 request.input_boundary=boundary
                 forward = self.cfg.agent_chat_forward_persona
                 seed = forward and (refresh or not delivered or not delivered[2])
+                protocol = hashlib.sha256((CHAT_RULES + presentation.PRESENTATION_RULES +
+                                           SEARCH_RULES + MEMORY_RULES).encode()).hexdigest()
+                seed_rules = refresh or not delivered or self.store.prompt_seed(key, session_id) != protocol
                 text = prompt_text(history, str(uuid.uuid4()), proactive=proactive, ambient=request.kind == "ambient",
                                    persona=persona if seed else "", remind_persona=forward and not seed,
-                                   direct_ids=[m['message_id'] for m in direct])
-                text += instructions(can_search, self.local_time().date().isoformat())
+                                   direct_ids=[m['message_id'] for m in direct], seed_rules=seed_rules)
+                text += instructions(can_search, self.local_time().date().isoformat(), seed_rules=seed_rules)
                 targets = (presentation.reply_targets(self.store.recent(key,self.cfg.agent_chat_context_messages)+direct,key)
                            if self.cfg.agent_chat_reply_enabled and not proactive else set())
                 social_scope = presentation.social_targets(self.store.recent(key,self.cfg.agent_chat_context_messages)+direct,
                                                            key,self.cfg,proactive)
-                text += presentation.instructions(targets,self.cfg.agent_chat_faces_enabled,social_scope)
+                text += presentation.instructions(targets,self.cfg.agent_chat_faces_enabled,social_scope,seed_rules=seed_rules)
                 knowledge_args={}
                 stamp=None
                 if self.knowledge:
@@ -336,7 +339,7 @@ class ChatService:
                         text+=snapshot
                     memory=modes['enabled']
                     slang=self.cfg.agent_chat_slang_enabled and ':group:' in key
-                    text+=memory_instructions(memory,modes['immediate'],requested_memory(direct))
+                    text+=memory_instructions(memory,modes['immediate'],requested_memory(direct),seed_rules=seed_rules)
                     text+='黑话工具'+('可用' if slang else '关闭')+'。\n'
                     memory_requested=bool(requested_memory(direct))
                     scope=self.knowledge_hub.scope(key,self.knowledge.window(key),memory,slang)
@@ -344,6 +347,9 @@ class ChatService:
                     scope.members={str(m['user_id']):str(m['name']) for m in self.store.recent(key,80)+direct}
                     knowledge_args={'knowledge':scope}
                     memory_scope=scope
+                if not self.knowledge:
+                    text += memory_instructions(False, False, [], seed_rules=seed_rules)
+                    text += "本轮黑话工具关闭。\n"
                 images = []
                 if request.prepare and not proactive:
                     # Keep recent-image reference semantics even when text is incremental.
@@ -364,7 +370,7 @@ class ChatService:
                         '如果最新问题只涉及文字，正常回答文字问题，不要因为近期聊天附带了图片就转移话题。',
                         search_enabled=can_search, on_search=search_started, **knowledge_args)
                 model_ms+=round((time.monotonic()-model_started)*1000)
-                self.store.delivered(key, session_id, boundary, cut, forward)
+                self.store.delivered(key, session_id, boundary, cut, forward, protocol)
                 if stamp is not None:
                     # Mark the PRE-turn snapshot, not later tool mutations which the next turn must see.
                     self.knowledge.delivered(key,session_id,stamp)

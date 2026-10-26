@@ -22,6 +22,10 @@ from .knowledge import TOOLS
 from .search import CONTROL_PREFIX, public_result_url
 
 
+CHAT_COMPACTION = {"thresholdRatio": 0.25, "headroomTokens": 8192, "retainTokens": 8192,
+                   "maxTokens": 4096, "compactionRetries": 0}
+
+
 class BridgeError(Exception):
     """Only fixed diagnostic codes; never carry remote messages or credentials."""
 
@@ -77,8 +81,13 @@ def validate_preset(content):
             compression.get("isolate") != {"compaction": True}):
         raise BridgeError("unsafe_compaction_scope")
     children = compression.get("config")
-    if (not isinstance(children, list) or len(children) != 1 or not isinstance(children[0], dict) or
-            set(children[0]) - {"id", "name"} or children[0].get("name") != "@deepseek-ai/dsh-compaction-basic"):
+    if (not isinstance(children, list) or len(children) not in (1, 2) or not isinstance(children[0], dict) or
+            set(children[0]) - {"id", "name", "config"} or children[0].get("name") != "@deepseek-ai/dsh-compaction-basic" or
+            children[0].get("config", {}) not in ({}, CHAT_COMPACTION)):
+        raise BridgeError("unsafe_compaction_configuration")
+    if len(children) == 2 and (children[0].get("config") != CHAT_COMPACTION or
+            not isinstance(children[1], dict) or set(children[1]) - {"id", "name"} or
+            children[1].get("name") != "@deepseek-ai/dsh-command-compact"):
         raise BridgeError("unsafe_compaction_configuration")
     persona = rows[1].get("config", {})
     if not isinstance(persona, dict) or set(persona) != {"prefix", "includeRuntimeContext", "complete"}:

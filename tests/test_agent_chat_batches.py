@@ -38,7 +38,7 @@ class BatchTests(unittest.IsolatedAsyncioTestCase):
         await self.drain()
         self.assertEqual(len(self.client.prompts),1)
         self.assertEqual(self.targets(0),['first','second','third'])
-        for mid in self.targets(0):self.assertIn('"message_id": "'+mid+'"',self.client.prompts[0][1])
+        for mid in self.targets(0):self.assertIn('"message_id":"'+mid+'"',self.client.prompts[0][1])
         self.assertEqual(len(self.sent),1)
 
     async def test_arrivals_during_generation_form_a_separate_complete_batch(self):
@@ -130,6 +130,7 @@ class BatchTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_ambient_silence_stays_quiet(self):
         self.client.answer='[SILENT]';self.service.cfg.agent_chat_ambient_probability=.2
+        self.service.cfg.agent_chat_quiet_start=self.service.cfg.agent_chat_quiet_end=0
         with patch('random.random',return_value=0):self.assertTrue(self.enqueue('ambient',directed=False))
         await self.drain();self.assertEqual(self.sent,[])
 
