@@ -28,18 +28,25 @@ const definition = name => ({
 root.tools.register(definition('global_canary'));
 root.tools.register(definition('web_search'));
 const agent = {id: 'agent-chat-guard-probe'};
-const scope = createScope(root, agent);
+const preset = {id:'agent-chat-preset-probe'};
+const presetScope = createScope(root,preset);
+const scope = createScope(root, agent, {parent:preset});
 root.systemPrompt.section({name: 'probe:host-identity', order: 100, text: 'Generic coding assistant'});
-applyPersona(scope.ctx, {prefix: 'Dedicated QQ role and fixed protocol', complete: true, includeRuntimeContext: false});
+applyPersona(presetScope.ctx, {prefix: 'Dedicated QQ role and fixed protocol', complete: true, includeRuntimeContext: false});
 const assembly = await scope.ctx.systemPrompt.assemble({scope: agent, agent, signal: new AbortController().signal});
 assert.equal(renderPrompt(assembly), 'Dedicated QQ role and fixed protocol');
 // The real registry and event system are used; only the provider configuration is inert.
-apply({tools: scope.ctx.tools, on: scope.ctx.on.bind(scope.ctx),
+apply({tools: presetScope.ctx.tools, on: presetScope.ctx.on.bind(presetScope.ctx),
   web: {config: {searchProvider: {get: () => 'anysearch'}}}});
 agent.ctx = scope.ctx;
 scope.ctx.emit('agent/created', {agent});
 assert.equal(scope.ctx.tools.get('global_canary', agent), undefined);
 assert.ok(scope.ctx.tools.get('web_search', agent));
+for (const name of ['qq_memory_append','qq_memory_query','qq_memory_remove','qq_memory_clear','qq_slang_query','qq_slang_submit']) {
+  assert.ok(scope.ctx.tools.get(name,agent));
+  const denied=await scope.ctx.tools.execute({agent,name,callId:'denied-'+name,arguments:{},signal:new AbortController().signal});
+  assert.equal(denied.isError,true);
+}
 const unauthorized = await scope.ctx.tools.execute({
   agent, name: 'web_search', callId: 'unpermitted-search', arguments: {queries: ['public topic']},
   signal: new AbortController().signal
@@ -58,5 +65,6 @@ for (const name of ['global_canary', 'local_canary', 'future_unknown_tool', 'run
 }
 assert.equal(invoked, 0);
 await scope.dispose();
-console.log('PASS: installed DSH engine exposes only native search, denies unauthorized search and global/local/unknown/Code Mode execution; canary never ran');
+await presetScope.dispose();
+console.log('PASS: installed DSH parent-preset/child-agent exposes search and six knowledge tools, denies unauthorized calls and global/local/unknown/Code Mode execution; canary never ran');
 console.log('PASS: complete persona excludes inherited system-prompt identity sections');

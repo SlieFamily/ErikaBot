@@ -25,13 +25,16 @@ async def main():
         assert ai_plugin and ana_plugin, "plugins must load"
         ai, ana = ai_plugin.module, ana_plugin.module
         ai.config.agent_chat_takeover_mentions = True
+        ai.config.agent_chat_slang_enabled = True
+        ai.config.agent_chat_groups = frozenset({42})
 
         class FakeService:
-            def __init__(self): self.observed = []; self.scheduled = []; self.recovered=[]
+            def __init__(self): self.observed = []; self.scheduled = []; self.recovered=[]; self.learned=[]; self.knowledge=None
             def allowed(self, bot_id, group_id, user_id): return group_id == 42 and str(user_id) != str(bot_id)
             def observe(self, message): self.observed.append(message); return True
             def schedule(self, message, send, prepare=None): self.scheduled.append((message, send)); self.prepare = prepare
             async def recover(self,key):self.recovered.append(key);return 'resumed'
+            def learn_message(self,message,plain):self.learned.append((message.message_id,plain))
 
         service = FakeService(); ai.service = service
         sent = []
@@ -73,6 +76,7 @@ async def main():
         service.scheduled.clear()
         await handle_event(bot, event("群内梗"))
         assert len(sent) == 1 and not service.scheduled, "advanced quote must suppress AI"
+        assert service.learned[-1][1]=='群内梗', 'ordinary slang still reaches learner when a passive quote replies'
         sent.clear()
         await handle_event(bot, event("群内梗", directed=True))
         assert len(service.scheduled) == 1 and not sent, "AI @ takeover must suppress both passive handlers"
@@ -80,8 +84,10 @@ async def main():
         await send("[CQ:at,qq=all]")
         assert len(sent[0]) == 1 and sent[0][0].type == "text", "model CQ must remain literal"
         sent.clear()
+        learned_before=len(service.learned)
         await handle_event(bot, event("测试语录"))
         assert sent and not service.scheduled, "explicit quote command wins"
+        assert len(service.learned)==learned_before, 'explicit commands must not enter learning window'
         sent.clear()
         before = len(service.observed)
         await handle_event(bot, event("你好", group=99))
@@ -131,6 +137,10 @@ async def main():
         await handle_event(bot,event('ai 恢复',uid=1))
         assert service.recovered==['100:group:42'] and not service.scheduled, 'SUPERUSER recovery wins over chat handlers'
         sent.clear()
+        before=len(sent)
+        await handle_event(bot,event('ai 清空记忆',uid=7))
+        assert len(sent)==before, 'ordinary members cannot administer persistent memory'
+        service.scheduled.clear()
         ai.config.agent_chat_images_enabled = False
         ai.media_resolver = None
         ai.service = None

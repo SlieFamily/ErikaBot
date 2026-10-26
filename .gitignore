@@ -9,6 +9,7 @@
 # agent_chat private configuration and runtime state
 /.env.agent_chat
 /.env.agent_chat.local
+/.env.agent_chat.*.bak
 /data/agent_chat/
 __pycache__/
 *.py[cod]

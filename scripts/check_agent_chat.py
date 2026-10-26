@@ -21,6 +21,13 @@ async def check(args):
     try:
         fingerprint = await client.policy()
         print("PASS: authenticated; safe preset composition verified (" + fingerprint[:12] + ")")
+        if client.cfg.agent_chat_slang_enabled:
+            learner=dsh.DshClient(client.cfg,preset_id=dsh.LEARNER_PRESET_ID)
+            try:
+                await learner.policy()
+                print('PASS: dedicated neutral learner preset verified')
+            finally:
+                await learner.close()
         if args.smoke:
             sid = await client.create_session()
             text = await client.reply(sid, "QQ_CHAT_EVENT diagnostic\n这是独立连通性测试。请只回复：连接成功。不要调用工具。")

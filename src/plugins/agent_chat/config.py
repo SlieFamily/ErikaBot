@@ -11,6 +11,7 @@ from dotenv import dotenv_values
 
 
 PRESET_ID = "erika-agent-chat-v1"
+LEARNER_PRESET_ID = "erika-agent-chat-learner-v1"
 GUARD_MODULE = "erika-agent-chat-dsh/guard.mjs"
 
 
@@ -22,6 +23,10 @@ class Config(BaseModel):
     agent_chat_dsh_token: SecretStr = SecretStr("")
     agent_chat_dsh_cookie: SecretStr = SecretStr("")
     agent_chat_state_path: Path = Path("data/agent_chat/state.sqlite3")
+    agent_chat_memory_enabled: bool = False
+    agent_chat_slang_enabled: bool = False
+    agent_chat_knowledge_token: SecretStr = SecretStr("")
+    agent_chat_learning_max_per_hour: int = Field(12, ge=1, le=60)
     agent_chat_cooldown: float = Field(8, ge=0, le=3600)
     agent_chat_debounce: float = Field(2, ge=0, le=10)
     agent_chat_timeout: float = Field(90, ge=5, le=300)
@@ -93,6 +98,10 @@ class Config(BaseModel):
         if bool(values.get("agent_chat_model")) != bool(values.get("agent_chat_provider")):
             raise ValueError("Set provider and model together")
         if values.get("agent_chat_enabled"):
+            if values.get('agent_chat_memory_enabled') or values.get('agent_chat_slang_enabled'):
+                import re
+                if not re.fullmatch(r'[a-f0-9]{64}',values.get('agent_chat_knowledge_token',SecretStr('')).get_secret_value()):
+                    raise ValueError('Knowledge tools require the private loopback bridge credential')
             if not (values.get("agent_chat_groups") or values.get("agent_chat_private_users")):
                 raise ValueError("Enabled agent_chat requires an explicit allowlist")
             token = values.get("agent_chat_dsh_token", SecretStr("")).get_secret_value()

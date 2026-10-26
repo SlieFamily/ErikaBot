@@ -19,12 +19,17 @@ from .store import Store
 from .media import MediaResolver, allowed_url, safe_file_ref
 from .presentation import segments as output_segments
 from .forwards import ForwardResolver, forward_refs
+from .knowledge_bridge import install_route
+from .knowledge_admin import handle as knowledge_command
 
 
 driver = get_driver()
 config = load_config(driver.config.dict())
 service: Optional[ChatService] = None
 media_resolver: Optional[MediaResolver] = None
+
+if config.agent_chat_enabled and (config.agent_chat_memory_enabled or config.agent_chat_slang_enabled):
+    install_route(driver.server_app,lambda:service.knowledge_hub if service else None)
 
 
 def chat_key(bot, event):
@@ -88,6 +93,7 @@ async def start_agent_chat():
         logger.info("agent_chat disabled (no DSH connection or chat recording)")
         return
     service = ChatService(config, Store(config.agent_chat_state_path), DshClient(config))
+    service.start_learning()
     if config.agent_chat_images_enabled:
         media_resolver = MediaResolver(config)
     if config.agent_chat_proactive_enabled:
@@ -136,7 +142,7 @@ async def observe_chat(bot: Bot, event: MessageEvent, state: T_State):
     )
     fresh = service.observe(message)
     # NoneBot shallow-copies state per matcher; this nested bucket is intentionally shared.
-    state[CONTEXT_KEY] = {"message": message, "fresh": fresh, "claimed": False,
+    state[CONTEXT_KEY] = {"message": message, "fresh": fresh, "claimed": False, "command":False,
                           "takeover": bool(fresh and directed and config.agent_chat_takeover_mentions)}
 
 
@@ -145,14 +151,19 @@ async def note_existing_handler(matcher: Matcher, state: T_State):
     bucket = state.get(CONTEXT_KEY)
     if bucket is not None and not getattr(matcher, "agent_chat_passive", False):
         bucket["claimed"] = True
+        bucket["command"] = True
 
 
 @event_postprocessor
 async def dispatch_chat(bot: Bot, event: MessageEvent, state: T_State):
     bucket = state.get(CONTEXT_KEY)
-    if not service or not bucket or not bucket["fresh"] or bucket["claimed"]:
+    if not service or not bucket or not bucket["fresh"]:
         return
     message = bucket["message"]
+    if config.agent_chat_slang_enabled and isinstance(event,GroupMessageEvent) and not bucket.get('command'):
+        service.learn_message(message,event.message.extract_plain_text())
+    if bucket['claimed']:
+        return
 
     async def send(text):
         # Only validated reply/face metadata creates segments; CQ text is never parsed.
@@ -179,6 +190,11 @@ async def administer(bot: Bot, event: MessageEvent, args: Message = CommandArg()
         await admin.finish("AI 桥接未启用。")
     key = chat_key(bot, event)
     command = args.extract_plain_text().strip()
+    if (isinstance(event,GroupMessageEvent) and event.group_id in config.agent_chat_groups or
+            isinstance(event,PrivateMessageEvent) and event.user_id in config.agent_chat_private_users):
+        rendered=knowledge_command(service.knowledge,key,command)
+        if rendered is not None:
+            await admin.finish(Message(MessageSegment.text(rendered)))
     if command in {"状态", "status"}:
         bound = service.store.session(key)
         status = "未创建会话" if not bound else ("已暂停，修复 DSH/API 后可尝试 ai 恢复" if bound[2] else "会话已保存")
@@ -192,7 +208,10 @@ async def administer(bot: Bot, event: MessageEvent, args: Message = CommandArg()
             f"\n读图：{'开启' if config.agent_chat_images_enabled else '关闭'}；随机接话：{config.agent_chat_ambient_probability:.0%}" +
             f"\n主动引用：{'开启' if config.agent_chat_reply_enabled else '关闭'}；QQ表情：{'开启' if config.agent_chat_faces_enabled else '关闭'}；合并转发：{'开启' if config.agent_chat_forwards_enabled else '关闭'}" +
             f"\n自主发言：{'开启' if config.agent_chat_proactive_enabled and service.proactive_group(key) else '关闭'}；今日尝试 {used}/{config.agent_chat_proactive_daily_limit}" +
-            f"\n安静时段：{quiet_label}；语音识别暂未启用。")
+            f"\n安静时段：{quiet_label}；语音识别暂未启用。"+
+            (f"\n轻量记忆：{service.knowledge.status(key)['memory']} 条；共享已确认黑话：{service.knowledge.status(key)['confirmed']} 条；"
+             f"后台学习近一小时：{service.knowledge.learning_count()}/{config.agent_chat_learning_max_per_hour}。ai 学习帮助 查看管理命令。"
+             if service.knowledge else ''))
     if command in {"恢复", "resume", "recover"}:
         try:
             result = await service.recover(key)
@@ -214,5 +233,5 @@ async def administer(bot: Bot, event: MessageEvent, args: Message = CommandArg()
             await service.reset(key)
         except Exception:
             await admin.finish("未能确认 DSH 旧任务已停止，保留会话并暂停重置。")
-        await admin.finish("当前对话的 AI 映射与本地上下文已重置。DSH 历史仍保留。")
+        await admin.finish("当前对话的 AI 映射与本地上下文已重置。DSH 历史、独立轻量记忆与共享黑话仍保留；清除记忆请用 ai 清空记忆。")
     await admin.finish("用法：ai 状态 / ai 恢复（保留记忆）/ ai 重置（新会话），仅机器人超级用户。")

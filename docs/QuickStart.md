@@ -33,3 +33,5 @@
 运行后怎样识别进程、查看/导出日志，见 [运行进程与日志](agent_chat.md#运行进程与日志)。更换模型 Key 通常只需在 DSH 操作；更改插件私有配置则需重启 NoneBot，详细步骤见 [更换 API、Key 或模型](agent_chat.md#更换-apikey-或模型)。DSH 暂停或退出时的 AI 行为与恢复方法见 [DSH 关闭、断线与恢复](agent_chat.md#dsh-关闭断线与恢复)。
 
 开发测试期间保持现有机器人和 QQ 网关在线：离线测试使用临时数据库与模拟收发，真实 DSH 联调用独立实例/会话。只在正式部署完成且验证通过后重启需要加载变更的进程，详见 [在线测试与部署](agent_chat.md#保持-qq-在线的测试与部署)。联网使用 DSH 已安装的 AnySearch 插件；首次迁移需安装新的安全预设并重启 DSH 与 NoneBot，之后只改 `AGENT_CHAT_SEARCH_ENABLED` 等开关时只需重启 NoneBot。凭据、额度与迁移见 [AnySearch 搜索配置与边界](agent_chat.md#ai-自主联网搜索anysearch)。
+
+轻量长期记忆与黑话学习需更新 DSH bundle，并用私有设置助手建立本机工具回调。先阅读 [记忆与黑话配置](agent_chat.md#轻量长期记忆与黑话学习)；默认关闭，开启后后台学习另计模型用量，黑话解释经超级用户确认后才生效。

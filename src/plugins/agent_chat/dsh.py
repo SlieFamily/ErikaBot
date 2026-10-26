@@ -4,6 +4,7 @@ Protocol reference: Derpyu520/qq-bridge (MIT); see third_party/qq-bridge-LICENSE
 Unknown wire shapes fail closed. A lost prompt response is never blindly retried.
 """
 import asyncio
+import contextlib
 import hashlib
 import json
 import logging
@@ -16,7 +17,8 @@ import websockets
 from websockets.legacy.client import Connect
 import yaml
 
-from .config import GUARD_MODULE, PRESET_ID
+from .config import GUARD_MODULE, PRESET_ID, LEARNER_PRESET_ID
+from .knowledge import TOOLS
 from .search import CONTROL_PREFIX, public_result_url
 
 
@@ -96,16 +98,20 @@ def validate_preset(content):
 
 
 class ReplyText(str):
-    def __new__(cls, text, searches=0, sources=()):
+    def __new__(cls, text, searches=0, sources=(), knowledge_calls=()):
         value = super().__new__(cls, text)
         value.searches, value.sources = searches, tuple(sources)
+        value.knowledge_calls=tuple(knowledge_calls)
         return value
 
 
 class TurnCollector:
     """Only return a turn containing OUR user message; never replay snapshot output."""
-    def __init__(self, rpc_id, search_enabled=False, on_search=None):
+    def __init__(self, rpc_id, search_enabled=False, on_search=None, knowledge_tools=(), preset_id=PRESET_ID):
         self.rpc_id = rpc_id
+        self.preset_id = preset_id
+        self.knowledge_tools = set(knowledge_tools) & set(TOOLS)
+        self.knowledge_calls, self.knowledge_results = {}, set()
         self.turn = None
         self.owned = False
         self.text = ""
@@ -137,6 +143,15 @@ class TurnCollector:
                 # Harness emits this metadata when an administrator changes the model.
                 # It is neither a foreign human prompt nor proof of our turn ownership.
                 return None
+            if (self.owned and source.get('kind')=='repeat-tool-reminder' and source.get('form')=='notice' and
+                    set(source)=={'kind','form','summary'} and event.get('surfaceOp')=='append' and
+                    isinstance(source.get('summary'),str)):
+                reminder=re.fullmatch(r'([a-z_]+) × ([2-6])',source['summary'])
+                if (reminder and reminder[1] in self.knowledge_calls.values() and
+                        int(reminder[2])<=len(self.knowledge_calls)):
+                    # Harness's bounded reminder after observed tool calls is metadata,
+                    # never a second operator prompt or evidence of turn ownership.
+                    return None
             op = event.get("surfaceOp", {})
             if (source.get("kind") == "compact-checkpoint" and
                     source.get("compactionId") in self.compactions and isinstance(op, dict) and
@@ -154,9 +169,16 @@ class TurnCollector:
         elif kind == "tool/call":
             # Defence-in-depth detector, NOT the host-side execution guard.
             cid = data.get('callId')
+            if data.get('name') in self.knowledge_tools:
+                if (not self.owned or data.get('turn') != self.turn or not isinstance(cid,str) or not cid or
+                        cid in self.knowledge_calls or cid in self.search_calls or len(self.knowledge_calls)>=6):
+                    raise BridgeError('unexpected_knowledge_call')
+                self.knowledge_calls[cid] = data['name']
+                self.text = ''
+                return None
             if (not self.search_enabled or not self.owned or data.get('turn') != self.turn or
                     data.get('name') != 'web_search' or not isinstance(cid, str) or not cid or
-                    cid in self.search_calls or len(self.search_calls) >= 2):
+                    cid in self.search_calls or cid in self.knowledge_calls or len(self.search_calls) >= 2):
                 raise BridgeError("unexpected_tool_call")
             if not self.search_calls and self.on_search:
                 self.on_search()
@@ -166,6 +188,12 @@ class TurnCollector:
             message = data.get('message', {})
             cid = message.get('toolCallId')
             source = message.get('source', {})
+            if cid in self.knowledge_calls:
+                if (cid in self.knowledge_results or message.get('role') != 'tool' or
+                        source.get('kind') != 'tool' or source.get('callId') != cid):
+                    raise BridgeError('unexpected_knowledge_result')
+                self.knowledge_results.add(cid)
+                return None
             if (cid not in self.search_calls or cid in self.search_results or
                     message.get('role') != 'tool' or source.get('kind') != 'tool' or source.get('callId') != cid):
                 raise BridgeError('unexpected_tool_result')
@@ -176,7 +204,7 @@ class TurnCollector:
                     url = public_result_url(row.get('url')) if isinstance(row, dict) else ''
                     if url and url not in self.sources:
                         self.sources.append(url)
-        elif kind == "agent-preset/selected" and data.get("agentPreset") != PRESET_ID:
+        elif kind == "agent-preset/selected" and data.get("agentPreset") != self.preset_id:
             raise BridgeError("session_preset_changed")
         elif kind == "assistant/message" and self.owned and data.get("turn") == self.turn:
             blocks = data.get("message", {}).get("content", [])
@@ -188,14 +216,17 @@ class TurnCollector:
             reason = reason.get("kind") if isinstance(reason, dict) else reason
             if reason != "completed":
                 raise BridgeError("turn_not_completed")
-            if self.search_calls != self.search_results:
+            if self.search_calls != self.search_results or set(self.knowledge_calls) != self.knowledge_results:
                 raise BridgeError('incomplete_tool_results')
-            return ReplyText(self.text, len(self.search_calls), self.sources)
+            return ReplyText(self.text, len(self.search_calls), self.sources, self.knowledge_calls.values())
         return None
 
 
 class DshClient:
-    def __init__(self, config, http=None, connect=None):
+    def __init__(self, config, http=None, connect=None, *, preset_id=PRESET_ID):
+        if preset_id not in (PRESET_ID,LEARNER_PRESET_ID):
+            raise BridgeError("invalid_bridge_preset")
+        self.preset_id = preset_id
         self.cfg = config
         self.http = http or httpx.AsyncClient(timeout=15, follow_redirects=False, trust_env=False)
         self.connect = connect or _NoRedirectConnect
@@ -269,19 +300,19 @@ class DshClient:
     async def policy_with_persona(self):
         """Fingerprint and role come from one validated preset read, never chat text."""
         listed = await self.rpc("agentPresets/list")
-        if not isinstance(listed, dict) or not any(p.get("id") == PRESET_ID and not p.get("broken") for p in listed.get("presets", [])):
+        if not isinstance(listed, dict) or not any(p.get("id") == self.preset_id and not p.get("broken") for p in listed.get("presets", [])):
             raise BridgeError("safe_preset_missing")
         # Intentionally no fallback if this DSH version cannot inspect the composition.
-        preset = await self.rpc("agentPresets/read", {"agentPreset": PRESET_ID})
-        if not isinstance(preset, dict) or preset.get("agentPreset") != PRESET_ID:
+        preset = await self.rpc("agentPresets/read", {"agentPreset": self.preset_id})
+        if not isinstance(preset, dict) or preset.get("agentPreset") != self.preset_id:
             raise BridgeError("preset_identity_mismatch")
         content = preset.get("content")
         fingerprint = validate_preset(content)
         return fingerprint, yaml.safe_load(content)[1]["config"]["prefix"]
 
     async def create_session(self):
-        value = await self.rpc("session/create", {"agentPreset": PRESET_ID})
-        if not isinstance(value, dict) or value.get("agentPreset") != PRESET_ID:
+        value = await self.rpc("session/create", {"agentPreset": self.preset_id})
+        if not isinstance(value, dict) or value.get("agentPreset") != self.preset_id:
             raise BridgeError("session_preset_mismatch")
         sid = value.get("sessionId")
         if not isinstance(sid, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,160}", sid):
@@ -317,9 +348,9 @@ class DshClient:
             if failure:
                 raise BridgeError("cannot_confirm_queue_cleared") from None
 
-    async def reply(self, sid, text, images=None, *, search_enabled=False, on_search=None):
+    async def reply(self, sid, text, images=None, *, search_enabled=False, on_search=None, knowledge=None, research_term=""):
         try:
-            return await asyncio.wait_for(self._reply(sid, text, images, search_enabled, on_search), self.cfg.agent_chat_timeout)
+            return await asyncio.wait_for(self._reply(sid, text, images, search_enabled, on_search, knowledge, research_term), self.cfg.agent_chat_timeout)
         except asyncio.TimeoutError:
             raise BridgeError("dsh_turn_timeout") from None
         except (OSError, websockets.WebSocketException):
@@ -356,8 +387,8 @@ class DshClient:
                     snapshot = frame
                     break
         if (not snapshot or snapshot.get('header',{}).get('id') != sid or
-                snapshot.get('header',{}).get('agentPreset') != PRESET_ID or
-                snapshot.get('projections',{}).get('values',{}).get('agentPreset') != PRESET_ID):
+                snapshot.get('header',{}).get('agentPreset') != self.preset_id or
+                snapshot.get('projections',{}).get('values',{}).get('agentPreset') != self.preset_id):
             raise BridgeError('unsafe_current_session_preset')
         inbox = snapshot['projections']['values'].get('inbox')
         if not isinstance(inbox,dict) or any(inbox.get(k) != [] for k in ('next-turn','next-step')):
@@ -425,8 +456,8 @@ class DshClient:
             if snapshot is None:
                 raise BridgeError("missing_snapshot")
         if (snapshot.get("header", {}).get("id") != sid or
-                snapshot.get("header", {}).get("agentPreset") != PRESET_ID or
-                snapshot.get("projections", {}).get("values", {}).get("agentPreset") != PRESET_ID):
+                snapshot.get("header", {}).get("agentPreset") != self.preset_id or
+                snapshot.get("projections", {}).get("values", {}).get("agentPreset") != self.preset_id):
             raise BridgeError("unsafe_current_session_preset")
         cut = snapshot.get("cursor")
         if type(cut) is not int or cut < -1:
@@ -463,10 +494,20 @@ class DshClient:
                     raise BridgeError("invalid_context_page")
         return cut, True
 
-    async def _reply(self, sid, text, images=None, search_enabled=False, on_search=None):
+    async def _reply(self, sid, text, images=None, search_enabled=False, on_search=None, knowledge=None, research_term=""):
         rid = str(uuid.uuid4())
+        lease = knowledge.hub.lease(knowledge,sid,rid) if knowledge else contextlib.nullcontext()
+        with lease:
+            return await self._reply_bound(sid,text,images,search_enabled,on_search,knowledge,research_term,rid)
+
+    async def _reply_bound(self, sid, text, images, search_enabled, on_search, knowledge, research_term, rid):
         control = {'version': 1, 'sessionId': sid, 'rpcId': rid,
                    'enabled': bool(search_enabled), 'expires': int(time.time() * 1000) + 300000}
+        if knowledge:
+            control['knowledge'] = [family for family,prefix in (('memory','qq_memory_'),('slang','qq_slang_'))
+                                    if any(tool.startswith(prefix) for tool in knowledge.tools)]
+        if research_term:
+            control['researchTerm'] = research_term
         content = [{"type": "text", "text": CONTROL_PREFIX + json.dumps(control) + '\n' + text}]
         for image in images or []:
             if (len(content) > 4 or set(image) != {"type", "mediaType", "data", "name"} or
@@ -491,19 +532,19 @@ class DshClient:
             if snapshot is None:
                 raise BridgeError("missing_snapshot")
             header = snapshot.get("header", {})
-            if header.get("id") != sid or header.get("agentPreset") != PRESET_ID:
+            if header.get("id") != sid or header.get("agentPreset") != self.preset_id:
                 raise BridgeError("unsafe_session_header")
             projections = snapshot.get("projections", {}).get("values", {})
             # Header is creation-time only. The projection folds the ENTIRE log,
             # including preset switches older than this bounded snapshot window.
-            if projections.get("agentPreset") != PRESET_ID:
+            if projections.get("agentPreset") != self.preset_id:
                 raise BridgeError("unsafe_current_session_preset")
             # Reject a changed preset, unfinished historical turn or queued work.
             open_turns = set()
             for record in snapshot.get("records", []):
                 event = record.get("event", record)
                 kind, data = event.get("type"), event.get("data", {})
-                if kind == "agent-preset/selected" and data.get("agentPreset") != PRESET_ID:
+                if kind == "agent-preset/selected" and data.get("agentPreset") != self.preset_id:
                     raise BridgeError("session_preset_changed")
                 if kind == "turn/start": open_turns.add(data.get("turn"))
                 if kind == "turn/end": open_turns.discard(data.get("turn"))
@@ -514,7 +555,7 @@ class DshClient:
                                      "content": content}, rpc_id=rid)
             if not isinstance(result, dict) or result.get("accepted") is not True or result.get("command"):
                 raise BridgeError("unexpected_prompt_response")
-            collector = TurnCollector(rid, search_enabled, on_search)
+            collector = TurnCollector(rid, search_enabled, on_search, knowledge.tools if knowledge else (), self.preset_id)
             async for raw in ws:
                 value = self.frame(raw, stream)
                 if value and value.get("type") == "event":

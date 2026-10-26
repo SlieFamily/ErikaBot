@@ -1,17 +1,18 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {apply, CONTROL_PREFIX, publicQuery} from '../dsh/agent-chat/guard.mjs';
+import {knowledgeTools} from '../dsh/agent-chat/knowledge.mjs';
 
 function fixture() {
   let guard, observe, created, filter, mode;
   const web = {config: {searchProvider: {get: () => 'anysearch'}}};
   apply({web, on: (event, fn) => {if(event === 'session/event') observe = fn; else if(event === 'agent/created') created=fn; else assert.fail(event);},
-    tools: {guard: fn => {guard = fn;}, restrict: x => {filter = x;}, presentAs: x => {mode = x;}}});
+    tools: {register(){},guard: fn => {guard = fn;}, restrict: x => {filter = x;}, presentAs: x => {mode = x;}}});
   assert.equal(mode, 'native');
   const session = {id:'s'};
   const agent={session,ctx:{tools:{restrict:x=>{filter=x;}}}};
   created({agent});
-  assert.deepEqual(filter, {allow: ['web_search']});
+  assert.deepEqual(filter, {allow: ['web_search',...knowledgeTools]});
   const permit = (enabled=true, changes={}) => {
     observe(session, {type:'turn/start',data:{turn:1}});
     observe(session, {type:'user/message',surfaceOp:'append',data:{source:{kind:'user',rpcId:'rpc'},content:[{
@@ -78,4 +79,17 @@ test('provider changes, unsupported APIs and unscoped restrictions fail closed',
   assert.equal(typeof f.call(),'string');
   assert.throws(()=>apply({tools:{}}));
   assert.throws(()=>apply({web:{},on(){},tools:{guard(){},restrict(){},presentAs(){}}}),/AnySearch/);
+});
+
+test('knowledge needs an explicit family grant, is bounded, and learner search cannot leak chat',()=>{
+  const f=fixture();
+  f.permit();assert.equal(typeof f.call({name:'qq_memory_query',arguments:{}}),'string');
+  f.permit(false,{knowledge:['memory']});
+  assert.equal(f.call({name:'qq_memory_query',arguments:{}}),undefined);
+  assert.equal(typeof f.call({name:'qq_slang_submit',callId:'slang',arguments:{content:'芜湖起飞'}}),'string');
+  for(let n=1;n<6;n++) assert.equal(f.call({name:'qq_memory_query',callId:'m'+n,arguments:{}}),undefined);
+  assert.equal(typeof f.call({name:'qq_memory_query',callId:'seventh',arguments:{}}),'string');
+  f.permit(true,{researchTerm:'芜湖起飞'});
+  assert.equal(typeof f.call({arguments:{queries:['这里是整段群聊']}}),'string');
+  assert.equal(f.call({arguments:{queries:['芜湖起飞 是什么梗']}}),undefined);
 });

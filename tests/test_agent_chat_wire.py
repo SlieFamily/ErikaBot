@@ -51,6 +51,15 @@ class WireTests(unittest.IsolatedAsyncioTestCase):
                 elif self.mode == "tool":
                     await self.emit({"type":"tool/call", "data":{"name":"bash"}})
                 else:
+                    if self.mode == 'native-knowledge':
+                        control=json.loads(payload['request']['content'][0]['text'].split('\n')[0].split(' ',1)[1])
+                        assert control['knowledge']==['memory','slang']
+                        await self.emit({'type':'tool/call','data':{'turn':3,'name':'qq_memory_append','callId':'memory-1'}})
+                        value=self.hub.handle({'session_id':payload['request']['sessionId'],'rpc_id':body['rpcId'],
+                            'call_id':'memory-1','name':'qq_memory_append','args':{'category':'activeTopic','content':'线下开黑'}})
+                        assert value['ok']
+                        await self.emit({'type':'tool/result','data':{'turn':3,'message':{'toolCallId':'memory-1','role':'tool',
+                            'source':{'kind':'tool','callId':'memory-1'},'content':[{'type':'text','text':json.dumps(value)}]}}})
                     if self.mode == 'native-search':
                         await self.emit({'type':'tool/call','data':{'turn':3,'name':'web_search','callId':'search-1',
                             'arguments':{'queries':['明日堇sumire']}}})
@@ -120,6 +129,23 @@ class WireTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.client.reply(sid, "QQ_CHAT_EVENT test"), "新回复")
         self.assertEqual(self.prompts[0]["sessionId"], sid)
         self.assertTrue(self.prompts[0]["requestId"])
+
+    async def test_native_knowledge_lease_exists_only_during_correlated_prompt(self):
+        import importlib,sqlite3
+        from test_agent_chat import PACKAGE
+        knowledge=importlib.import_module(PACKAGE+'.knowledge')
+        bridge=importlib.import_module(PACKAGE+'.knowledge_bridge')
+        db=sqlite3.connect(':memory:');store=knowledge.KnowledgeStore(db)
+        self.hub=bridge.KnowledgeHub(store,'a'*64)
+        scope=self.hub.scope('100:group:42',[])
+        self.mode='native-knowledge'
+        try:
+            answer=await self.client.reply('session-1','test',knowledge=scope)
+            self.assertEqual(str(answer),'新回复')
+            self.assertEqual(answer.knowledge_calls,('qq_memory_append',))
+            self.assertEqual(store.memory('100:group:42')[0]['content'],'线下开黑')
+            self.assertFalse(self.hub.leases)
+        finally:db.close()
 
     async def test_recovery_requires_idle_owned_history_and_empty_queue(self):
         self.mode = 'recovery-ok'

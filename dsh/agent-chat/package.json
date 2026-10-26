@@ -3,5 +3,5 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "dsh": {"bundle": {"patch": ["./preset.patch.yml"]}}
+  "dsh": {"bundle": {"patch": ["./preset.patch.yml", "./learner.patch.yml"]}}
 }
