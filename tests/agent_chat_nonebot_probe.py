@@ -215,6 +215,8 @@ async def main():
         await handle_event(bot,event('ai 黑话 全部',uid=1,group=99))
         api,data=api_calls[-1]
         assert api=='send_group_forward_msg' and data['group_id']==99
+        assert data['source']=='黑话审核汇总' and len(data['news'])==2
+        assert '字面[CQ:' not in str(data['news'])
         assert len(data['messages'])>=3, 'one forwarded container has header and separate source-group nodes'
         exported='\n'.join(str(node.data['content']) for node in data['messages'])
         assert '来源群 42' in exported and '来源群 43' in exported
@@ -239,6 +241,16 @@ async def main():
         assert wire[-1]['action']=='send_group_forward_msg' and wire[-1]['params']['group_id']==99
         assert all(node['type']=='node' and node['data']['user_id']=='101' and node['data']['nickname']=='古户绘梨花' and
             node['data']['content'][0]['type']=='text' for node in wire[-1]['params']['messages'])
+        # A realistic long report must stay complete while its outer QQ card stays small.
+        from src.plugins.agent_chat.slang_report import SlangReport
+        long_report=SlangReport(tuple(f'节点{i}\n'+('完整内容🙂 '*400)[:1750] for i in range(10)),1,7,600)
+        wire.clear()
+        await send_report(native_bot,event('ai黑话',uid=1,group=99),long_report)
+        sent_report=wire[-1]['params']
+        assert len(sent_report['messages'])==10
+        assert tuple(n['data']['content'][0]['data']['text'] for n in sent_report['messages'])==long_report.nodes
+        assert len(json.dumps({k:sent_report[k] for k in ('source','news','summary','prompt')},ensure_ascii=False).encode())<512
+        assert len([f for f in wire if f['action']=='send_group_forward_msg'])==1
         adapter.connections.clear()
         # A gateway failure returns one short notice, never a multi-message plain-text flood or retry.
         original_call=bot.call_api;failed=[]
