@@ -140,13 +140,14 @@ class ServiceSearchTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.store.db.execute('SELECT stage FROM searches').fetchone()[0],'cancelled')
     async def test_model_failure_suspends_and_does_not_retry(self):
         self.client.error=dsh.BridgeError('test_timeout');await self.submit()
-        self.assertFalse(self.sent);self.assertEqual(self.store.session(message().key)[2],1)
+        self.assertEqual(len(self.sent),1);self.assertEqual(self.store.session(message().key)[2],1)
         self.assertEqual(len(self.client.prompts),1)
-    async def test_empty_final_gets_notice_but_silent_stays_silent(self):
+    async def test_empty_and_silent_direct_answers_get_notices(self):
         self.client.answer='';await self.submit()
         self.assertEqual(self.sent,['这次查询没能整理出可用答案，你换个关键词再试试。'])
         self.client.answer='[SILENT]';await self.submit(message(mid='2'))
-        self.assertEqual(len(self.sent),1)
+        self.assertEqual(len(self.sent),2)
+        self.assertNotIn('[SILENT]',self.sent[-1])
     async def test_late_arrival_during_native_search_not_marked_delivered(self):
         async def late():self.store.append(message(mid='late'))
         self.client.callback=late;await self.submit()

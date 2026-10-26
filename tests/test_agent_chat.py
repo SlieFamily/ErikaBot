@@ -268,7 +268,7 @@ class ServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.store.session(message().key)[2], 1)
         self.assertEqual(len(self.client.created), 1)
         self.assertEqual(self.client.stopped, ["session-0"])
-        self.assertEqual(self.sent, [])
+        self.assertEqual(len(self.sent), 1)  # Fixed failure notice; no model answer replay.
         await self.submit(message(mid="2"))
         self.assertEqual(len(self.client.prompts), 1)
 
@@ -277,20 +277,23 @@ class ServiceTests(unittest.IsolatedAsyncioTestCase):
         await self.submit(message())
         self.assertEqual(len(self.sent[0]), 600)
 
-    async def test_silent_does_not_send(self):
+    async def test_direct_silence_gets_a_clarification_instead_of_no_reply(self):
         self.client.answer = "[SILENT]"; await self.submit(message())
-        self.assertEqual(self.sent, [])
+        self.assertEqual(len(self.sent), 1)
+        self.assertNotIn("[SILENT]", self.sent[0])
 
     async def test_preset_change_blocks_old_session(self):
         await self.submit(message()); self.client.policy_value = "new"
         await self.submit(message(mid="2"))
-        self.assertEqual(len(self.sent), 1)
+        self.assertEqual(len(self.sent), 2)  # Previous answer plus safe failure notice.
         self.assertEqual(self.store.session(message().key)[2], 1)
 
     async def test_hourly_limit(self):
         self.service.cfg.agent_chat_max_calls_per_hour = 1
         await self.submit(message()); await self.submit(message(mid="2"))
-        self.assertEqual(len(self.sent), 1)
+        self.assertEqual(len(self.sent), 2)
+        self.assertIn("额度",self.sent[-1])
+        self.assertEqual(len(self.client.prompts),1)
 
     async def test_burst_coalesces_and_limits_cross_chat_concurrency(self):
         self.service.cfg.agent_chat_debounce = .02

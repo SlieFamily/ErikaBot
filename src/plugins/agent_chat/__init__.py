@@ -203,6 +203,7 @@ async def administer(bot: Bot, event: MessageEvent, args: Message = CommandArg()
         quiet_label = (f'{config.agent_chat_quiet_start}:00—{config.agent_chat_quiet_end}:00'
                        if config.agent_chat_quiet_start != config.agent_chat_quiet_end else '关闭（全天可接话）')
         await admin.finish("AI 桥接：" + status +
+            f"\n当前群待处理提问：{service.pending_count(key)} 条；{'有任务处理中或等待调度' if key in service.tasks else '空闲'}。"+
             f"\n近一小时对话回合：{service.store.calls(key, service.local_time().timestamp() - 3600)[0]}/{config.agent_chat_max_calls_per_hour}；排队上限：{config.agent_chat_queue_timeout:g} 秒" +
             f"\nAnySearch 搜索：{'开启' if config.agent_chat_search_enabled else '关闭'}；近一小时搜索回合 {service.store.search_count(key)}/{config.agent_chat_search_max_per_hour}" +
             f"\n读图：{'开启' if config.agent_chat_images_enabled else '关闭'}；随机接话：{config.agent_chat_ambient_probability:.0%}" +

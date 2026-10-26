@@ -108,13 +108,14 @@ class SocialServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result,'哼😏');self.assertEqual(result.reply_to,'1');self.assertEqual(result.faces,(22,))
         self.assertNotIn('secret',result)
 
-    async def test_qq_face_only_is_a_reply_and_silent_remains_silent(self):
+    async def test_qq_face_only_is_a_reply_and_direct_silence_gets_notice(self):
         self.client.answer='QQ_REPLY '+json.dumps({'text':'','reply_to':'','faces':['捂脸']})
         await self.submit(message())
         self.assertEqual(self.sent[0].faces,(264,))
         self.client.answer='QQ_REPLY '+json.dumps({'text':'[SILENT]','reply_to':'','faces':['捂脸']})
         await self.submit(message(mid='2'))
-        self.assertEqual(len(self.sent),1)
+        self.assertEqual(len(self.sent),2)
+        self.assertNotIn('[SILENT]',self.sent[-1])
 
     async def test_forward_metadata_never_leaks_into_normal_prompt(self):
         msg=replace(message(),forwards=('opaque-resource',))

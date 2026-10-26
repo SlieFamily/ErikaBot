@@ -24,7 +24,7 @@ class ChatMessage:
         return asdict(self)
 
 
-def prompt_text(messages, nonce, proactive=False, persona="", remind_persona=False, ambient=False):
+def prompt_text(messages, nonce, proactive=False, persona="", remind_persona=False, ambient=False, direct_ids=()):
     # No slash-command forwarding, role delimiters or interpolation of user-supplied instructions.
     # JSON is data, not an injection defence by itself: the DSH guard is the hard boundary.
     public = [{k: v for k, v in message.items() if k not in {"media","forwards"}} for message in messages]
@@ -47,6 +47,12 @@ def prompt_text(messages, nonce, proactive=False, persona="", remind_persona=Fal
         + ("这是桥接安排的自主发言机会，当前没有新问题。可以自然延续兴趣或话题，说简短的一句；"
            "不要假装有人刚提问、不要催群友回复、不重复前面的回答。没有值得说的内容就输出 [SILENT]。\n"
            if proactive else "")
+        + ("本轮待答的是以下消息ID对应的直接提问：" + json.dumps(list(direct_ids),ensure_ascii=False) + "。"
+           "逐一接住这些群友的问题，合并为一次自然回复；相近的问题可以合答，必要时用各自昵称区分。"
+           "其他消息只是聊天背景，不要漏掉前面的人、只答最后一句，也不要重复回答旧问题。"
+           "不懂就简短问清，不能回答的部分说明一下；直接提问不能用 [SILENT] 略过。"
+           "普通聊天直接说最有用的看法，别为一句闲聊反复铺陈；查资料和处理工具也以解决本轮问题为止。\n"
+           if direct_ids else "")
         + json.dumps(public, ensure_ascii=False)
     )
 

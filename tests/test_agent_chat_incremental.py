@@ -74,7 +74,7 @@ class IncrementalTests(unittest.IsolatedAsyncioTestCase):
         self.client.reply = receive_during_turn
         self.client.answer = '[SILENT]'
         await self.submit(core.message(mid='one'))
-        self.assertEqual(self.sent, [])
+        self.assertEqual(len(self.sent), 1)  # Direct silence produces a clarification.
         self.client.reply = original
         await self.submit(core.message(mid='two'))
         self.assertNotIn('"message_id": "one"', self.payloads(1))
