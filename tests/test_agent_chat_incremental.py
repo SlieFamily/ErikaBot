@@ -48,7 +48,7 @@ class IncrementalTests(unittest.IsolatedAsyncioTestCase):
     async def test_missing_session_rebuilds_full_prompt_and_context(self):
         await self.submit(core.message(mid='one'))
         original = self.client.reply
-        async def missing_once(sid, text):
+        async def missing_once(sid, text, images=None, **kwargs):
             if sid == 'session-0': raise core.dsh.MissingSession('dsh_session_missing')
             return await original(sid, text)
         self.client.reply = missing_once
@@ -68,7 +68,7 @@ class IncrementalTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_new_input_during_generation_remains_pending_and_silence_is_acknowledged(self):
         original = self.client.reply
-        async def receive_during_turn(sid, text):
+        async def receive_during_turn(sid, text, images=None, **kwargs):
             self.service.observe(core.message(mid='arrived-later', directed=False))
             return await original(sid, text)
         self.client.reply = receive_during_turn

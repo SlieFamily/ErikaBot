@@ -1,324 +1,167 @@
-"""Search contract, public-only transport, quotas, continuation and crash recovery."""
+"""Native AnySearch turns, source correlation, quotas and failure boundaries."""
 import asyncio
 import importlib
-import json
 from pathlib import Path
-import re
 import tempfile
 import unittest
 from dataclasses import replace
 from unittest.mock import patch
 
-import httpx
-
-from test_agent_chat import PACKAGE, cfg, domain, dsh, message, Store, ChatService, FakeClient
-
+from test_agent_chat import PACKAGE, cfg, dsh, message, Store, ChatService, FakeClient
 web = importlib.import_module(PACKAGE + '.search')
-RSS = b'<rss><channel><item><title>Example</title><link>https://example.com/article</link><description>Evidence</description></item></channel></rss>'
-RESULT = {'status': 'ok', 'results': [{'id': 1, 'title': 'Example', 'url': 'https://example.com/article', 'snippet': 'Evidence'}]}
+URL = 'https://example.com/article'
 
+class CollectorTests(unittest.TestCase):
+    def collector(self, enabled=True):
+        calls=[]
+        c=dsh.TurnCollector('mine',enabled,lambda:calls.append(1))
+        c.push({'type':'turn/start','data':{'turn':1}})
+        c.push({'type':'user/message','data':{'source':{'kind':'user','rpcId':'mine'}}})
+        return c,calls
+    def call(self,c,cid='a',name='web_search'):
+        return c.push({'type':'tool/call','data':{'turn':1,'name':name,'callId':cid,'arguments':{'queries':['明日堇sumire']}}})
+    def result(self,c,cid='a',error=False,url=URL):
+        return c.push({'type':'tool/result','data':{'turn':1,'message':{'toolCallId':cid,'role':'tool',
+            'source':{'kind':'tool','callId':cid},'isError':error,
+            'content':[{'type':'text','text':'untrusted result'}]},'meta':{'sources':[{'url':url}]}}})
+    def finish(self,c,text='答案'):
+        c.push({'type':'assistant/message','data':{'turn':1,'message':{'content':[{'type':'reasoning','text':'private'}, {'type':'text','text':text}]}}})
+        return c.push({'type':'turn/end','data':{'turn':1,'reason':{'kind':'completed'}}})
+    def test_two_native_searches_same_turn_only_final_answer_and_real_sources(self):
+        c,called=self.collector()
+        c.push({'type':'assistant/message','data':{'turn':1,'message':{'content':[{'type':'text','text':'我去查查'}]}}})
+        self.call(c);self.result(c)
+        self.call(c,'b');self.result(c,'b',url='http://127.0.0.1/private')
+        answer=self.finish(c,'看到了[原文]('+URL+')')
+        self.assertEqual(called,[1]);self.assertEqual(answer.searches,2)
+        self.assertEqual(answer.sources,(URL,))
+        self.assertNotIn('我去查查',answer);self.assertNotIn('private',answer)
+    def test_nonsearch_disabled_foreign_and_excess_calls_fail_closed(self):
+        for enabled,name in [(False,'web_search'),(True,'bash'),(True,'web_fetch'),(True,'anysearch_batch_search')]:
+            c,_=self.collector(enabled)
+            with self.assertRaisesRegex(dsh.BridgeError,'unexpected_tool_call'):self.call(c,name=name)
+        c,_=self.collector();self.call(c);self.result(c);self.call(c,'b');self.result(c,'b')
+        with self.assertRaises(dsh.BridgeError):self.call(c,'c')
+        c=dsh.TurnCollector('mine',True)
+        with self.assertRaises(dsh.BridgeError):self.call(c)
+    def test_unmatched_duplicate_and_missing_results_are_rejected(self):
+        c,_=self.collector()
+        with self.assertRaises(dsh.BridgeError):self.result(c,'foreign')
+        self.call(c)
+        with self.assertRaisesRegex(dsh.BridgeError,'incomplete_tool_results'):self.finish(c)
+        self.result(c)
+        with self.assertRaises(dsh.BridgeError):self.result(c)
+    def test_search_error_can_be_explained_without_trusting_error_sources(self):
+        c,_=self.collector();self.call(c);self.result(c,error=True)
+        answer=self.finish(c,'暂时查不了')
+        self.assertEqual(answer.sources,());self.assertEqual(answer,'暂时查不了')
+    def test_compacted_surface_endpoint_ids_need_not_be_numeric_order(self):
+        c,_=self.collector()
+        c.push({'type':'compaction/start','data':{'turn':1,'compactionId':'c'}})
+        c.push({'type':'user/message','surfaceOp':{'op':'replace','startSeq':182,'endSeq':158},
+            'data':{'source':{'kind':'compact-checkpoint','compactionId':'c'}}})
+        self.assertTrue(c.owned)
+        for start,end in [(-1,2),(1,-1),(True,2)]:
+            with self.assertRaises(dsh.BridgeError):
+                c.push({'type':'user/message','surfaceOp':{'op':'replace','startSeq':start,'endSeq':end},
+                    'data':{'source':{'kind':'compact-checkpoint','compactionId':'c'}}})
 
-def action(nonce, query='命运石之门 官方网站'):
-    return json.dumps({web.ACTION: {'nonce': nonce, 'query': query}}, ensure_ascii=False)
-
-
-class ProtocolTests(unittest.TestCase):
-    def test_focus_must_preserve_complete_public_query_subject(self):
-        value = json.loads(action('n', '四时小路 B站 UP主'))
-        value[web.ACTION]['focus'] = '四时小路'
-        parsed = web.decision(json.dumps(value, ensure_ascii=False), 'n')
-        self.assertEqual(parsed['focus'], '四时小路')
-        for invalid in ['四', '另一人', '13812345678', [], 'x' * 61]:
-            value[web.ACTION]['focus'] = invalid
-            with self.subTest(focus=invalid), self.assertRaises(web.SearchError):
-                web.decision(json.dumps(value, ensure_ascii=False), 'n')
-
-    def test_exact_fresh_action_only(self):
-        self.assertEqual(web.decision('<thinking>hidden</thinking>' + action('n'), 'n')['query'], '命运石之门 官方网站')
-        self.assertIsNone(web.decision('我今天不想打瓦', 'n'))
-        for text in [action('old'), '先搜\n' + action('n'), '```json\n' + action('n') + '\n```',
-                     '{"agent_chat_search": []}', '{"agent_chat_search":',
-                     action('n').replace('"query":', '"url":'), action('n')[:-1] + ',"exec":"x"}']:
-            with self.subTest(text=text), self.assertRaises(web.SearchError):
-                web.decision(text, 'n')
-        self.assertEqual(web.decision(action('n').replace('agent_chat_search', '\\u0061gent_chat_search'), 'n')['query'],
-                         '命运石之门 官方网站')
-        with self.assertRaises(web.SearchError):
-            web.decision(action('n').replace('"query":', '"nonce":"n","query":'), 'n')
-
-    def test_private_queries_never_leave_host(self):
-        for q in ['QQ 818353963', '１３８１２３４５６７８', 'person@example.com', 'api_key abc',
-                  'E:\\secrets', 'https://127.0.0.1/admin', 'cookie abc', 'abc\nsecret', 'x' * 121]:
-            with self.subTest(q=q), self.assertRaises(web.SearchError): web.safe_query(q)
-        with self.assertRaises(web.SearchError): web.safe_query('where is SECRET_VALUE', ['SECRET_VALUE'])
-        self.assertEqual(web.safe_query('2026 CS2 更新 site:counter-strike.net'), '2026 CS2 更新 site:counter-strike.net')
-
-    def test_rss_bounded_deduplicated_and_no_xml_entities(self):
-        self.assertEqual(len(web.parse_rss(RSS)), 1)
-        for raw in [b'<!DOCTYPE x [<!ENTITY e SYSTEM "file:///x">]><rss/>', b'<html>captcha</html>',
-                    b'<rss>broken', b'x' * (web.MAX_BODY + 1), b'<rss>\x00</rss>']:
-            with self.subTest(raw=raw[:30]), self.assertRaises(web.SearchError): web.parse_rss(raw)
-        items = ''.join(f'<item><title>{i}</title><link>https://example.com/{i}</link>'
-                        f'<description>{"a" * 900}</description></item>' for i in range(20))
-        result = web.parse_rss(('<rss><channel>' + items + '</channel></rss>').encode())
-        self.assertEqual(len(result), 3)
-        self.assertEqual(len(result[0]['snippet']), 600)
-        for url in ['file:///etc/passwd', 'http://127.0.0.1/x', 'https://user:secret@public.com', 'http://private.local/x']:
+class OutputTests(unittest.TestCase):
+    def test_only_returned_public_sources_are_sent(self):
+        value=web.final_answer('资料[原文]('+URL+')，假链接 https://evil.com/x', [URL], True,600)
+        self.assertIn(URL,value);self.assertNotIn('evil.com',value)
+        self.assertNotIn('原文](',value)
+        self.assertEqual(web.final_answer('[SILENT]',[URL],True,600),'')
+        for token in ('agent_chat_search','QQ_SEARCH_RESULT',web.CONTROL_PREFIX):
+            self.assertEqual(web.final_answer('leak '+token,[],False,600),'')
+        self.assertEqual(web.final_answer('<tool_call>{"name":"web_search"}</tool_call>',[],False,600),'')
+        self.assertLessEqual(len(web.final_answer('x'*700+' '+URL,[URL],True,100)),100)
+    def test_private_source_url_rejected(self):
+        for url in ['file:///secret','http://127.0.0.1/x','https://u:p@public.com','https://host.internal/x']:
             self.assertFalse(web.public_result_url(url))
 
-    def test_sources_only_from_results_and_no_control_leaks(self):
-        value = web.final_answer('信息[来源1]。伪造[来源9] https://evil.com/path', RESULT, 600)
-        self.assertIn('https://example.com/article', value)
-        self.assertNotIn('evil.com', value)
-        self.assertNotIn('来源9', value)
-        self.assertEqual(web.final_answer(action('n'), RESULT, 600), '')
-        self.assertEqual(web.final_answer('[SILENT]', RESULT, 600), '')
-        self.assertEqual(web.final_answer(action('n').replace('agent_chat_search', '\\u0061gent_chat_search'), RESULT, 600), '')
-        self.assertLessEqual(len(web.final_answer('信息[来源1]' * 300, RESULT, 80)), 80)
-
-
-class TransportTests(unittest.IsolatedAsyncioTestCase):
-    async def test_pinned_transport_no_credentials_no_redirects_group_scoped_cache(self):
-        requests = []
-        async def respond(req):
-            requests.append(req)
-            self.assertEqual(req.url.host, '8.8.8.8')
-            self.assertEqual(req.headers['Host'], 'cn.bing.com')
-            self.assertEqual(req.extensions['sni_hostname'], 'cn.bing.com')
-            self.assertNotIn('authorization', req.headers)
-            self.assertNotIn('cookie', req.headers)
-            self.assertNotIn('DSH', str(req.url))
-            return httpx.Response(200, content=RSS)
-        async def resolve(host): return ['8.8.8.8']
-        backend = web.BingSearch(cfg(), httpx.AsyncClient(transport=httpx.MockTransport(respond)), resolve)
-        try:
-            await backend.search('bot:group:1', 'public topic')
-            self.assertTrue((await backend.search('bot:group:1', 'public topic'))['cached'])
-            await backend.search('bot:group:2', 'public topic')
-            self.assertEqual(len(requests), 2)
-        finally: await backend.close()
-
-    async def test_private_dns_mixed_dns_redirect_and_large_response_rejected(self):
-        for addresses, response in [(['127.0.0.1'], httpx.Response(200, content=RSS)),
-                (['8.8.8.8', '10.1.1.1'], httpx.Response(200, content=RSS)),
-                (['8.8.8.8'], httpx.Response(302, headers={'location': 'http://localhost/'})),
-                (['8.8.8.8'], httpx.Response(200, headers={'content-length': '9999999'})),
-                (['8.8.8.8'], httpx.Response(200, content=b'x' * (web.MAX_BODY + 1)))]:
-            async def resolve(host): return addresses
-            backend = web.BingSearch(cfg(), httpx.AsyncClient(transport=httpx.MockTransport(lambda _: response)), resolve)
-            try:
-                with self.assertRaises(web.SearchError): await backend.search('group', 'public topic')
-            finally: await backend.close()
-
-    async def test_timeout_includes_dns_and_queue(self):
-        async def resolve(host): await asyncio.sleep(10)
-        backend = web.BingSearch(cfg().copy(update={'agent_chat_search_timeout': .02}), resolve=resolve)
-        try:
-            with self.assertRaisesRegex(web.SearchError, 'search_timeout'): await backend.search('g', 'public')
-        finally: await backend.close()
-
-    async def test_bing_single_character_broadening_retries_exact_name_once(self):
-        backend = web.BingSearch(cfg())
-        seen = []
-        async def fetch(query):
-            seen.append(query)
-            if len(seen) == 1:
-                return [{'id':1,'title':'四（汉字）','snippet':'数字四','url':'https://example.com/four'}]
-            return [{'id':1,'title':'四（汉字）','snippet':'数字四','url':'https://example.com/four'},
-                    {'id':2,'title':'四时小路Komichi的个人空间','snippet':'B站主页','url':'https://example.com/komichi'}]
-        backend._fetch = fetch
-        try:
-            result = await backend.search('g', '四时小路 B站 UP主 site:bilibili.com', focus='四时小路')
-            self.assertEqual(seen, ['四时小路 B站 UP主 site:bilibili.com', '"四时小路"'])
-            self.assertEqual(len(result['results']), 1)
-            self.assertEqual(result['results'][0]['id'], 1)
-            self.assertEqual(result['focus'], '四时小路')
-            self.assertTrue(result['exact_retry'])
-            self.assertTrue((await backend.search('g', seen[0], focus='四时小路'))['cached'])
-            self.assertEqual(len(seen), 2)
-        finally: await backend.close()
-
-    async def test_unrelated_results_never_filled_as_other_person_and_no_loop(self):
-        backend = web.BingSearch(cfg()); seen = []
-        async def fetch(query):
-            seen.append(query)
-            return [{'id':1,'title':'闪闪','snippet':'同名字词','url':'https://example.com/wrong'}]
-        backend._fetch = fetch
-        try:
-            result = await backend.search('g', '"闪闪闪闪星" B站 主播')
-            self.assertEqual(result['status'], 'empty')
-            self.assertEqual(result['results'], [])
-            self.assertEqual(len(seen), 2)
-        finally: await backend.close()
-
-    async def test_matching_primary_results_do_not_repeat_network_query(self):
-        backend = web.BingSearch(cfg()); seen = []
-        async def fetch(query):
-            seen.append(query)
-            return [{'id':1,'title':'四时小路','snippet':'主页','url':'https://example.com/correct'}]
-        backend._fetch = fetch
-        try:
-            result = await backend.search('g', '四时小路')
-            self.assertFalse(result['exact_retry'])
-            self.assertEqual(len(seen), 1)
-        finally: await backend.close()
-
-
-class SearchClient(FakeClient):
-    async def reply(self, sid, text):
-        self.prompts.append((sid, text))
-        if 'QQ_SEARCH_RESULT' in text:
-            if self.error: raise self.error
-            return self.answer
-        nonce = re.search(r'"nonce": "([a-f0-9]+)"', text)
-        return action(nonce[1]) if nonce else '直接回答'
-
-
-class FakeSearch:
-    def __init__(self): self.calls = []; self.error = None; self.callback = None
-    async def search(self, key, query, focus=''):
-        self.calls.append((key, query))
-        if self.callback: self.callback()
-        if self.error: raise self.error
-        return RESULT
-    async def close(self): pass
-
+class NativeClient(FakeClient):
+    def __init__(self):
+        super().__init__();self.answer='查到了[来源]('+URL+')';self.callback=None;self.searches=0;self.enabled=[]
+    async def reply(self,sid,text,images=None,*,search_enabled=False,on_search=None):
+        self.prompts.append((sid,text));self.enabled.append(search_enabled)
+        if search_enabled:
+            on_search();self.searches+=1
+            if self.callback:await self.callback()
+            if self.error:raise self.error
+            return dsh.ReplyText(self.answer,1,[URL])
+        return '直接回答'
 
 class ServiceSearchTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.path = Path(self.tmp.name) / 'test.sqlite3'
-        self.store = Store(self.path)
-        self.client = SearchClient(); self.client.answer = '查到了[来源1]'
-        self.backend = FakeSearch(); self.sent = []
-        self.service = ChatService(cfg(agent_chat_search_enabled=True), self.store, self.client, self.backend)
+        self.tmp=tempfile.TemporaryDirectory();self.path=Path(self.tmp.name)/'test.sqlite3'
+        self.store=Store(self.path);self.client=NativeClient();self.sent=[]
+        self.service=ChatService(cfg(agent_chat_search_enabled=True),self.store,self.client)
     async def asyncTearDown(self):
-        await self.service.close(); self.tmp.cleanup()
-    async def submit(self, msg=None):
-        msg = msg or message()
-        async def send(text): self.sent.append(text)
-        self.service.observe(msg); self.service.schedule(msg, send)
+        await self.service.close();self.tmp.cleanup()
+    async def submit(self,msg=None):
+        msg=msg or message()
+        async def send(text):self.sent.append(text)
+        self.service.observe(msg);self.service.schedule(msg,send)
         await asyncio.gather(*list(self.service.tasks.values()))
-
-    async def test_search_uses_same_session_two_calls_and_no_role_or_chat_replay(self):
+    async def test_one_dsh_turn_native_search_and_digestion_no_python_followup(self):
         await self.submit()
-        self.assertEqual(len(self.backend.calls), 1)
-        self.assertEqual(len(self.client.prompts), 2)
-        self.assertEqual(self.client.prompts[0][0], self.client.prompts[1][0])
-        self.assertNotIn('ADMIN_ROLE_CANARY', self.client.prompts[1][1])
-        self.assertNotIn('"message_id"', self.client.prompts[1][1])
-        self.assertEqual(self.store.calls(message().key, 0)[0], 2)
-        self.assertEqual(len(self.sent), 1)
-        self.assertNotIn(web.ACTION, self.sent[0])
-        self.assertIn('https://example.com/article', self.sent[0])
-        self.assertEqual(self.store.db.execute('SELECT stage FROM searches').fetchone()[0], 'sent')
-
-    async def test_ordinary_conversation_one_call_no_search(self):
-        self.service.client = FakeClient()
-        await self.submit()
-        self.assertEqual(len(self.backend.calls), 0)
-        self.assertEqual(len(self.service.client.prompts), 1)
-
-    async def test_random_search_disabled_by_default_and_opt_in(self):
-        self.service.cfg.agent_chat_ambient_probability = .1
-        with patch.object(self.service, 'quiet', return_value=False), patch('random.random', return_value=0):
-            await self.submit(replace(message(), directed=False))
-            self.assertEqual(len(self.backend.calls), 0)
-            self.service.cfg.agent_chat_search_ambient = True
-            await self.submit(replace(message(mid='2'), directed=False))
-        self.assertEqual(len(self.backend.calls), 1)
-
-    async def test_bad_action_gives_notice_without_control_leak_or_suspension(self):
-        self.service.client = FakeClient()
-        self.service.client.answer = action('stale', '818353963')
-        await self.submit()
-        self.assertEqual(len(self.sent), 1)
-        self.assertNotIn('agent_chat_search', self.sent[0])
-        self.assertNotIn('818353963', self.sent[0])
-        self.assertEqual(self.backend.calls, [])
-        self.assertEqual(self.store.session(message().key)[2], 0)
-
-    async def test_cancel_during_search_suspends_and_never_sends(self):
-        entered = asyncio.Event()
-        async def block(key, query, focus=''):
-            entered.set()
-            await asyncio.Event().wait()
-        self.backend.search = block
-        msg = message()
-        async def send(text): self.sent.append(text)
-        self.service.observe(msg); self.service.schedule(msg, send)
-        await asyncio.wait_for(entered.wait(), 5)
-        task = self.service.tasks[msg.key]
-        task.cancel(); await asyncio.gather(task, return_exceptions=True)
-        self.assertEqual(self.sent, [])
-        self.assertEqual(self.store.session(msg.key)[2], 1)
-        self.assertEqual(self.store.db.execute('SELECT stage FROM searches').fetchone()[0], 'cancelled')
-
-    async def test_no_search_if_only_one_model_call_remains(self):
-        self.service.cfg = cfg(agent_chat_search_enabled=True, agent_chat_max_calls_per_hour=1)
-        await self.submit()
-        self.assertEqual(len(self.backend.calls), 0)
-        self.assertEqual(self.sent, ['直接回答'])
-
-    async def test_search_quota_persists_across_reset(self):
-        self.service.cfg = cfg(agent_chat_search_enabled=True, agent_chat_search_max_per_hour=1)
-        await self.submit()
+        self.assertEqual(len(self.client.prompts),1);self.assertEqual(self.client.searches,1)
+        self.assertEqual(self.store.calls(message().key,0)[0],1)
+        self.assertEqual(self.store.search_count(message().key),1)
+        self.assertEqual(self.store.db.execute('SELECT stage FROM searches').fetchone()[0],'sent')
+        self.assertIn(URL,self.sent[0])
+    async def test_smalltalk_no_search_does_not_consume_search_quota(self):
+        self.service.client=FakeClient();await self.submit()
+        self.assertEqual(self.store.search_count(message().key),0)
+        self.assertEqual(len(self.service.client.prompts),1)
+    async def test_random_search_requires_opt_in(self):
+        self.service.cfg.agent_chat_ambient_probability=.1
+        with patch.object(self.service,'quiet',return_value=False),patch('random.random',return_value=0):
+            await self.submit(replace(message(),directed=False))
+            self.assertEqual(self.client.searches,0)
+            self.service.cfg.agent_chat_search_ambient=True
+            await self.submit(replace(message(mid='2'),directed=False))
+            self.assertEqual(self.client.searches,1)
+    async def test_search_fits_one_remaining_turn_and_quota_survives_reset(self):
+        self.service.cfg=cfg(agent_chat_search_enabled=True,agent_chat_max_calls_per_hour=1)
+        await self.submit();self.assertEqual(self.client.searches,1)
+        self.service.cfg=cfg(agent_chat_search_enabled=True,agent_chat_search_max_per_hour=1)
         await self.service.reset(message().key)
         await self.submit(message(mid='2'))
-        self.assertEqual(len(self.backend.calls), 1)
-        self.assertEqual(self.sent[-1], '直接回答')
+        self.assertEqual(self.client.searches,1);self.assertFalse(self.client.enabled[-1])
+    async def test_cancel_during_native_search_suspends_no_send(self):
+        entered=asyncio.Event()
+        async def block():entered.set();await asyncio.Event().wait()
+        self.client.callback=block
+        task=asyncio.create_task(self.submit())
+        await asyncio.wait_for(entered.wait(),5)
+        self.service.tasks[message().key].cancel();await asyncio.gather(task,return_exceptions=True)
+        self.assertFalse(self.sent);self.assertEqual(self.store.session(message().key)[2],1)
+        self.assertEqual(self.store.db.execute('SELECT stage FROM searches').fetchone()[0],'cancelled')
+    async def test_model_failure_suspends_and_does_not_retry(self):
+        self.client.error=dsh.BridgeError('test_timeout');await self.submit()
+        self.assertFalse(self.sent);self.assertEqual(self.store.session(message().key)[2],1)
+        self.assertEqual(len(self.client.prompts),1)
+    async def test_empty_final_gets_notice_but_silent_stays_silent(self):
+        self.client.answer='';await self.submit()
+        self.assertEqual(self.sent,['这次查询没能整理出可用答案，你换个关键词再试试。'])
+        self.client.answer='[SILENT]';await self.submit(message(mid='2'))
+        self.assertEqual(len(self.sent),1)
+    async def test_late_arrival_during_native_search_not_marked_delivered(self):
+        async def late():self.store.append(message(mid='late'))
+        self.client.callback=late;await self.submit()
+        sid=self.store.session(message().key)[0]
+        after=self.store.delivery(message().key,sid)[0]
+        pending,_=self.store.pending_messages(message().key,20,after)
+        self.assertEqual([m['message_id'] for m in pending],['late'])
+    async def test_legacy_action_never_published(self):
+        self.service.client=FakeClient();self.service.client.answer='{"agent_chat_search": {"query":"private"}}'
+        await self.submit();self.assertEqual(len(self.sent),1);self.assertNotIn('private',self.sent[0])
+    async def test_interrupted_native_search_not_replayed_after_restart(self):
+        self.store.bind('g','sid','policy');dispatch=self.store.begin('g');self.store.begin_search('g',dispatch,6)
+        self.store.close();self.store=Store(self.path);self.service.store=self.store
+        self.assertEqual(self.store.session('g')[2],1)
+        self.assertEqual(self.store.db.execute('SELECT stage FROM searches').fetchone()[0],'interrupted')
 
-    async def test_network_failure_is_digested_without_suspending_session(self):
-        self.backend.error = web.SearchError('search_timeout')
-        self.client.answer = '暂时没查到，先不瞎讲。'
-        await self.submit()
-        self.assertIn('"status": "unavailable"', self.client.prompts[-1][1])
-        self.assertEqual(self.store.session(message().key)[2], 0)
-        self.assertEqual(len(self.sent), 1)
-
-    async def test_second_model_failure_suspends_without_qq_send(self):
-        self.client.error = dsh.BridgeError('test_timeout')
-        await self.submit()
-        self.assertEqual(self.store.session(message().key)[2], 1)
-        self.assertEqual(self.sent, [])
-
-    async def test_no_recursive_search_or_control_send(self):
-        self.client.answer = action('wrong')
-        await self.submit()
-        self.assertEqual(len(self.backend.calls), 1)
-        self.assertEqual(len(self.client.prompts), 2)
-        self.assertEqual(self.sent, ['这次查询没能整理出可用答案，你换个关键词再试试。'])
-
-    async def test_completed_search_without_final_text_gives_notice_not_reasoning(self):
-        self.client.answer = ''
-        await self.submit()
-        self.assertEqual(self.sent, ['这次查询没能整理出可用答案，你换个关键词再试试。'])
-        self.assertEqual(len(self.client.prompts), 2)
-        self.assertEqual(self.store.session(message().key)[2], 0)
-        self.assertEqual(self.store.db.execute('SELECT stage FROM searches').fetchone()[0], 'sent')
-
-    async def test_late_arrival_during_search_not_marked_delivered(self):
-        self.backend.callback = lambda: self.store.append(message(mid='late'))
-        await self.submit()
-        sid = self.store.session(message().key)[0]
-        after = self.store.delivery(message().key, sid)[0]
-        pending, _ = self.store.pending_messages(message().key, 20, after)
-        self.assertEqual([m['message_id'] for m in pending], ['late'])
-
-    async def test_deliberate_silence_after_search(self):
-        self.client.answer = '[SILENT]'
-        await self.submit()
-        self.assertFalse(self.sent)
-        self.assertEqual(self.store.session(message().key)[2], 0)
-
-    async def test_crash_in_search_chain_not_replayed(self):
-        self.store.bind('g', 'sid', 'policy')
-        first = self.store.begin('g'); self.store.begin_search('g', first, 6)
-        self.store.begin('g'); self.store.search_stage(first, 'answering')
-        self.store.close(); self.store = Store(self.path); self.service.store = self.store
-        self.assertEqual(self.store.session('g')[2], 1)
-        self.assertEqual(self.store.db.execute('SELECT stage FROM searches').fetchone()[0], 'interrupted')
-        self.assertEqual(self.store.calls('g', 0)[0], 2)
-
-
-if __name__ == '__main__': unittest.main()
+if __name__ == '__main__':unittest.main()

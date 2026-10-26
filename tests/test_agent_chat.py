@@ -79,7 +79,10 @@ class ConfigTests(unittest.TestCase):
                        lambda r: r[0].update(name="qq-agent-presets/qq-tool-restrict.mjs"),
                        lambda r: r[1]["config"].update(includeRuntimeContext=True),
                        lambda r: r[2].update(isolate={}),
-                       lambda r: r[2]["config"].append({"name": "@deepseek-ai/dsh-tool-bash"})]:
+                       lambda r: r[2]["config"].append({"name": "@deepseek-ai/dsh-tool-bash"}),
+                       lambda r: r[3]['config'].update(fetch=True),
+                       lambda r: r[3]['config'].update(searchMaxQueries=2),
+                       lambda r: r[3]['config'].update(searchTimeoutMs=90000)]:
             modified = yaml.safe_load(valid)
             change(modified)
             with self.assertRaises(dsh.BridgeError): dsh.validate_preset(yaml.safe_dump(modified))
@@ -202,7 +205,7 @@ class FakeClient:
     async def context_state(self, sid, since=None): return len(self.prompts) * 10, since is None
     async def create_session(self):
         sid = "session-" + str(len(self.created)); self.created.append(sid); return sid
-    async def reply(self, sid, text):
+    async def reply(self, sid, text, images=None, **kwargs):
         self.prompts.append((sid, text))
         if self.error: raise self.error
         return self.answer
@@ -294,7 +297,7 @@ class ServiceTests(unittest.IsolatedAsyncioTestCase):
         active = set()
         peak = 0
         original = self.client.reply
-        async def slow(sid, text):
+        async def slow(sid, text, images=None, **kwargs):
             nonlocal peak
             self.assertNotIn(sid, active)
             active.add(sid); peak = max(peak, len(active))

@@ -80,7 +80,7 @@ class ProactiveTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.store.activity(self.key)[6], 1)
 
     async def test_new_message_during_generation_discards_stale_autonomous_answer(self):
-        async def reply(sid, text):
+        async def reply(sid, text, images=None, **kwargs):
             self.service.observe(core.message(mid='new'))
             return 'too late'
         self.client.reply = reply

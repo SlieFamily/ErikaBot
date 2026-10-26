@@ -51,6 +51,13 @@ class WireTests(unittest.IsolatedAsyncioTestCase):
                 elif self.mode == "tool":
                     await self.emit({"type":"tool/call", "data":{"name":"bash"}})
                 else:
+                    if self.mode == 'native-search':
+                        await self.emit({'type':'tool/call','data':{'turn':3,'name':'web_search','callId':'search-1',
+                            'arguments':{'queries':['明日堇sumire']}}})
+                        await self.emit({'type':'tool/result','data':{'turn':3,
+                            'message':{'toolCallId':'search-1','role':'tool','source':{'kind':'tool','callId':'search-1'},
+                                       'content':[{'type':'text','text':'evidence'}]},
+                            'meta':{'sources':[{'url':'https://example.com/evidence'}]}}})
                     await self.emit({"type":"assistant/chunk", "data":{"turn":3,"text":"新回复"}})
                     await self.emit({"type":"assistant/message", "data":{"turn":3,"message":{"content":[{"type":"text","text":"新回复"}]}}})
                     await self.emit({"type":"turn/end", "data":{"turn":3,"reason":{"kind":"completed"}}})
@@ -106,6 +113,20 @@ class WireTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.client.reply(sid, "QQ_CHAT_EVENT test"), "新回复")
         self.assertEqual(self.prompts[0]["sessionId"], sid)
         self.assertTrue(self.prompts[0]["requestId"])
+
+    async def test_native_search_control_bound_to_current_rpc_and_sources_collected(self):
+        self.mode = 'native-search'
+        calls = []
+        result = await self.client.reply('session-1', 'QQ_CHAT_EVENT test', search_enabled=True,
+                                         on_search=lambda: calls.append(1))
+        header = self.prompts[0]['content'][0]['text'].split('\n', 1)[0]
+        control = json.loads(header.removeprefix('QQ_BRIDGE_SEARCH_POLICY '))
+        self.assertTrue(control['enabled'])
+        self.assertEqual(control['rpcId'], self.prompts[0]['requestId'])
+        self.assertEqual(control['sessionId'], 'session-1')
+        self.assertEqual(calls, [1])
+        self.assertEqual(result.searches, 1)
+        self.assertEqual(result.sources, ('https://example.com/evidence',))
 
     async def test_forwarded_persona_is_extracted_only_after_validating_same_preset(self):
         fingerprint, persona = await self.client.policy_with_persona()

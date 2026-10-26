@@ -8,7 +8,7 @@
 
 `ai 状态` 查看当前对话和功能开关，`ai 重置` 清理当前映射后重新建立会话，二者仅限 NoneBot 超级用户。默认 AI 接管指向机器人的消息；既有显式命令优先，`their_ana` 实际发出语录时 AI 不重复回复。关闭 AI 或关闭接管后保留原有语录路径。
 
-联网搜索已支持：开启 `AGENT_CHAT_SEARCH_ENABLED` 后，AI 自主决定是否查询 Bing，再消化资料回复并按需附来源，无需额外 Key。随机/主动发言的搜索默认关闭；完整等待机制和语音识别尚未实装。配置与全部边界见 [agent_chat 使用说明](agent_chat.md)，角色与群配置见 [角色设置](../roles/README.md)，与参考项目的差异见 [后续计划](agent_chat_roadmap.md)。
+联网搜索已支持：开启 `AGENT_CHAT_SEARCH_ENABLED` 后，AI 自主调用 DSH 已安装的 AnySearch web_search，再消化资料回复并按需附来源；凭据与用量由 DSH/AnySearch 管理。随机/主动发言的搜索默认关闭；完整等待机制和语音识别尚未实装。配置与全部边界见 [agent_chat 使用说明](agent_chat.md)，角色与群配置见 [角色设置](../roles/README.md)，与参考项目的差异见 [后续计划](agent_chat_roadmap.md)。
 
 ## 绘梨花特性
 

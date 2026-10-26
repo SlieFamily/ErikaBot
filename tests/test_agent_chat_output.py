@@ -57,7 +57,7 @@ class DeliveryTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_image_unsupported_falls_back_once_without_suspending_text_chat(self):
         requests = []
-        async def reply(sid, text, images=None):
+        async def reply(sid, text, images=None, **kwargs):
             requests.append(images)
             if images:
                 raise core.dsh.ImageUnsupported('model_does_not_support_images')

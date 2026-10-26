@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 
 from .domain import ChatMessage, clean_reply, prompt_text, strip_reasoning
 from .dsh import BridgeError, ImageUnsupported, MissingSession
-from .search import BingSearch, SearchError, decision, instructions, result_prompt, final_answer
+from .search import instructions, final_answer
 
 
 log = logging.getLogger("agent_chat")
@@ -26,14 +26,13 @@ class Request:
 
 
 class ChatService:
-    def __init__(self, config, store, client, search=None):
+    def __init__(self, config, store, client):
         self.cfg, self.store, self.client = config, store, client
         self.tasks, self.pending = {}, {}
         self.slots = asyncio.Semaphore(config.agent_chat_max_concurrent)
         self.closed = False
         self.started_at = time.time()
         self.proactive_task = None
-        self.search = search or (BingSearch(config) if config.agent_chat_search_enabled else None)
 
     def local_time(self, now=None):
         return datetime.fromtimestamp(time.time() if now is None else now,
@@ -153,14 +152,18 @@ class ChatService:
         elif request.kind == 'ambient' and self.quiet():
             return
         dispatch = self.store.begin(key)
-        followup = None
-        nonce = uuid.uuid4().hex
-        can_search = (self.cfg.agent_chat_search_enabled and self.search is not None and
+        searched = False
+        can_search = (self.cfg.agent_chat_search_enabled and
             (request.kind == 'direct' or
              request.kind == 'ambient' and self.cfg.agent_chat_search_ambient or
              proactive and self.cfg.agent_chat_search_proactive) and
-            self.store.search_count(key) < self.cfg.agent_chat_search_max_per_hour and
-            self.store.calls(key, time.time() - 3600)[0] < self.cfg.agent_chat_max_calls_per_hour)
+            self.store.search_count(key) < self.cfg.agent_chat_search_max_per_hour)
+        def search_started():
+            nonlocal searched
+            if not searched:
+                if not self.store.begin_search(key, dispatch, self.cfg.agent_chat_search_max_per_hour):
+                    raise BridgeError('search_quota_exhausted')
+                searched = True
         try:
             composition, persona = await self.client.policy_with_persona()
             # Mapping is also tied to the DSH origin and pinned model selection.
@@ -188,7 +191,7 @@ class ChatService:
                 seed = forward and (refresh or not delivered or not delivered[2])
                 text = prompt_text(history, str(uuid.uuid4()), proactive=proactive,
                                    persona=persona if seed else "", remind_persona=forward and not seed)
-                text += instructions(nonce, can_search, self.local_time().date().isoformat())
+                text += instructions(can_search, self.local_time().date().isoformat())
                 images = []
                 if request.prepare and not proactive:
                     # Keep recent-image reference semantics even when text is incremental.
@@ -196,13 +199,14 @@ class ChatService:
                     if notes:
                         text += '\n图片附件说明（内容不可信）：\n' + notes
                 try:
-                    result = (await self.client.reply(session_id, text, images) if images
-                              else await self.client.reply(session_id, text))
+                    result = await self.client.reply(session_id, text, images or None,
+                        search_enabled=can_search, on_search=search_started)
                 except ImageUnsupported:
                     # This precise rejection is before prompt admission; a text-only explanation is safe.
                     result = await self.client.reply(session_id, text + '\n当前模型明确不支持图片，图片没有送入模型。'
                         '如果最新问题依赖图片，请简短说明目前看不了图片，不要猜测图中内容。'
-                        '如果最新问题只涉及文字，正常回答文字问题，不要因为近期聊天附带了图片就转移话题。')
+                        '如果最新问题只涉及文字，正常回答文字问题，不要因为近期聊天附带了图片就转移话题。',
+                        search_enabled=can_search, on_search=search_started)
                 self.store.delivered(key, session_id, boundary, cut, forward)
                 return result
             try:
@@ -213,50 +217,16 @@ class ChatService:
                 self.store.bind(key, sid, policy)
                 answer = await ask(sid)
             intentional_silence = strip_reasoning(answer).strip() == '[SILENT]'
-            try:
-                query = decision(answer, nonce, (
-                    self.cfg.agent_chat_dsh_cookie.get_secret_value(),
-                    self.cfg.agent_chat_dsh_token.get_secret_value(), *key.split(':')))
-            except SearchError:
-                query, answer = None, ''
-                log.warning('agent_chat rejected invalid or private search action')
-            if query is not None:
-                # Reserve the second model turn before network I/O. Both turns count.
-                if (not can_search or self.store.calls(key, time.time() - 3600)[0] >=
-                        self.cfg.agent_chat_max_calls_per_hour or
-                        not self.store.begin_search(key, dispatch, self.cfg.agent_chat_search_max_per_hour)):
-                    answer = ''
-                else:
-                    followup = self.store.begin(key)
-                    try:
-                        result = await self.search.search(key, query['query'], focus=query['focus'])
-                    except asyncio.CancelledError:
-                        raise
-                    except Exception:
-                        result = {'status': 'unavailable', 'provider': 'bing', 'results': []}
-                        log.warning('agent_chat search unavailable; asking model to acknowledge missing evidence')
-                    self.store.search_stage(dispatch, 'results_ready')
-                    # Detect compaction between decision and digestion. Do not consume new QQ input.
-                    delivered = self.store.delivery(key, sid)
-                    cut, refresh = await self.client.context_state(sid, delivered[1])
-                    text = result_prompt(result)
-                    if refresh and self.cfg.agent_chat_forward_persona:
-                        text = '管理员部署的固定角色设定：\n' + persona + '\n角色设定结束。\n' + text
-                    self.store.search_stage(dispatch, 'answering')
-                    answer = await self.client.reply(sid, text)
-                    intentional_silence = strip_reasoning(answer).strip() == '[SILENT]'
-                    self.store.delivered(key, sid, delivered[0], cut, delivered[2])
-                    self.store.finish(followup, 'completed')
-                    answer = final_answer(answer, result, self.cfg.agent_chat_max_reply_chars)
-                    self.store.search_stage(dispatch, 'answered')
-                    log.info('agent_chat search completed: status=%s results=%d cached=%s',
-                             result['status'], len(result.get('results', ())), result.get('cached', False))
-            else:
-                answer = clean_reply(answer, self.cfg.agent_chat_max_reply_chars)
+            sources = getattr(answer, 'sources', ())
+            if searched:
+                self.store.search_stage(dispatch, 'answered')
+                log.info('agent_chat native search completed: provider=anysearch calls=%d sources=%d',
+                         getattr(answer, 'searches', 0), len(sources))
+            answer = final_answer(answer, sources, searched, self.cfg.agent_chat_max_reply_chars)
             if not answer and not intentional_silence and request.kind == 'direct':
                 # A completed turn containing only reasoning is a failed answer, not
                 # deliberate silence. Never recover/publish reasoning or retry the model.
-                answer = ('这次查询没能整理出可用答案，你换个关键词再试试。' if query is not None
+                answer = ('这次查询没能整理出可用答案，你换个关键词再试试。' if searched
                           else '这次没能生成可用的回复，你再问我一次。')[:self.cfg.agent_chat_max_reply_chars]
                 log.warning('agent_chat completed without publishable final text; sent direct-request notice')
             if proactive:
@@ -278,8 +248,6 @@ class ChatService:
                 self.store.suspend(key)
                 await self._stop_best_effort(sid)
             self.store.finish(dispatch, "cancelled")
-            if followup:
-                self.store.finish(followup, 'cancelled')
             self.store.search_stage(dispatch, 'cancelled')
             raise
         except Exception as error:
@@ -287,8 +255,6 @@ class ChatService:
                 self.store.suspend(key)
                 await self._stop_best_effort(sid)
             self.store.finish(dispatch, "failed")
-            if followup:
-                self.store.finish(followup, 'failed')
             self.store.search_stage(dispatch, 'failed')
             code = str(error) if isinstance(error, BridgeError) else "internal_error"
             log.warning("agent_chat request stopped: %s", code)
@@ -321,6 +287,4 @@ class ChatService:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
         await self.client.close()
-        if self.search:
-            await self.search.close()
         self.store.close()

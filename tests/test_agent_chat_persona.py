@@ -31,7 +31,7 @@ process.stdout.write(renderPreset(template, role));
         self.assertEqual(len(rows), 1)
         self.assertEqual(len(rows[0]["insert"]), 1)
         plugins = rows[0]["insert"][0]["config"]["plugins"]
-        self.assertEqual(len(plugins), 3)
+        self.assertEqual(len(plugins), 4)
         dsh.validate_preset(yaml.safe_dump(plugins, allow_unicode=True))
         return plugins[1]["config"]["prefix"]
 
@@ -39,7 +39,8 @@ process.stdout.write(renderPreset(template, role));
         prefix = self.render()
         card = (ROOT / "roles/古户绘梨花.md").read_text(encoding="utf-8").strip()
         self.assertTrue(prefix.endswith(card))
-        self.assertIn("你没有工具权限", prefix)
+        self.assertIn("原生 web_search", prefix)
+        self.assertIn("其他工具全部禁止", prefix)
         self.assertNotIn("__AGENT_CHAT_ROLE_CARD__", prefix)
 
     def test_incomplete_persona_is_rejected(self):

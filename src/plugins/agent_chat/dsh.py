@@ -8,6 +8,7 @@ import hashlib
 import json
 import logging
 import re
+import time
 import uuid
 
 import httpx
@@ -16,6 +17,7 @@ from websockets.legacy.client import Connect
 import yaml
 
 from .config import GUARD_MODULE, PRESET_ID
+from .search import CONTROL_PREFIX, public_result_url
 
 
 class BridgeError(Exception):
@@ -58,7 +60,7 @@ def validate_preset(content):
         rows = yaml.safe_load(content)
     except yaml.YAMLError:
         raise BridgeError("invalid_preset") from None
-    if not isinstance(rows, list) or len(rows) != 3:
+    if not isinstance(rows, list) or len(rows) != 4:
         raise BridgeError("unsafe_preset_composition")
     expected = [GUARD_MODULE, "@deepseek-ai/dsh-persona"]
     for row, name in zip(rows[:2], expected):
@@ -84,17 +86,32 @@ def validate_preset(content):
         raise BridgeError("unsafe_persona_configuration")
     if "{{" in persona["prefix"]:
         raise BridgeError("persona_templates_not_allowed")
+    web = rows[3]
+    if (not isinstance(web, dict) or set(web) - {'id', 'name', 'config'} or
+            web.get('name') != '@deepseek-ai/dsh-tool-web' or web.get('config') != {
+                'search': True, 'fetch': False, 'searchMaxResults': 3,
+                'searchMaxQueries': 1, 'searchTimeoutMs': 20000}):
+        raise BridgeError('unsafe_search_configuration')
     return hashlib.sha256(json.dumps(rows, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+
+
+class ReplyText(str):
+    def __new__(cls, text, searches=0, sources=()):
+        value = super().__new__(cls, text)
+        value.searches, value.sources = searches, tuple(sources)
+        return value
 
 
 class TurnCollector:
     """Only return a turn containing OUR user message; never replay snapshot output."""
-    def __init__(self, rpc_id):
+    def __init__(self, rpc_id, search_enabled=False, on_search=None):
         self.rpc_id = rpc_id
         self.turn = None
         self.owned = False
         self.text = ""
         self.compactions = set()
+        self.search_enabled, self.on_search = search_enabled, on_search
+        self.search_calls, self.search_results, self.sources = set(), set(), []
 
     def push(self, event):
         kind, data = event.get("type"), event.get("data", {})
@@ -102,7 +119,7 @@ class TurnCollector:
             self.turn = data.get("turn")
             self.owned, self.text = False, ""
             self.compactions.clear()
-        elif kind == "compaction/start" and data.get("turn") == self.turn:
+        elif kind == "compaction/start" and self.turn is not None and data.get("turn") == self.turn:
             cid = data.get("compactionId")
             if isinstance(cid, str) and cid:
                 self.compactions.add(cid)
@@ -124,8 +141,9 @@ class TurnCollector:
             if (source.get("kind") == "compact-checkpoint" and
                     source.get("compactionId") in self.compactions and isinstance(op, dict) and
                     op.get("op") == "replace" and type(op.get("startSeq")) is int and
-                    type(op.get("endSeq")) is int and 0 <= op["startSeq"] <= op["endSeq"]):
+                    type(op.get("endSeq")) is int and op["startSeq"] >= 0 and op["endSeq"] >= 0):
                 # DSH's correlated history replacement is not a second human input.
+                # Endpoints follow surface order, not numeric order after compaction.
                 # Never establish ownership or copy the summary into the QQ answer.
                 return None
             if source.get("kind") == "user" and source.get("rpcId") == self.rpc_id:
@@ -134,8 +152,30 @@ class TurnCollector:
                 # Dedicated bridge sessions must not be manually chatted in concurrently.
                 raise BridgeError("concurrent_session_input")
         elif kind == "tool/call":
-            # Defence-in-depth detector, NOT the execution guard. DSH guard enforces denial.
-            raise BridgeError("unexpected_tool_call")
+            # Defence-in-depth detector, NOT the host-side execution guard.
+            cid = data.get('callId')
+            if (not self.search_enabled or not self.owned or data.get('turn') != self.turn or
+                    data.get('name') != 'web_search' or not isinstance(cid, str) or not cid or
+                    cid in self.search_calls or len(self.search_calls) >= 2):
+                raise BridgeError("unexpected_tool_call")
+            if not self.search_calls and self.on_search:
+                self.on_search()
+            self.search_calls.add(cid)
+            self.text = ''  # Never send the pre-tool "let me search" text as an answer.
+        elif kind == 'tool/result' and data.get('turn') == self.turn:
+            message = data.get('message', {})
+            cid = message.get('toolCallId')
+            source = message.get('source', {})
+            if (cid not in self.search_calls or cid in self.search_results or
+                    message.get('role') != 'tool' or source.get('kind') != 'tool' or source.get('callId') != cid):
+                raise BridgeError('unexpected_tool_result')
+            self.search_results.add(cid)
+            if not message.get('isError'):
+                meta = data.get('meta', {})
+                for row in meta.get('sources', [])[:3] if isinstance(meta, dict) else []:
+                    url = public_result_url(row.get('url')) if isinstance(row, dict) else ''
+                    if url and url not in self.sources:
+                        self.sources.append(url)
         elif kind == "agent-preset/selected" and data.get("agentPreset") != PRESET_ID:
             raise BridgeError("session_preset_changed")
         elif kind == "assistant/message" and self.owned and data.get("turn") == self.turn:
@@ -148,7 +188,9 @@ class TurnCollector:
             reason = reason.get("kind") if isinstance(reason, dict) else reason
             if reason != "completed":
                 raise BridgeError("turn_not_completed")
-            return self.text
+            if self.search_calls != self.search_results:
+                raise BridgeError('incomplete_tool_results')
+            return ReplyText(self.text, len(self.search_calls), self.sources)
         return None
 
 
@@ -275,9 +317,9 @@ class DshClient:
             if failure:
                 raise BridgeError("cannot_confirm_queue_cleared") from None
 
-    async def reply(self, sid, text, images=None):
+    async def reply(self, sid, text, images=None, *, search_enabled=False, on_search=None):
         try:
-            return await asyncio.wait_for(self._reply(sid, text, images), self.cfg.agent_chat_timeout)
+            return await asyncio.wait_for(self._reply(sid, text, images, search_enabled, on_search), self.cfg.agent_chat_timeout)
         except asyncio.TimeoutError:
             raise BridgeError("dsh_turn_timeout") from None
         except (OSError, websockets.WebSocketException):
@@ -347,8 +389,11 @@ class DshClient:
                     raise BridgeError("invalid_context_page")
         return cut, True
 
-    async def _reply(self, sid, text, images=None):
-        content = [{"type": "text", "text": text}]
+    async def _reply(self, sid, text, images=None, search_enabled=False, on_search=None):
+        rid = str(uuid.uuid4())
+        control = {'version': 1, 'sessionId': sid, 'rpcId': rid,
+                   'enabled': bool(search_enabled), 'expires': int(time.time() * 1000) + 300000}
+        content = [{"type": "text", "text": CONTROL_PREFIX + json.dumps(control) + '\n' + text}]
         for image in images or []:
             if (len(content) > 4 or set(image) != {"type", "mediaType", "data", "name"} or
                     image["type"] != "image" or image["mediaType"] != "image/jpeg" or
@@ -359,7 +404,6 @@ class DshClient:
         await self.authenticate()
         ws_url = self.cfg.agent_chat_dsh_url.replace("http", "ws", 1) + "/api/remote.mux"
         stream = str(uuid.uuid4())
-        rid = str(uuid.uuid4())
         async with self.connect(ws_url, extra_headers={"Cookie": self.cookie},
                                 open_timeout=10, close_timeout=2, max_size=2_000_000, max_queue=32) as ws:
             await ws.send(json.dumps({"type": "open", "streamId": stream, "endpoint": "session/follow",
@@ -396,7 +440,7 @@ class DshClient:
                                      "content": content}, rpc_id=rid)
             if not isinstance(result, dict) or result.get("accepted") is not True or result.get("command"):
                 raise BridgeError("unexpected_prompt_response")
-            collector = TurnCollector(rid)
+            collector = TurnCollector(rid, search_enabled, on_search)
             async for raw in ws:
                 value = self.frame(raw, stream)
                 if value and value.get("type") == "event":
