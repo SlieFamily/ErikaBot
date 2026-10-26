@@ -38,7 +38,7 @@ NoneBot 负责 QQ 收发、白名单、消息仲裁与限流；DSH 负责模型/
 
 同群连续直接提问合并为一批，保留每个人的消息、身份和附件引用，并明确告诉模型本轮需要回答哪些消息 ID；可以分别称呼群友、合答相近问题。生成期间新来的 @ 留到下一批，不覆盖前面的请求，普通随机接话不能挤掉直接提问。每条提问独立计算600秒等待预算，旧问题过期不会连带丢掉刚来的新问题。队列在内存中，意外退出不自动重放；发布时应等现有任务空闲。
 
-默认一批最多8条，超过上限或全局待处理群数已满会提示未排上；等待15秒后给一次“排队或处理中”提示。额度用完、过期、暂停和失败也给明确提示。同群同类提示30秒内最多一次，不调用模型、不计模型额度；QQ 本身断线时无法保证提示送达，提示发送失败不重试也不暂停模型会话。`ai 状态` 显示当前群待处理问题数和是否存在任务。
+默认一批最多8条，超过上限或全局待处理群数已满会提示未排上；默认在后台静默等待，不发送“排队或处理中”提示。需要时管理员可用 `AGENT_CHAT_NOTICE_AFTER` 选择等待提示秒数，0 表示关闭。额度用完、过期、暂停和失败也给明确提示。同群同类提示30秒内最多一次，不调用模型、不计模型额度；QQ 本身断线时无法保证提示送达，提示发送失败不重试也不暂停模型会话。`ai 状态` 显示当前群待处理问题数和是否存在任务。
 
 安全恢复只适用于已知连接中断/超时：失败回合不会重新请求模型；确认取消完成、最后回合结束、队列空、输入来自桥接、预设一致且没有发送不确定后，保留原会话继续后面的新提问。未通过校验、模型/协议异常、人工插入的会话输入和 QQ 发送不确定，仍须人工处理。
 
@@ -58,7 +58,7 @@ NoneBot 负责 QQ 收发、白名单、消息仲裁与限流；DSH 负责模型/
 | `AGENT_CHAT_CONTEXT_MESSAGES` | `20` | 首次或单批新增背景消息上限；已接受的直接提问另行保留 |
 | `AGENT_CHAT_DEBOUNCE` / `AGENT_CHAT_COOLDOWN` | `1` / `2` 秒 | 合并同群短时消息并限制调用节奏 |
 | `AGENT_CHAT_BATCH_LIMIT` | `8` | 每群一批直接提问上限；接受后保留所有问题，超出的新提问明确提示未排上 |
-| `AGENT_CHAT_NOTICE_AFTER` | `15` 秒 | 排队/处理中一次等待提示，0关闭；同群同类提示30秒内最多一次 |
+| `AGENT_CHAT_NOTICE_AFTER` | `0` 秒 | 排队/处理中一次等待提示，0关闭；同群同类提示30秒内最多一次 |
 | `AGENT_CHAT_MAX_CALLS_PER_HOUR` | `60` | 每个对话共用的调用额度，包括随机、自主、沉默和失败尝试 |
 | `AGENT_CHAT_QUEUE_TIMEOUT` | `600` 秒 | 最新触发入队后的等待上限，包含消息合并、冷却、同群排队和等待并发名额；允许配置 5～3600 秒 |
 | `AGENT_CHAT_MAX_CONCURRENT` / `AGENT_CHAT_MAX_PENDING` | `2` / `16` | 模型并发数及正在处理或排队的对话数上限 |
@@ -203,6 +203,7 @@ poetry run python scripts/setup_agent_chat_knowledge.py --env .env.agent_chat --
 | `ai 清空记忆 [类别]` | 清理当前群全部或一类记忆 |
 | `ai 黑话 [候选/已确认/已拒绝]` | 查看最多30条词条、解释草稿和来源 |
 | `ai 黑话确认 编号 [解释]` | 审核草稿，可补写/覆盖解释；确认后各群共享 |
+| `ai 黑话确认 1,2,3` | 批量确认各自的已有解释，最多30条；也支持多行 `编号 \| 解释` |
 | `ai 黑话拒绝 编号` / `ai 黑话删除 编号` | 停用/删除词条 |
 | `ai 黑话添加 词语 \| 解释` | 手动添加或修订共享已确认词条 |
 | `ai 学习帮助` | 查看命令与共享范围 |
@@ -308,7 +309,7 @@ Get-CimInstance Win32_Process |
 
 8080 是本部署的 NoneBot 端口，其他部署按实际配置替换。DSH Desktop 是独立进程，界面进程与监听本机 API 端口的子进程可能不同；其窗口关闭是否等于退出，要以端口是否还在监听为准。DSH、NoneBot、NapCat/QQ 不是同一个进程。
 
-本机 2026-10-26 部署使用后台启动并重定向输出，日志目录为用户目录下的 `Documents/Codex/2026-10-24/new-chat/work/agent-chat/response-latency-release-v2/`：
+本机 2026-10-26 部署使用后台启动并重定向输出，日志目录为用户目录下的 `Documents/Codex/2026-10-24/new-chat/work/agent-chat/social-controls-release/`：
 
 - `bot.stdout.log`：标准输出，包含 NoneBot 启动、插件加载和网关连接等日志。
 - `bot.stderr.log`：标准错误，可能包含警告和错误；文件为空不代表没有发生过业务问题，应同时检查标准输出和 `ai 状态`。
@@ -318,14 +319,14 @@ Get-CimInstance Win32_Process |
 查看当前日志末尾（`-Wait` 可选；在独立查看窗口按 Ctrl+C 只结束查看）：
 
 ```powershell
-$logDir = Join-Path $env:USERPROFILE 'Documents\Codex\2026-10-24\new-chat\work\agent-chat\response-latency-release-v2'
+$logDir = Join-Path $env:USERPROFILE 'Documents\Codex\2026-10-24\new-chat\work\agent-chat\social-controls-release'
 Get-Content -LiteralPath (Join-Path $logDir 'bot.stdout.log') -Tail 100 -Wait
 ```
 
 导出已有日志不会断开机器人连接，也不需要重启：
 
 ```powershell
-$logDir = Join-Path $env:USERPROFILE 'Documents\Codex\2026-10-24\new-chat\work\agent-chat\response-latency-release-v2'
+$logDir = Join-Path $env:USERPROFILE 'Documents\Codex\2026-10-24\new-chat\work\agent-chat\social-controls-release'
 $exportDir = Join-Path $env:USERPROFILE ('Desktop\ErikaBot-logs-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
 New-Item -ItemType Directory -Path $exportDir | Out-Null
 Copy-Item -LiteralPath (Join-Path $logDir 'bot.stdout.log'), (Join-Path $logDir 'bot.stderr.log') -Destination $exportDir
@@ -443,7 +444,23 @@ DSH 不在线时，AI 会记录连接/协议错误并保持沉默，通常不会
 
 日常新增群只需改私有白名单并在配置正式应用时重启机器人。修改 Markdown 说明文档不需要重启任何进程。
 
+### 批量确认黑话
+
+仅 SUPERUSER 可以确认，编号需来自当前群可见候选或已确认共享词条。`ai 黑话确认 12,15,18` 使用每条词语各自已有的研究解释；也支持空格、中文逗号、顿号和 `#12` 格式。每次最多30条，重复编号会去重。
+
+需要分别补解释时，可在同一条 QQ 消息中发送：
+
+```text
+ai 黑话确认
+12 | 第一条的解释
+15 | 第二条的解释
+```
+
+单条旧用法 `ai 黑话确认 12 解释` 继续支持；纯数字解释请用 `12 | 233`，避免与多个编号混淆。结果会列出成功和未确认的编号。没有解释、当前群不可见或解释不合要求的词条会跳过，不影响其他有效词条；不会把一份解释批量复制给不同词语。格式错误、重复编号解释冲突或超过30条时整条命令不执行。
+
 ## 测试与故障定位
+
+2026-10-26 引用修复与表达管理：实际失败消息的 QQ 时间比本机接收时间快约1.3秒，原引用筛选错误排除了最新提问；现与消息接收保持相同的120秒时钟容差，仍只接受当前对话近期观察到的真实编号。162 项 Python 回归、4 项安装器测试、真实 NoneBot Bot/Adapter/WebSocket 序列化与批量确认权限测试通过。独立 DSH 同一会话完成新版父母关系、引用+QQ捂脸+emoji、纯emoji和主人称呼不提升权限四轮验证，没有发送 QQ 测试消息。默认排队静默处理。
 
 2026-10-26 连续提问与响应优化：153 项全量 Python 回归通过；最后的图片保留调整另经 13 项合批专项与 9 项增量上下文测试通过。真实 NoneBot 隔离分发通过；独立 DSH 测试中四人的连续提问分成两批，均取得回答且沿用同一会话。显式关闭思考后普通聊天和 AnySearch 均通过。没有发送 QQ 测试消息，正式部署核验六群原绑定、记忆接口、DSH 与 QQ 连接。
 
@@ -477,7 +494,7 @@ node --test tests/test_agent_chat_guard.mjs tests/test_agent_chat_setup.mjs
 
 2026-10-25 读图与自主发言更新：58 项 Python 测试通过，覆盖思考内容过滤、图片下载限制、原生附件、夜间安静、每天额度、重启保持及新消息取消过时回复；实际 NoneBot 分发探针验证了与既有语录插件的配合。真实 DSH 独立会话识别几何测试图成功，执行端工具守卫检查通过。上述测试没有向 QQ 群发送测试消息，真实 QQ 图片下载仍需结合网关与 CDN 的现场状态。
 
-2026-10-25 增量优化：77 项 Python 测试、6 项 Node 测试、实际 NoneBot 分发探针和已安装 DSH 工具守卫检查通过。独立会话三轮实测新增提示字符数为 9830、542、544；后两轮不重复完整角色卡或已投递聊天，前任别名正确，重建 Python 客户端及本地状态连接后仍能回忆开黑房间号。这是新增文本字符数，不能当作总输入 token 或账单降幅。测试不向 QQ 发消息。
+2026-10-25 增量优化：77 项 Python 测试、6 项 Node 测试、实际 NoneBot 分发探针和已安装 DSH 工具守卫检查通过。独立会话三轮实测新增提示字符数为 9830、542、544；后两轮不重复完整角色卡或已投递聊天，角色别名正确，重建 Python 客户端及本地状态连接后仍能回忆开黑房间号。这是新增文本字符数，不能当作总输入 token 或账单降幅。测试不向 QQ 发消息。
 
 可重复运行以下独立三轮测试（调用收费模型，人物语气可能使记忆抽查偶发失败）：
 

@@ -23,8 +23,10 @@ class Outgoing(str):
 
 def reply_targets(messages, key, now=None):
     now = time.time() if now is None else now
+    # Match intake clock-skew tolerance: QQ timestamps may be ahead of this host.
+    # Retain the same-chat, bounded-history and 10-minute age restrictions.
     return {str(m.get('message_id')) for m in messages
-            if m.get('key') == key and 0 <= now-float(m.get('timestamp',0)) <= 600
+            if m.get('key') == key and -120 <= now-float(m.get('timestamp',0)) <= 600
             and re.fullmatch(r'-?\d{1,20}',str(m.get('message_id','')))
             and -(2**63) <= int(m['message_id']) < 2**63}
 

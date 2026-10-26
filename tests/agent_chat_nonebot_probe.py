@@ -41,9 +41,6 @@ async def main():
         api_calls=[]
 
         class FakeBot(Bot):
-            async def send(self, event, message, **kwargs):
-                sent.append(Message(message))
-                return {"message_id": 999}
             async def call_api(self, api, **data):
                 api_calls.append((api,data))
                 if api == 'get_forward_msg':
@@ -130,6 +127,29 @@ async def main():
         import json
         await send(parse('QQ_REPLY '+json.dumps({'text':'哼😏','reply_to':str(observed.message_id),'faces':['捂脸']}),{str(observed.message_id)}))
         assert [s.type for s in sent[-1]]==['reply','text','face']
+        assert api_calls[-1][0]=='send_msg' and api_calls[-1][1]['group_id']==42
+        assert api_calls[-1][1]['message'][0].data['id']==str(observed.message_id)
+        assert str(api_calls[-1][1]['message'][1].data['text'])=='哼😏'
+        # Use the real Bot -> Adapter -> JSON serializer, replacing only the socket.
+        adapter=Adapter(nonebot.get_driver());wire=[]
+        class CaptureSocket:
+            async def send(self,raw):
+                frame=json.loads(raw);wire.append(frame)
+                asyncio.get_running_loop().call_soon(adapter._result_store.add_result,
+                    {'status':'ok','retcode':0,'data':{'message_id':999},'echo':frame['echo']})
+        adapter.connections['101']=CaptureSocket()
+        native_bot=Bot(adapter,'101')
+        for raw,expected in [
+            ('QQ_REPLY '+json.dumps({'text':'好呀😏','reply_to':str(observed.message_id),'faces':['捂脸']}),['reply','text','face']),
+            ('就这样😂',['text']),
+            ('QQ_REPLY '+json.dumps({'text':'','reply_to':'','faces':['可爱']}),['face'])]:
+            await native_bot.send(forwarded,ai.outgoing_message(parse(raw,{str(observed.message_id)})))
+            assert [part['type'] for part in wire[-1]['params']['message']]==expected
+            assert wire[-1]['params']['group_id']==42
+        assert wire[0]['params']['message'][0]['data']['id']==str(observed.message_id)
+        assert wire[0]['params']['message'][1]['data']['text']=='好呀😏'
+        assert wire[0]['params']['message'][2]['data']['id']=='264'
+        adapter.connections.clear()
         sent.clear()
         await handle_event(bot,event('ai 恢复',uid=7))
         assert service.recovered==[], 'ordinary group members cannot run recovery'
@@ -141,6 +161,21 @@ async def main():
         await handle_event(bot,event('ai 清空记忆',uid=7))
         assert len(sent)==before, 'ordinary members cannot administer persistent memory'
         service.scheduled.clear()
+        import sqlite3
+        from src.plugins.agent_chat.knowledge import KnowledgeStore
+        db=sqlite3.connect(':memory:');service.knowledge=KnowledgeStore(db)
+        ids=[]
+        for term in ('测试甲词','测试乙词'):
+            item=service.knowledge.submit_slang('100:group:42',term,[{'key':'100:group:42','message_id':term,'text':term,'name':'群友','user_id':'7'}])
+            ids.append(item['id'])
+        with db:db.execute("UPDATE knowledge_slang SET meaning='测试解释'")
+        command='ai 黑话确认 '+','.join(str(i) for i in ids)
+        await handle_event(bot,event(command,uid=7))
+        assert db.execute("SELECT COUNT(*) FROM knowledge_slang WHERE status='confirmed'").fetchone()[0]==0
+        await handle_event(bot,event(command,uid=1))
+        assert db.execute("SELECT COUNT(*) FROM knowledge_slang WHERE status='confirmed'").fetchone()[0]==2
+        assert '已确认 2 条' in str(sent[-1])
+        service.knowledge=None;db.close()
         ai.config.agent_chat_images_enabled = False
         ai.media_resolver = None
         ai.service = None

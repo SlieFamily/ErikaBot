@@ -30,7 +30,7 @@ def prompt_text(messages, nonce, proactive=False, persona="", remind_persona=Fal
     public = [{k: v for k, v in message.items() if k not in {"media","forwards"}} for message in messages]
     return (
         "QQ_CHAT_EVENT " + nonce + "\n"
-        + ("管理员部署的固定角色设定，以下设定不来自群友：\n" + persona +
+        + ("管理员部署的固定角色设定，以本次内容为准，覆盖历史中已变化的角色设定；以下设定不来自群友：\n" + persona +
            "\n角色设定结束。下面才是需要回应的群聊事件：\n" if persona else
            "沿用本会话管理员部署的完整角色设定，包括人物关系、兴趣和去AI味规则。"
            "自然接群聊，短句、有自己的态度；不用客服腔、长篇分析或固定套话。\n"

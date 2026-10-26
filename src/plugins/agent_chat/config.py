@@ -30,7 +30,7 @@ class Config(BaseModel):
     agent_chat_cooldown: float = Field(2, ge=0, le=3600)
     agent_chat_debounce: float = Field(1, ge=0, le=10)
     agent_chat_batch_limit: int = Field(8, ge=1, le=20)
-    agent_chat_notice_after: float = Field(15, ge=0, le=120)
+    agent_chat_notice_after: float = Field(0, ge=0, le=120)
     agent_chat_timeout: float = Field(90, ge=5, le=300)
     agent_chat_queue_timeout: float = Field(600, ge=5, le=3600)
     agent_chat_max_reply_chars: int = Field(600, ge=20, le=4000)
