@@ -111,6 +111,9 @@ class ChatService:
         hour = self.local_time(now).hour
         return (start <= hour < end if start < end else hour >= start or hour < end) if start != end else False
 
+    def ambient_quiet(self, now=None):
+        return self.cfg.agent_chat_ambient_quiet_enabled and self.quiet(now)
+
     def proactive_group(self, key):
         parts = key.split(':')
         if len(parts) != 3 or not parts[0].isdigit() or parts[1] != 'group' or not parts[2].isdigit():
@@ -166,7 +169,7 @@ class ChatService:
     def schedule(self, message, send, prepare=None):
         if self.closed:
             return False
-        if not message.directed and (self.quiet() or random.random() >= self.cfg.agent_chat_ambient_probability):
+        if not message.directed and (self.ambient_quiet() or random.random() >= self.cfg.agent_chat_ambient_probability):
             return False
         return self._enqueue(Request(message, send, prepare, 'direct' if message.directed else 'ambient'))
 
@@ -258,7 +261,7 @@ class ChatService:
             if not self.store.claim_proactive(key, request.generation, self.local_time().date().isoformat(),
                                               self.cfg.agent_chat_proactive_daily_limit):
                 return
-        elif request.kind == 'ambient' and self.quiet():
+        elif request.kind == 'ambient' and self.ambient_quiet():
             return
         bound=self.store.session(key)
         if bound and bound[2]:

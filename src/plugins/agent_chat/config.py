@@ -73,6 +73,7 @@ class Config(BaseModel):
     agent_chat_proactive_idle: float = Field(900, ge=60, le=86400)
     agent_chat_proactive_daily_limit: int = Field(6, ge=1, le=24)
     agent_chat_proactive_recent_hours: int = Field(6, ge=1, le=24)
+    agent_chat_ambient_quiet_enabled: bool = True
     agent_chat_quiet_start: int = Field(23, ge=0, le=23)
     agent_chat_quiet_end: int = Field(9, ge=0, le=23)
     agent_chat_utc_offset_hours: int = Field(8, ge=-12, le=14)

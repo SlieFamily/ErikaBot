@@ -102,6 +102,36 @@ class ProactiveTests(unittest.IsolatedAsyncioTestCase):
         self.service.schedule_proactive(self.key, self.send); await self.drain()
         self.assertEqual(self.sent, [])
 
+    async def test_night_can_keep_random_and_direct_replies_but_never_idle_speech(self):
+        self.service.cfg.agent_chat_ambient_quiet_enabled = False
+        self.service.cfg.agent_chat_ambient_probability = .05
+        night = datetime(2026, 10, 25, 16, tzinfo=timezone.utc).timestamp()
+        with patch('time.time', return_value=night):
+            self.idle()
+            self.assertTrue(self.service.quiet())
+            self.assertFalse(self.service.schedule_proactive(self.key, self.send))
+            ambient = replace(core.message(mid='101'), directed=False)
+            self.service.observe(ambient)
+            with patch('random.random', return_value=.04):
+                self.assertTrue(self.service.schedule(ambient, self.send))
+            await self.drain()
+            self.assertEqual(len(self.sent), 1)
+            with patch('random.random', return_value=.06):
+                self.assertFalse(self.service.schedule(replace(ambient,message_id='102'), self.send))
+            direct = core.message(mid='103');self.service.observe(direct)
+            self.assertTrue(self.service.schedule(direct, self.send))
+            await self.drain()
+            self.assertEqual(len(self.sent), 2)
+            self.assertFalse(self.service.schedule_proactive(self.key, self.send))
+
+    async def test_quiet_window_boundaries_remain_exact(self):
+        for hour, minute, expected in [(14,59,False),(15,0,True),(0,59,True),(1,0,False)]:
+            stamp=datetime(2026,10,25,hour,minute,tzinfo=timezone.utc).timestamp()
+            self.assertEqual(self.service.quiet(stamp),expected)
+            self.assertEqual(self.service.ambient_quiet(stamp),expected)
+        self.service.cfg.agent_chat_ambient_quiet_enabled=False
+        self.assertFalse(self.service.ambient_quiet(datetime(2026,10,25,16,tzinfo=timezone.utc).timestamp()))
+
     async def test_random_probability_and_direct_message_priority(self):
         self.service.cfg.agent_chat_ambient_probability = .1
         direct = core.message()
