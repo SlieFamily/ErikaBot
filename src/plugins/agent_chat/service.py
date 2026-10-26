@@ -16,6 +16,7 @@ from .interactions import SocialActions
 from .knowledge import KnowledgeStore
 from .slang_evolution import SLANG_RULES
 from .observation import ReplyObserver
+from .poke import PokeGate
 from .knowledge_bridge import KnowledgeHub
 from .memory import MEMORY_RULES, MemoryManager, requested_memory, memory_instructions, honest_memory_answer
 
@@ -42,6 +43,7 @@ class ChatService:
         self.cfg, self.store, self.client = config, store, client
         self.social = SocialActions(config,store)
         self.observer = ReplyObserver(config,store)
+        self.pokes = PokeGate(store,config)
         self.tasks, self.pending = {}, {}
         self.recovering = set()
         self.slots = asyncio.Semaphore(config.agent_chat_max_concurrent)
@@ -180,6 +182,17 @@ class ChatService:
             return False
         return self._enqueue(Request(message, send, prepare, 'direct' if message.directed else 'ambient'))
 
+    def schedule_poke(self,message,send):
+        parts=message.key.split(':')
+        if len(parts)!=3 or parts[1] not in ('group','private') or not parts[2].isdigit():return False
+        group=int(parts[2]) if parts[1]=='group' else None
+        if not self.allowed(parts[0],group,int(message.user_id)):return False
+        if not self.pokes.admit(message):return False
+        if not self.observe(message):return False
+        # Bypass both the ambient lottery and post-send observer. Poke is optional,
+        # never merges into or replaces a pending batch of direct questions.
+        return self._enqueue(Request(message,send,kind='poke'))
+
     def _enqueue(self, request):
         message = request.message
         # Reject old gateway snapshots on arrival; this is separate from time spent queued.
@@ -272,6 +285,10 @@ class ChatService:
         elif request.kind == 'ambient' and self.ambient_quiet():
             return
         bound=self.store.session(key)
+        if request.kind=='poke' and bound:
+            delivered=self.store.delivery(key,bound[0])
+            row=self.store.db.execute('SELECT seq FROM messages WHERE chat_key=? AND message_id=?',(key,message.message_id)).fetchone()
+            if not row or delivered and row[0]<=delivered[0]:return
         if bound and bound[2]:
             await self._notice(request,'paused','这段对话暂时停住了，请让主人发送 ai 恢复；这批问题还没有回答。')
             return
@@ -328,6 +345,8 @@ class ChatService:
                     ids={m['message_id'] for m in direct}
                     history=[m for m in history if m['message_id'] not in ids]+direct
                     history.sort(key=lambda m:m['timestamp'])
+                if request.kind=='poke' and not any(m['message_id']==message.message_id for m in history):
+                    history.append(message.payload())
                 request.input_boundary=boundary
                 forward = self.cfg.agent_chat_forward_persona
                 seed = forward and (refresh or not delivered or not delivered[2])
@@ -337,6 +356,8 @@ class ChatService:
                 text = prompt_text(history, str(uuid.uuid4()), proactive=proactive, ambient=request.kind == "ambient",
                                    persona=persona if seed else "", remind_persona=forward and not seed,
                                    direct_ids=[m['message_id'] for m in direct], seed_rules=seed_rules)
+                if request.kind=='poke':
+                    text+='\n本轮是QQ戳一戳通知，对方只是戳了你，没有提出必须回答的问题。可自然简短回应、发emoji/QQ表情或回戳，也可只输出[SILENT]。概率已由宿主决定，不必再抽签；不要把通知编号当QQ消息引用，不重复回答旧问题。\n'
                 if request.kind=='followup':
                     text+='\n发送后观察：有群友在你发言后继续说话。只在延续刚才话题、回应你或需要澄清时自然续聊；无关、结束或无须参与就输出[SILENT]结束观察。不催人回复，不重复旧答案。\n'
                 text += instructions(can_search, self.local_time().date().isoformat(), seed_rules=seed_rules)

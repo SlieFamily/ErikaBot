@@ -2,8 +2,8 @@
 import asyncio
 from typing import Optional
 
-from nonebot import get_bots, get_driver, on_command
-from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, Message, MessageEvent, MessageSegment, PrivateMessageEvent
+from nonebot import get_bots, get_driver, on_command, on_notice
+from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, Message, MessageEvent, MessageSegment, PrivateMessageEvent, PokeNotifyEvent
 from nonebot.log import logger
 from nonebot.matcher import Matcher
 from nonebot.message import event_postprocessor, event_preprocessor, run_postprocessor
@@ -14,6 +14,7 @@ from nonebot.typing import T_State
 from utils.agent_chat_routing import CONTEXT_KEY
 from .config import load_config
 from .domain import ChatMessage
+from .poke import poke_message
 from .dsh import BridgeError, DshClient
 from .service import ChatService
 from .store import Store
@@ -191,6 +192,29 @@ async def dispatch_chat(bot: Bot, event: MessageEvent, state: T_State):
         service.schedule(message, send)
 
 
+poke_notice = on_notice(priority=99, block=False)
+
+
+@poke_notice.handle()
+async def receive_poke(bot: Bot, event: PokeNotifyEvent):
+    if (not service or not config.agent_chat_poke_reply_enabled or
+            str(event.self_id)!=str(bot.self_id) or not event.is_tome() or
+            not service.allowed(bot.self_id,event.group_id,event.user_id)):
+        return
+    key=(f"{bot.self_id}:group:{event.group_id}" if event.group_id
+         else f"{bot.self_id}:private:{event.user_id}")
+    message=poke_message(bot.self_id,event.user_id,event.target_id,event.group_id,event.time,
+                         service.store.recent(key,80))
+    if message is None:return
+    async def send(value):
+        async def send_message(body):
+            if event.group_id:
+                return await bot.send_group_msg(group_id=event.group_id,message=outgoing_message(body))
+            return await bot.send_private_msg(user_id=event.user_id,message=outgoing_message(body))
+        return await service.social.send(bot,key,value,send_message)
+    service.schedule_poke(message,send)
+
+
 admin = on_command("ai", permission=SUPERUSER, priority=1, block=True)
 
 
@@ -234,6 +258,7 @@ async def administer(bot: Bot, event: MessageEvent, args: Message = CommandArg()
             f"\n自主发言：{'开启' if config.agent_chat_proactive_enabled and service.proactive_group(key) else '关闭'}；今日尝试 {used}/{config.agent_chat_proactive_daily_limit}" +
             f"\n安静时段：{quiet_label}；随机接话夜间限制：{'开启' if config.agent_chat_ambient_quiet_enabled else '关闭'}。"+
             "\n"+service.observer.describe(key)+
+            f"\n被戳回应：{'开启' if config.agent_chat_poke_reply_enabled else '关闭'}；判断概率{config.agent_chat_poke_reply_probability:.0%}，冷却{config.agent_chat_poke_reply_cooldown:g}秒"+
             (f"\n轻量记忆：{service.knowledge.status(key)['memory']} 条；共享黑话：自动{service.knowledge.status(key)['learned']}条，锁定{service.knowledge.status(key)['confirmed']}条；"
              f"后台学习近一小时：{service.knowledge.learning_count()}/{config.agent_chat_learning_max_per_hour}。ai 学习帮助 查看管理命令。"
              if service.knowledge else ''))

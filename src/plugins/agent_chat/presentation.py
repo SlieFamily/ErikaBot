@@ -3,6 +3,7 @@ import json
 import re
 import time
 from .domain import strip_reasoning
+from .poke import is_poke_record
 
 # Verified against the installed NapCat QQ face catalog. No custom image URLs.
 FACES = {'撇嘴':1,'得意':4,'流泪':5,'害羞':6,'尴尬':10,'发怒':11,'调皮':12,
@@ -42,13 +43,14 @@ def social_targets(messages, key, config, proactive=False, now=None):
     now = time.time() if now is None else now
     valid = reply_targets(messages,key,now)
     bot_id = key.split(':',1)[0]
-    records = [m for m in messages if str(m.get('message_id')) in valid and m.get('key')==key
+    records = [m for m in messages if (str(m.get('message_id')) in valid or
+               is_poke_record(m) and -120<=now-float(m.get('timestamp',0))<=600) and m.get('key')==key
                and re.fullmatch(r'[1-9][0-9]{0,19}',str(m.get('user_id','')))
                and str(m['user_id'])!=bot_id and int(m['user_id'])<2**63]
     users = {str(m['user_id']) for m in records}
     if config.agent_chat_mentions_enabled: scope['mentions'] = users
     if config.agent_chat_poke_enabled: scope['poke'] = users
-    if config.agent_chat_reactions_enabled: scope['reaction'] = {str(m['message_id']) for m in records}
+    if config.agent_chat_reactions_enabled: scope['reaction'] = {str(m['message_id']) for m in records if str(m['message_id']) in valid}
     return scope
 
 

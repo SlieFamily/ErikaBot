@@ -19,6 +19,7 @@ class ChatMessage:
     reply_user_id: str = ""
     media: tuple = ()
     forwards: tuple = ()
+    notice: str = ""
 
     def payload(self):
         return asdict(self)
@@ -43,7 +44,7 @@ def prompt_text(messages, nonce, proactive=False, persona="", remind_persona=Fal
         row = {k: message[k] for k in ("message_id", "user_id", "name", "text") if k in message}
         if "timestamp" in message:
             row["timestamp"] = int(message["timestamp"])
-        row.update({k: message[k] for k in ("reply_to", "reply_text", "reply_user_id") if message.get(k)})
+        row.update({k: message[k] for k in ("reply_to", "reply_text", "reply_user_id", "notice") if message.get(k)})
         public.append(row)
     return (
         "QQ_CHAT_EVENT " + nonce + "\n"

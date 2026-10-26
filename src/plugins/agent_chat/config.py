@@ -51,6 +51,9 @@ class Config(BaseModel):
     agent_chat_faces_enabled: bool = True
     agent_chat_mentions_enabled: bool = True
     agent_chat_reactions_enabled: bool = True
+    agent_chat_poke_reply_enabled: bool = True
+    agent_chat_poke_reply_probability: float = Field(0.3, ge=0, le=1)
+    agent_chat_poke_reply_cooldown: float = Field(30, ge=0, le=3600)
     agent_chat_poke_enabled: bool = True
     agent_chat_reaction_cooldown: float = Field(30, ge=5, le=3600)
     agent_chat_poke_cooldown: float = Field(300, ge=30, le=86400)
@@ -74,7 +77,7 @@ class Config(BaseModel):
     agent_chat_proactive_daily_limit: int = Field(6, ge=1, le=24)
     agent_chat_proactive_recent_hours: int = Field(6, ge=1, le=24)
     agent_chat_observation_enabled: bool = False
-    agent_chat_observation_seconds: int = Field(300, ge=30, le=900)
+    agent_chat_observation_seconds: int = Field(120, ge=30, le=900)
     agent_chat_observation_max_calls: int = Field(3, ge=1, le=10)
     agent_chat_ambient_quiet_enabled: bool = True
     agent_chat_quiet_start: int = Field(23, ge=0, le=23)

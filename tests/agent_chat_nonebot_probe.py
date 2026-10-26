@@ -17,7 +17,7 @@ async def main():
         Path("db").mkdir()
         import nonebot
         nonebot.init(_env_file=None, driver="~fastapi", superusers={"1"}, command_start={"/", ""}, log_level="ERROR")
-        from nonebot.adapters.onebot.v11 import Adapter, Bot, GroupMessageEvent, Message, MessageSegment
+        from nonebot.adapters.onebot.v11 import Adapter, Bot, GroupMessageEvent, Message, MessageSegment, PokeNotifyEvent
         from nonebot.adapters.onebot.v11.bot import _check_reply, _check_at_me
         from nonebot.message import handle_event
         ai_plugin = nonebot.load_plugin("src.plugins.agent_chat")
@@ -31,11 +31,12 @@ async def main():
         class FakeService:
             def __init__(self):
                 from src.plugins.agent_chat.interactions import SocialActions
-                self.observed = []; self.scheduled = []; self.recovered=[]; self.learned=[]; self.knowledge=None
+                self.observed = []; self.scheduled = []; self.poked=[]; self.recovered=[]; self.learned=[]; self.knowledge=None
                 self.store=ai.Store(Path(td)/'social.sqlite3'); self.social=SocialActions(ai.config,self.store)
             def allowed(self, bot_id, group_id, user_id): return group_id == 42 and str(user_id) != str(bot_id)
             def observe(self, message): self.observed.append(message); self.store.append(message); return True
             def schedule(self, message, send, prepare=None): self.scheduled.append((message, send)); self.prepare = prepare
+            def schedule_poke(self,message,send):self.poked.append((message,send))
             async def recover(self,key):self.recovered.append(key);return 'resumed'
             def learn_message(self,message,plain):self.learned.append((message.message_id,plain))
 
@@ -71,6 +72,21 @@ async def main():
                 message_type="group", sub_type="normal", message_id=idx, group_id=group, user_id=uid,
                 message=[{"type":"text","data":{"text":text}}], original_message=[{"type":"text","data":{"text":text}}],
                 raw_message=text, font=0, sender={"user_id":uid,"nickname":"群友","role":"member"}, to_me=directed))
+
+        def notice(user=7,target=100,group=42):
+            return PokeNotifyEvent.parse_obj(dict(time=int(time.time()),self_id=100,post_type='notice',
+                notice_type='notify',sub_type='poke',group_id=group,user_id=user,target_id=target))
+        for e in [notice(target=8),notice(user=100),notice(group=99),notice(group=None)]:
+            await handle_event(bot,e)
+        assert not service.poked and not sent
+        await handle_event(bot,notice())
+        assert len(service.poked)==1 and not service.learned and not service.scheduled
+        received,reply=service.poked.pop()
+        assert received.user_id=='7' and received.notice=='poke' and received.message_id.startswith('poke-')
+        await reply('戳我干嘛😏')
+        assert api_calls[-1][0]=='send_group_msg' and api_calls[-1][1]['group_id']==42
+        assert sent[-1].extract_plain_text()=='戳我干嘛😏'
+        sent.clear()
 
         await handle_event(bot, event("普通聊天"))
         assert len(service.scheduled) == 1, "SuperAna's broad match must not claim a no-hit message"
@@ -300,7 +316,7 @@ async def main():
         ai.service = None
         await handle_event(bot, event("你好", directed=True))
         assert sent, "disabled AI retains old @ reply"
-        print("PASS: real NoneBot dispatch, SuperAna arbitration, mention recovery, literal CQ, image/forward routing, reply+face segments, SUPERUSER recovery, remote slang review, grouped forward wire, native mention/reaction/poke APIs, failure no-flood, allowlist, disabled fallback")
+        print("PASS: native PokeNotifyEvent routing and literal response, real NoneBot dispatch, SuperAna arbitration, mention recovery, literal CQ, image/forward routing, reply+face segments, SUPERUSER recovery, remote slang review, grouped forward wire, native mention/reaction/poke APIs, failure no-flood, allowlist, disabled fallback")
         os.chdir(ROOT)
 
 

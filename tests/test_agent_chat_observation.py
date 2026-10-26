@@ -30,7 +30,7 @@ class ObservationTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(await self.ask(3,user='8'))
         self.assertFalse(self.service.tasks);self.assertFalse(self.service.slots.locked())
         before=len(self.client.prompts);await asyncio.sleep(.01);self.assertEqual(len(self.client.prompts),before)
-    async def test_three_calls_do_not_reset_five_minute_budget(self):
+    async def test_three_calls_do_not_reset_observation_budget(self):
         await self.ask(1,True);window=self.service.observer.get(KEY);deadline=window.until
         for i in range(2,5):self.assertTrue(await self.ask(i))
         self.assertEqual(window.calls,3);self.assertEqual(window.until,deadline)
