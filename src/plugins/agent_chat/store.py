@@ -38,8 +38,9 @@ class Store:
         # An interrupted request is not blindly re-sent after restart.
         with self.db:
             self.db.execute("UPDATE sessions SET suspended=1 WHERE chat_key IN "
-                            "(SELECT chat_key FROM dispatches WHERE status='inflight')")
+                            "(SELECT chat_key FROM dispatches WHERE status IN ('inflight','sending'))")
             self.db.execute("UPDATE dispatches SET status='interrupted' WHERE status='inflight'")
+            self.db.execute("UPDATE dispatches SET status='delivery_uncertain' WHERE status='sending'")
             self.db.execute("UPDATE searches SET stage='interrupted' WHERE stage IN "
                             "('searching','results_ready','answering')")
 
@@ -126,7 +127,27 @@ class Store:
             self.db.execute("DELETE FROM delivery WHERE chat_key=?", (key,))
             self.db.execute("DELETE FROM sessions WHERE chat_key=?", (key,))
             self.db.execute("DELETE FROM messages WHERE chat_key=?", (key,))
+            self.db.execute("UPDATE dispatches SET status='reset_abandoned' WHERE chat_key=? "
+                            "AND status IN ('sending','delivery_uncertain')", (key,))
             # Preserve daily budget, and do not revive an idle opportunity after reset.
+            self.db.execute("UPDATE activity SET consumed_generation=generation WHERE chat_key=?", (key,))
+
+    def recovery_boundary(self, key):
+        if self.db.execute("SELECT 1 FROM dispatches WHERE chat_key=? AND status IN "
+                           "('inflight','sending','delivery_uncertain')", (key,)).fetchone():
+            return None
+        return self.db.execute("SELECT COALESCE(MAX(seq),0) FROM messages WHERE chat_key=?", (key,)).fetchone()[0]
+
+    def resume(self, key, bound, boundary, context_seq):
+        # Called only after DSH cancellation, preset validation and an idle audit.
+        # Keep the same session, history and quotas; never replay a failed send.
+        with self.db:
+            if self.session(key) != bound or self.recovery_boundary(key) is None:
+                raise ValueError('recovery_state_changed')
+            self.db.execute("UPDATE sessions SET suspended=0 WHERE chat_key=?", (key,))
+            self.db.execute("INSERT INTO delivery VALUES(?,?,?,?,0) ON CONFLICT(chat_key) DO UPDATE SET "
+                            "message_seq=MAX(delivery.message_seq,excluded.message_seq),"
+                            "context_seq=excluded.context_seq,persona_sent=0", (key,bound[0],boundary,context_seq))
             self.db.execute("UPDATE activity SET consumed_generation=generation WHERE chat_key=?", (key,))
 
     def activities(self):

@@ -83,6 +83,13 @@ class WireTests(unittest.IsolatedAsyncioTestCase):
                         "projections":{"values":{"agentPreset":"erika-agent-chat-v1", "inbox":{"next-turn":[],"next-step":[]}}}}
             if self.mode == "unsafe-preset": snapshot["header"]["agentPreset"] = "standard"
             if self.mode == "old-preset-switch": snapshot["projections"]["values"]["agentPreset"] = "standard"
+            if self.mode.startswith('recovery'):
+                text = 'QQ_BRIDGE_SEARCH_POLICY '+json.dumps({'version':1,'sessionId':sid,'rpcId':'original'})+'\nchat'
+                if self.mode == 'recovery-foreign': text = 'manual message'
+                snapshot['records'].insert(0,{'event':{'seq':18,'type':'user/message','data':{
+                    'source':{'kind':'user','rpcId':'original'},'content':[{'type':'text','text':text}]}}})
+                if self.mode == 'recovery-active':snapshot['records'][-1]['event']['type']='turn/start'
+                if self.mode == 'recovery-queued':snapshot['projections']['values']['inbox']['next-turn']=[{'id':'queued'}]
             await ws.send_json({"type":"item","streamId":self.stream,"value":snapshot})
             try:
                 while True: await ws.receive_text()
@@ -113,6 +120,15 @@ class WireTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.client.reply(sid, "QQ_CHAT_EVENT test"), "新回复")
         self.assertEqual(self.prompts[0]["sessionId"], sid)
         self.assertTrue(self.prompts[0]["requestId"])
+
+    async def test_recovery_requires_idle_owned_history_and_empty_queue(self):
+        self.mode = 'recovery-ok'
+        self.assertEqual(await self.client.recovery_checkpoint('session-1'),20)
+        for mode,code in [('recovery-active','recovery_turn_active'),('recovery-queued','recovery_turn_active'),
+                          ('recovery-foreign','recovery_foreign_input')]:
+            self.mode=mode
+            with self.assertRaisesRegex(dsh.BridgeError,code):await self.client.recovery_checkpoint('session-1')
+        self.assertEqual(self.prompts,[])
 
     async def test_native_search_control_bound_to_current_rpc_and_sources_collected(self):
         self.mode = 'native-search'

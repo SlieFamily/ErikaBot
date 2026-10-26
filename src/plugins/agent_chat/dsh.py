@@ -334,6 +334,80 @@ class DshClient:
         except (OSError, websockets.WebSocketException):
             raise BridgeError("dsh_stream_disconnected") from None
 
+    async def recovery_checkpoint(self, sid):
+        try:
+            return await asyncio.wait_for(self._recovery_checkpoint(sid), 15)
+        except asyncio.TimeoutError:
+            raise BridgeError('recovery_check_timeout') from None
+        except (OSError, websockets.WebSocketException):
+            raise BridgeError('dsh_stream_disconnected') from None
+
+    async def _recovery_checkpoint(self, sid):
+        await self.authenticate()
+        stream = str(uuid.uuid4())
+        async with self.connect(self.cfg.agent_chat_dsh_url.replace('http','ws',1)+'/api/remote.mux',
+                extra_headers={'Cookie':self.cookie},open_timeout=10,close_timeout=2,max_size=2_000_000) as ws:
+            await ws.send(json.dumps({'type':'open','streamId':stream,'endpoint':'session/follow',
+                'payload':{'args':{'request':{'address':{'kind':'session','sessionId':sid},'maxMessages':20}}}}))
+            snapshot = None
+            async for raw in ws:
+                frame = self.frame(raw,stream)
+                if frame and frame.get('type') == 'snapshot':
+                    snapshot = frame
+                    break
+        if (not snapshot or snapshot.get('header',{}).get('id') != sid or
+                snapshot.get('header',{}).get('agentPreset') != PRESET_ID or
+                snapshot.get('projections',{}).get('values',{}).get('agentPreset') != PRESET_ID):
+            raise BridgeError('unsafe_current_session_preset')
+        inbox = snapshot['projections']['values'].get('inbox')
+        if not isinstance(inbox,dict) or any(inbox.get(k) != [] for k in ('next-turn','next-step')):
+            raise BridgeError('recovery_turn_active')
+        cut = snapshot.get('cursor')
+        if type(cut) is not int or cut < -1:
+            raise BridgeError('invalid_context_cursor')
+        page, before, latest_turn, owner = snapshot, cut+1, None, False
+        owner_seq, turn_seq = -1, -1
+        for _ in range(8):
+            records = page.get('records')
+            if not isinstance(records,list) or type(page.get('hasMore')) is not bool:
+                raise BridgeError('invalid_context_page')
+            events = [r.get('event',{}) for r in records if isinstance(r,dict)]
+            seqs = [e.get('seq') for e in events]
+            if (len(events)!=len(records) or any(type(s) is not int or s<0 for s in seqs) or
+                    seqs != sorted(set(seqs)) or seqs and seqs[-1]>=before):
+                raise BridgeError('invalid_context_page')
+            for event in reversed(events):
+                kind, data = event.get('type'), event.get('data',{})
+                if latest_turn is None and kind in {'turn/start','turn/end'}:
+                    latest_turn = kind
+                    turn_seq = event['seq']
+                    if kind != 'turn/end':
+                        raise BridgeError('recovery_turn_active')
+                if not owner and kind == 'user/message' and data.get('source',{}).get('kind') == 'user':
+                    source, blocks = data.get('source',{}), data.get('content',[])
+                    try:
+                        first = blocks[0]['text'].split('\n',1)[0]
+                        if not first.startswith(CONTROL_PREFIX): raise ValueError()
+                        control = json.loads(first[len(CONTROL_PREFIX):])
+                        if (control.get('version')!=1 or control.get('sessionId')!=sid or
+                                not source.get('rpcId') or control.get('rpcId')!=source['rpcId']): raise ValueError()
+                    except (ValueError,KeyError,IndexError,TypeError,AttributeError):
+                        raise BridgeError('recovery_foreign_input') from None
+                    owner = True
+                    owner_seq = event['seq']
+            if latest_turn and owner:
+                if owner_seq >= turn_seq: raise BridgeError('recovery_history_unverified')
+                return cut
+            if not page['hasMore']:
+                if latest_turn is None and not owner: return cut  # Never-used session.
+                raise BridgeError('recovery_history_unverified')
+            if not seqs: raise BridgeError('invalid_context_page')
+            before = seqs[0]
+            page = await self.rpc('session/page',{'address':{'kind':'session','sessionId':sid},
+                'throughSeq':cut,'beforeSeq':before,'maxMessages':20})
+            if not isinstance(page,dict): raise BridgeError('invalid_context_page')
+        raise BridgeError('recovery_history_unverified')
+
     async def _context_state(self, sid, since):
         await self.authenticate()
         ws_url = self.cfg.agent_chat_dsh_url.replace("http", "ws", 1) + "/api/remote.mux"

@@ -64,7 +64,7 @@ class DeliveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn('不支持图片', text)
             self.assertIn('如果最新问题只涉及文字，正常回答文字问题', text)
             return '这张图我现在看不了'
-        async def prepare(history): return [{'type':'image'}], 'image note'
+        async def prepare(history,pending): return [{'type':'image'}], 'image note'
         self.client.reply = reply
         msg = message()
         self.service.observe(msg)

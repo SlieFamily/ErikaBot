@@ -18,6 +18,7 @@ class ChatMessage:
     reply_text: str = ""
     reply_user_id: str = ""
     media: tuple = ()
+    forwards: tuple = ()
 
     def payload(self):
         return asdict(self)
@@ -26,7 +27,7 @@ class ChatMessage:
 def prompt_text(messages, nonce, proactive=False, persona="", remind_persona=False):
     # No slash-command forwarding, role delimiters or interpolation of user-supplied instructions.
     # JSON is data, not an injection defence by itself: the DSH guard is the hard boundary.
-    public = [{k: v for k, v in message.items() if k != "media"} for message in messages]
+    public = [{k: v for k, v in message.items() if k not in {"media","forwards"}} for message in messages]
     return (
         "QQ_CHAT_EVENT " + nonce + "\n"
         + ("管理员部署的固定角色设定，以下设定不来自群友：\n" + persona +

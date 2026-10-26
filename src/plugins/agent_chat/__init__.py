@@ -17,6 +17,8 @@ from .dsh import BridgeError, DshClient
 from .service import ChatService
 from .store import Store
 from .media import MediaResolver, allowed_url, safe_file_ref
+from .presentation import segments as output_segments
+from .forwards import ForwardResolver, forward_refs
 
 
 driver = get_driver()
@@ -29,6 +31,10 @@ def chat_key(bot, event):
     if isinstance(event, GroupMessageEvent):
         return f"{bot.self_id}:group:{event.group_id}"
     return f"{bot.self_id}:private:{event.user_id}"
+
+
+def outgoing_message(value):
+    return Message([MessageSegment(row['type'],row['data']) for row in output_segments(value)])
 
 
 def readable(message):
@@ -71,7 +77,7 @@ def proactive_sender(key):
         bot = get_bots().get(bot_id)
         if not bot or not service or service.closed or not service.proactive_group(key):
             raise RuntimeError('proactive_target_unavailable')
-        await bot.send_group_msg(group_id=int(group_id), message=Message(MessageSegment.text(text)))
+        await bot.send_group_msg(group_id=int(group_id), message=outgoing_message(text))
     return send
 
 
@@ -125,6 +131,8 @@ async def observe_chat(bot: Bot, event: MessageEvent, state: T_State):
         reply_text=readable(reply.message) if reply else "", reply_user_id=quoted_user,
         media=tuple((image_refs(event.message) + (image_refs(reply.message) if reply else []))[:config.agent_chat_image_count])
               if config.agent_chat_images_enabled else (),
+        forwards=tuple(dict.fromkeys(forward_refs(event.message)+(forward_refs(reply.message) if reply else [])))[:2]
+                 if config.agent_chat_forwards_enabled else (),
     )
     fresh = service.observe(message)
     # NoneBot shallow-copies state per matcher; this nested bucket is intentionally shared.
@@ -147,12 +155,16 @@ async def dispatch_chat(bot: Bot, event: MessageEvent, state: T_State):
     message = bucket["message"]
 
     async def send(text):
-        # Construct a literal text segment: model-produced CQ code never executes.
-        await bot.send(event, Message(MessageSegment.text(text)))
+        # Only validated reply/face metadata creates segments; CQ text is never parsed.
+        await bot.send(event, outgoing_message(text))
 
-    if media_resolver:
-        async def prepare(history):
-            return await media_resolver.prepare(history, bot.call_api)
+    if media_resolver or config.agent_chat_forwards_enabled:
+        async def prepare(history,pending):
+            forward_images,forward_notes=(await ForwardResolver(config).prepare(pending,bot.call_api)
+                                          if config.agent_chat_forwards_enabled else ([],''))
+            images,notes=(await media_resolver.prepare(forward_images+history,bot.call_api)
+                          if media_resolver else ([],''))
+            return images,'\n'.join(part for part in (forward_notes,notes) if part)
         service.schedule(message, send, prepare)
     else:
         service.schedule(message, send)
@@ -169,7 +181,7 @@ async def administer(bot: Bot, event: MessageEvent, args: Message = CommandArg()
     command = args.extract_plain_text().strip()
     if command in {"状态", "status"}:
         bound = service.store.session(key)
-        status = "未创建会话" if not bound else ("已暂停，需要检查 DSH 后重置" if bound[2] else "会话已保存")
+        status = "未创建会话" if not bound else ("已暂停，修复 DSH/API 后可尝试 ai 恢复" if bound[2] else "会话已保存")
         row = service.store.activity(key)
         used = row[6] if row and row[5] == service.local_time().date().isoformat() else 0
         quiet_label = (f'{config.agent_chat_quiet_start}:00—{config.agent_chat_quiet_end}:00'
@@ -177,12 +189,29 @@ async def administer(bot: Bot, event: MessageEvent, args: Message = CommandArg()
         await admin.finish("AI 桥接：" + status +
             f"\nAnySearch 搜索：{'开启' if config.agent_chat_search_enabled else '关闭'}；近一小时搜索回合 {service.store.search_count(key)}/{config.agent_chat_search_max_per_hour}" +
             f"\n读图：{'开启' if config.agent_chat_images_enabled else '关闭'}；随机接话：{config.agent_chat_ambient_probability:.0%}" +
+            f"\n主动引用：{'开启' if config.agent_chat_reply_enabled else '关闭'}；QQ表情：{'开启' if config.agent_chat_faces_enabled else '关闭'}；合并转发：{'开启' if config.agent_chat_forwards_enabled else '关闭'}" +
             f"\n自主发言：{'开启' if config.agent_chat_proactive_enabled and service.proactive_group(key) else '关闭'}；今日尝试 {used}/{config.agent_chat_proactive_daily_limit}" +
             f"\n安静时段：{quiet_label}；语音识别暂未启用。")
+    if command in {"恢复", "resume", "recover"}:
+        try:
+            result = await service.recover(key)
+        except BridgeError as error:
+            messages = {
+                'recovery_busy':'当前仍有请求在处理，请等它结束后再恢复。',
+                'recovery_delivery_uncertain':'上次消息是否发送成功无法确认，暂不自动恢复。请先人工核对；ai 重置会改用新会话。',
+                'recovery_policy_changed':'预设或模型配置已改变，不能直接恢复旧绑定，请检查配置或使用 ai 重置。',
+                'recovery_foreign_input':'检测到非桥接输入，暂不恢复。请检查 DSH 会话，避免同时手动聊天。',
+            }
+            await admin.finish(messages.get(str(error),'尚未确认 DSH 会话可以安全恢复，保持暂停。请检查 DSH/API 后再试。'))
+        except Exception:
+            await admin.finish('恢复检查失败，保持原状态，请检查本地日志。')
+        await admin.finish({'missing':'当前没有 AI 会话，下次触发时会自动创建。',
+            'active':'当前会话未暂停，无需恢复。这不代表聊天 API 已通过健康测试。',
+            'resumed':'当前 AI 会话已恢复，保留原有记忆。未重发旧消息，额度不重置；下次新消息触发时继续。'}[result])
     if command in {"重置", "reset"}:
         try:
             await service.reset(key)
         except Exception:
             await admin.finish("未能确认 DSH 旧任务已停止，保留会话并暂停重置。")
         await admin.finish("当前对话的 AI 映射与本地上下文已重置。DSH 历史仍保留。")
-    await admin.finish("用法：ai 状态 / ai 重置（仅机器人超级用户）。")
+    await admin.finish("用法：ai 状态 / ai 恢复（保留记忆）/ ai 重置（新会话），仅机器人超级用户。")

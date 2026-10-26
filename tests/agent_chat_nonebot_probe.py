@@ -27,19 +27,26 @@ async def main():
         ai.config.agent_chat_takeover_mentions = True
 
         class FakeService:
-            def __init__(self): self.observed = []; self.scheduled = []
+            def __init__(self): self.observed = []; self.scheduled = []; self.recovered=[]
             def allowed(self, bot_id, group_id, user_id): return group_id == 42 and str(user_id) != str(bot_id)
             def observe(self, message): self.observed.append(message); return True
             def schedule(self, message, send, prepare=None): self.scheduled.append((message, send)); self.prepare = prepare
+            async def recover(self,key):self.recovered.append(key);return 'resumed'
 
         service = FakeService(); ai.service = service
         sent = []
+        api_calls=[]
 
         class FakeBot(Bot):
             async def send(self, event, message, **kwargs):
                 sent.append(Message(message))
                 return {"message_id": 999}
             async def call_api(self, api, **data):
+                api_calls.append((api,data))
+                if api == 'get_forward_msg':
+                    return {'messages':[{'sender':{'nickname':'转发成员'},'message':[
+                        {'type':'text','data':{'text':'转发测试内容'}},
+                        {'type':'image','data':{'file':'a'*32+'.jpg'}}]}]}
                 if api == 'get_msg':
                     return {'time': int(time.time()), 'message_type': 'group', 'message_id': 123,
                             'real_id': 123, 'sender': {'user_id': 8, 'nickname': '发图者'},
@@ -106,12 +113,30 @@ async def main():
             await handle_event(bot, other)
             assert not service.scheduled[-1][0].directed, 'other targets and literal CQ text are not a bot mention'
             service.scheduled.clear()
+        forwarded=event('看看这段聊天记录',directed=True)
+        forwarded.message.append(MessageSegment('forward',{'id':'observed-forward'}))
+        await handle_event(bot,forwarded)
+        observed,send=service.scheduled.pop()
+        assert observed.forwards==('observed-forward',)
+        _,notes=await service.prepare([observed.payload()],[observed.payload()])
+        assert '转发测试内容' in notes and any(a=='get_forward_msg' for a,_ in api_calls)
+        from src.plugins.agent_chat.presentation import parse
+        import json
+        await send(parse('QQ_REPLY '+json.dumps({'text':'哼😏','reply_to':str(observed.message_id),'faces':['捂脸']}),{str(observed.message_id)}))
+        assert [s.type for s in sent[-1]]==['reply','text','face']
+        sent.clear()
+        await handle_event(bot,event('ai 恢复',uid=7))
+        assert service.recovered==[], 'ordinary group members cannot run recovery'
+        service.scheduled.clear()
+        await handle_event(bot,event('ai 恢复',uid=1))
+        assert service.recovered==['100:group:42'] and not service.scheduled, 'SUPERUSER recovery wins over chat handlers'
+        sent.clear()
         ai.config.agent_chat_images_enabled = False
         ai.media_resolver = None
         ai.service = None
         await handle_event(bot, event("你好", directed=True))
         assert sent, "disabled AI retains old @ reply"
-        print("PASS: real NoneBot dispatch, SuperAna no-hit/hit, @ takeover, quoted-image mention recovery, literal CQ, image routing, allowlist, disabled fallback")
+        print("PASS: real NoneBot dispatch, SuperAna arbitration, mention recovery, literal CQ, image/forward routing, reply+face segments, SUPERUSER recovery, allowlist, disabled fallback")
         os.chdir(ROOT)
 
 
