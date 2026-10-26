@@ -5,7 +5,7 @@ import logging
 import random
 import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
 from .domain import ChatMessage, prompt_text, strip_reasoning
@@ -24,6 +24,7 @@ class Request:
     prepare: object = None
     kind: str = 'direct'
     generation: int = -1
+    enqueued_at: float = field(default_factory=time.monotonic)
 
 
 class ChatService:
@@ -106,6 +107,9 @@ class ChatService:
 
     def _enqueue(self, request):
         message = request.message
+        # Reject old gateway snapshots on arrival; this is separate from time spent queued.
+        if time.time() - message.timestamp > 120:
+            return False
         if message.key in self.recovering:
             return False
         if message.key not in self.tasks and len(self.tasks) >= self.cfg.agent_chat_max_pending:
@@ -130,7 +134,7 @@ class ChatService:
                     await asyncio.sleep(max(0, last + self.cfg.agent_chat_cooldown - time.time()))
                 async with self.slots:
                     request = self.pending.pop(key)
-                    if time.time() - request.message.timestamp > 120:
+                    if time.monotonic() - request.enqueued_at > self.cfg.agent_chat_queue_timeout:
                         continue
                     await self._respond(request)
         except asyncio.CancelledError:

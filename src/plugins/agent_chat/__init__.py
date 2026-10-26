@@ -187,6 +187,7 @@ async def administer(bot: Bot, event: MessageEvent, args: Message = CommandArg()
         quiet_label = (f'{config.agent_chat_quiet_start}:00—{config.agent_chat_quiet_end}:00'
                        if config.agent_chat_quiet_start != config.agent_chat_quiet_end else '关闭（全天可接话）')
         await admin.finish("AI 桥接：" + status +
+            f"\n近一小时对话回合：{service.store.calls(key, service.local_time().timestamp() - 3600)[0]}/{config.agent_chat_max_calls_per_hour}；排队上限：{config.agent_chat_queue_timeout:g} 秒" +
             f"\nAnySearch 搜索：{'开启' if config.agent_chat_search_enabled else '关闭'}；近一小时搜索回合 {service.store.search_count(key)}/{config.agent_chat_search_max_per_hour}" +
             f"\n读图：{'开启' if config.agent_chat_images_enabled else '关闭'}；随机接话：{config.agent_chat_ambient_probability:.0%}" +
             f"\n主动引用：{'开启' if config.agent_chat_reply_enabled else '关闭'}；QQ表情：{'开启' if config.agent_chat_faces_enabled else '关闭'}；合并转发：{'开启' if config.agent_chat_forwards_enabled else '关闭'}" +

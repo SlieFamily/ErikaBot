@@ -10,7 +10,7 @@ NoneBot 负责 QQ 收发、白名单、消息仲裁与限流；DSH 负责模型/
 - 每个“机器人账号 + 群号/私聊用户”独立绑定一个 DSH 会话，重启复用，避免串群。SQLite 存在 `data/agent_chat/state.sqlite3`，每个对话最多保存 200 条输入；首次补充最近 20 条，以后每次只补充尚未送入 DSH 的最新消息，单次上限仍是 20 条。
 - 现有显式命令优先。`their_ana.SuperAna` 和 `abuse` 标记为被动处理器：实际发出语录才占用消息。普通消息扫描后不吞掉 AI 机会；默认 @ 时由 AI 接管，关闭 `AGENT_CHAT_TAKEOVER_MENTIONS` 可保留旧 @ 语录行为。
 - AI 在 NoneBot 的事件后处理阶段调度，因此不会被 SuperAna 的 `block` 阻断。对 their_ana 的修改不引用 AI 服务，AI 关闭时保留旧行为。
-- 同群串行、2 秒合并、8 秒冷却，每小时每个对话最多 30 次调用；最多 2 个模型请求并发、16 个待处理对话。默认回复最多 600 字符。
+- 同群串行、2 秒合并、8 秒冷却，每小时每个对话最多 60 次调用；最多 2 个模型请求并发、16 个待处理对话。默认回复最多 600 字符。
 - 收到旧消息快照不重发；输出只认本次请求对应的已完成回合，忽略流式片段和思考内容。断线、超时或发送结果不确定时暂停该会话，不自动重试，避免重复回复和重复收费。
 - 超级用户命令：`ai 状态`、`ai 恢复`、`ai 重置`（也接受 `/ai`，以机器人 COMMAND_START 为准）。重置先清空 DSH 待处理消息并取消执行，再清除当前对话的本地映射与上下文；保留 DSH 历史和调用频率记录。
 
@@ -36,7 +36,7 @@ NoneBot 负责 QQ 收发、白名单、消息仲裁与限流；DSH 负责模型/
 
 ### 当前部署节奏与仓库默认值
 
-当前私有配置的节奏是：随机接话 5%；安静 15 分钟后可主动说一句；每群每天最多 6 次主动尝试。2026-10-26 部署核对时保留了用户当前的 5% 设置，并按要求取消夜间静默，随机与自主发言全天可触发；冷却、等待回应和次数额度仍然生效。主白名单由私有配置维护，目前部署到 5 个群，各群会话独立且共用同一版人设。仓库不保存完整生产白名单或登录凭据。
+当前私有配置每群每小时最多 60 个 DSH 回合，排队等待上限 600 秒；单轮执行超时仍为 300 秒。接话节奏是：随机接话 5%；安静 15 分钟后可主动说一句；每群每天最多 6 次主动尝试。2026-10-26 部署核对时保留了用户当前的 5% 设置，并按要求取消夜间静默，随机与自主发言全天可触发；冷却、等待回应和次数额度仍然生效。主白名单由私有配置维护，目前部署到 5 个群，各群会话独立且共用同一版人设。仓库不保存完整生产白名单或登录凭据。
 
 仓库示例默认仍关闭插件、读图、自主发言，随机概率为 0，需按实际用途启用。`AGENT_CHAT_PROACTIVE_GROUPS=[]` 表示沿用主白名单；主白名单新增群后重启机器人即可，群会话会按需建立。已有群不会因追加群号而丢失记忆。
 
@@ -45,11 +45,16 @@ NoneBot 负责 QQ 收发、白名单、消息仲裁与限流；DSH 负责模型/
 | `AGENT_CHAT_FORWARD_PERSONA` | `true` | 首次完整载入、后续短提醒；关闭只影响对话里的角色投递，不关闭预设校验 |
 | `AGENT_CHAT_CONTEXT_MESSAGES` | `20` | 首次或单批新增输入的最大消息数；超过上限只取最新消息 |
 | `AGENT_CHAT_DEBOUNCE` / `AGENT_CHAT_COOLDOWN` | `2` / `8` 秒 | 合并同群短时消息并限制调用节奏 |
-| `AGENT_CHAT_MAX_CALLS_PER_HOUR` | `30` | 每个对话共用的调用额度，包括随机、自主、沉默和失败尝试 |
+| `AGENT_CHAT_MAX_CALLS_PER_HOUR` | `60` | 每个对话共用的调用额度，包括随机、自主、沉默和失败尝试 |
+| `AGENT_CHAT_QUEUE_TIMEOUT` | `600` 秒 | 最新触发入队后的等待上限，包含消息合并、冷却、同群排队和等待并发名额；允许配置 5～3600 秒 |
 | `AGENT_CHAT_MAX_CONCURRENT` / `AGENT_CHAT_MAX_PENDING` | `2` / `16` | 模型并发数及正在处理或排队的对话数上限 |
 | `AGENT_CHAT_TIMEOUT` / `AGENT_CHAT_MAX_REPLY_CHARS` | `90` 秒 / `600` 字符 | DSH 回合超时和最终可见回复长度 |
 
 各参数完整定义见 [配置模型](../src/plugins/agent_chat/config.py)，建议从 [.env.agent_chat.example](../.env.agent_chat.example) 开始设置。
+
+连续 @ 会合并到最新待处理机会，已有消息仍由增量上下文提供；同群上一轮结束后才开始下一轮。`AGENT_CHAT_QUEUE_TIMEOUT` 从最新触发入队时起，用单调时钟计时，不受系统校时或 QQ 消息时间偏差影响。超过等待上限的机会不再启动模型、不消耗调用额度；这与模型已经运行后的 `AGENT_CHAT_TIMEOUT` 是两段独立预算。网关刚投递时已经超过 120 秒的旧消息仍不会触发回复。
+
+`ai 状态` 会显示最近一小时已用／上限和排队等待上限。修改私有 `.env.agent_chat` 的 `AGENT_CHAT_MAX_CALLS_PER_HOUR=60`、`AGENT_CHAT_QUEUE_TIMEOUT=600` 后重启 NoneBot 即可，无须重启 DSH 或重建群会话；小时额度是滚动窗口，不因重启而清零。
 
 ## AI 自主联网搜索（AnySearch）
 
@@ -72,7 +77,7 @@ AGENT_CHAT_TIMEOUT=300
 
 - 每个 DSH 回合最多执行 **2 次 `web_search`**，每次仅 1 个至多 120 字符的公开主题、最多 3 条来源。模型可在第一次结果不足时调整关键词再查；原生工具每次超时 20 秒，整个 DSH 回合仍受 `AGENT_CHAT_TIMEOUT`（代码默认 90 秒，当前部署 300 秒）约束。原生工具会把多段模型推理合并进一个回合，慢模型可能需要增加总预算；这不是取消超时，也不代表通常需要等满 300 秒。
 - 每个“机器人账号 + 群/私聊”每小时最多 6 个实际尝试搜索的回合。首次工具调用即记一次，失败和空结果也计数；普通未搜索回合不消耗搜索额度。重启 NoneBot 或 `ai 重置` 不返还额度。每群串行、总并发仍由原有机器人限制控制。
-- 原来的每小时 30 次额度现在统计 **DSH 回合**，不等于模型底层请求次数。一个原生工具回合内可能包含多次模型推理与工具结果阅读，仍会产生 token 费用。人设首次/压缩后投递和群聊增量发送保持不变。
+- 每小时 60 次的对话额度统计 **DSH 回合**，不等于模型底层请求次数。一个原生工具回合内可能包含多次模型推理与工具结果阅读，仍会产生 token 费用。人设首次/压缩后投递和群聊增量发送保持不变。
 - AnySearch 凭据由 DSH 管理，不写入机器人的配置。未配置时插件可使用匿名访问，但能否成功、配额和收费取决于 AnySearch 当前服务。不要将聊天 API Key 复制给搜索服务。搜索超时由安全预设中的 `searchTimeoutMs: 20000` 固定并验证。
 - 桥接只接收当前请求、当前回合的最终文本；不会发送“我去查查”等中间消息、工具结果原文、思考块或伪工具调用标签。内部搜索授权控制头仍会拦截。只有实际工具结果元数据中的公开来源网址可作为本次搜索的引用，最多 2 个，最终回复仍受 600 字符默认上限约束。
 - 查询与工具结果会随 DSH 会话保留；不要把会话历史当作普通日志公开。
@@ -220,7 +225,7 @@ Get-CimInstance Win32_Process |
 
 8080 是本部署的 NoneBot 端口，其他部署按实际配置替换。DSH Desktop 是独立进程，界面进程与监听本机 API 端口的子进程可能不同；其窗口关闭是否等于退出，要以端口是否还在监听为准。DSH、NoneBot、NapCat/QQ 不是同一个进程。
 
-本机 2026-10-26 部署使用后台启动并重定向输出，日志目录为用户目录下的 `Documents/Codex/2026-10-24/new-chat/work/agent-chat/role-interests-release/`：
+本机 2026-10-26 部署使用后台启动并重定向输出，日志目录为用户目录下的 `Documents/Codex/2026-10-24/new-chat/work/agent-chat/queue-limits-release/`：
 
 - `bot.stdout.log`：标准输出，包含 NoneBot 启动、插件加载和网关连接等日志。
 - `bot.stderr.log`：标准错误，可能包含警告和错误；文件为空不代表没有发生过业务问题，应同时检查标准输出和 `ai 状态`。
@@ -230,14 +235,14 @@ Get-CimInstance Win32_Process |
 查看当前日志末尾（`-Wait` 可选；在独立查看窗口按 Ctrl+C 只结束查看）：
 
 ```powershell
-$logDir = Join-Path $env:USERPROFILE 'Documents\Codex\2026-10-24\new-chat\work\agent-chat\role-interests-release'
+$logDir = Join-Path $env:USERPROFILE 'Documents\Codex\2026-10-24\new-chat\work\agent-chat\queue-limits-release'
 Get-Content -LiteralPath (Join-Path $logDir 'bot.stdout.log') -Tail 100 -Wait
 ```
 
 导出已有日志不会断开机器人连接，也不需要重启：
 
 ```powershell
-$logDir = Join-Path $env:USERPROFILE 'Documents\Codex\2026-10-24\new-chat\work\agent-chat\role-interests-release'
+$logDir = Join-Path $env:USERPROFILE 'Documents\Codex\2026-10-24\new-chat\work\agent-chat\queue-limits-release'
 $exportDir = Join-Path $env:USERPROFILE ('Desktop\ErikaBot-logs-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
 New-Item -ItemType Directory -Path $exportDir | Out-Null
 Copy-Item -LiteralPath (Join-Path $logDir 'bot.stdout.log'), (Join-Path $logDir 'bot.stderr.log') -Destination $exportDir
@@ -354,6 +359,8 @@ DSH 不在线时，AI 会记录连接/协议错误并保持沉默，通常不会
 日常新增群只需改私有白名单并在配置正式应用时重启机器人。修改 Markdown 说明文档不需要重启任何进程。
 
 ## 测试与故障定位
+
+2026-10-26 调用与排队上限更新：121 项 Python 回归及真实 NoneBot 隔离分发探针通过；另复查了可配置的排队期限。覆盖等待超过 300 秒仍可执行、超过指定排队期限不调用模型、不接收旧网关快照，以及第 60 轮放行、第 61 轮限流。测试使用临时状态，没有发送 QQ 消息。
 
 2026-10-26 提示与旧协议清理：117 项 Python 回归、9 项 Node 守卫/安装测试及真实 DSH 工具引擎检查通过。覆盖未被 @ 的普通话题可以进入随机接话、模型仍可选择沉默、直接对话不会被误标为随机机会，以及原生搜索各中断阶段的重启保护。移除了旧搜索协议分支、过时能力说明和历史部署记录；当前原生搜索授权、思考过滤及权限边界保持有效。测试没有向 QQ 发送消息；提示表达的实际接话效果仍取决于模型。
 
