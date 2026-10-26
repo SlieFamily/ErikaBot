@@ -26,14 +26,26 @@ const definition = name => ({
   execute() { invoked += 1; return 'ran'; }
 });
 root.tools.register(definition('global_canary'));
+root.tools.register(definition('web_search'));
 const agent = {id: 'agent-chat-guard-probe'};
 const scope = createScope(root, agent);
 root.systemPrompt.section({name: 'probe:host-identity', order: 100, text: 'Generic coding assistant'});
 applyPersona(scope.ctx, {prefix: 'Dedicated QQ role and fixed protocol', complete: true, includeRuntimeContext: false});
 const assembly = await scope.ctx.systemPrompt.assemble({scope: agent, agent, signal: new AbortController().signal});
 assert.equal(renderPrompt(assembly), 'Dedicated QQ role and fixed protocol');
-apply(scope.ctx);
+// The real registry and event system are used; only the provider configuration is inert.
+apply({tools: scope.ctx.tools, on: scope.ctx.on.bind(scope.ctx),
+  web: {config: {searchProvider: {get: () => 'anysearch'}}}});
+agent.ctx = scope.ctx;
+scope.ctx.emit('agent/created', {agent});
 assert.equal(scope.ctx.tools.get('global_canary', agent), undefined);
+assert.ok(scope.ctx.tools.get('web_search', agent));
+const unauthorized = await scope.ctx.tools.execute({
+  agent, name: 'web_search', callId: 'unpermitted-search', arguments: {queries: ['public topic']},
+  signal: new AbortController().signal
+});
+assert.equal(unauthorized.isError, true);
+assert.match(JSON.stringify(unauthorized), /search is not authorized/);
 // Local tools bypass inherited-tool visibility masks, but MUST still hit the guard.
 scope.ctx.tools.register(definition('local_canary'));
 assert.ok(scope.ctx.tools.get('local_canary', agent));
@@ -42,9 +54,9 @@ for (const name of ['global_canary', 'local_canary', 'future_unknown_tool', 'run
     agent, name, callId: 'probe-' + name, arguments: {}, signal: new AbortController().signal
   });
   assert.equal(result.isError, true, name);
-  assert.match(JSON.stringify(result), /tool execution is disabled/, name);
+  assert.match(JSON.stringify(result), /only native AnySearch web_search is allowed/, name);
 }
 assert.equal(invoked, 0);
 await scope.dispose();
-console.log('PASS: installed DSH engine hides inherited tools and denies global/local/unknown/Code Mode execution; canary never ran');
+console.log('PASS: installed DSH engine exposes only native search, denies unauthorized search and global/local/unknown/Code Mode execution; canary never ran');
 console.log('PASS: complete persona excludes inherited system-prompt identity sections');

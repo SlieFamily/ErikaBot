@@ -42,7 +42,7 @@ class Store:
             self.db.execute("UPDATE dispatches SET status='interrupted' WHERE status='inflight'")
             self.db.execute("UPDATE dispatches SET status='delivery_uncertain' WHERE status='sending'")
             self.db.execute("UPDATE searches SET stage='interrupted' WHERE stage IN "
-                            "('searching','results_ready','answering')")
+                            "('searching','answered','sending')")
 
     def append(self, message):
         with self.db:
@@ -107,7 +107,7 @@ class Store:
                                (key, time.time() - 3600)).fetchone()[0]
 
     def begin_search(self, key, dispatch, limit):
-        # Includes cache hits/failures; reset does not replenish the budget.
+        # Count each turn that attempts native search, including failures; reset preserves the budget.
         with self.db:
             cur = self.db.execute("INSERT INTO searches SELECT ?,?,?,'searching' WHERE "
                 "(SELECT COUNT(*) FROM searches WHERE chat_key=? AND created>?) < ?",

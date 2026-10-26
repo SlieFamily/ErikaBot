@@ -8,7 +8,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from .domain import ChatMessage, clean_reply, prompt_text, strip_reasoning
+from .domain import ChatMessage, prompt_text, strip_reasoning
 from .dsh import BridgeError, ImageUnsupported, MissingSession
 from .search import instructions, final_answer
 from . import presentation
@@ -196,7 +196,7 @@ class ChatService:
                 history, boundary = self.store.pending_messages(key, self.cfg.agent_chat_context_messages, after)
                 forward = self.cfg.agent_chat_forward_persona
                 seed = forward and (refresh or not delivered or not delivered[2])
-                text = prompt_text(history, str(uuid.uuid4()), proactive=proactive,
+                text = prompt_text(history, str(uuid.uuid4()), proactive=proactive, ambient=request.kind == "ambient",
                                    persona=persona if seed else "", remind_persona=forward and not seed)
                 text += instructions(can_search, self.local_time().date().isoformat())
                 targets = (presentation.reply_targets(self.store.recent(key,self.cfg.agent_chat_context_messages),key)

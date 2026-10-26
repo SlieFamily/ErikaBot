@@ -72,8 +72,7 @@ class OutputTests(unittest.TestCase):
         self.assertIn(URL,value);self.assertNotIn('evil.com',value)
         self.assertNotIn('原文](',value)
         self.assertEqual(web.final_answer('[SILENT]',[URL],True,600),'')
-        for token in ('agent_chat_search','QQ_SEARCH_RESULT',web.CONTROL_PREFIX):
-            self.assertEqual(web.final_answer('leak '+token,[],False,600),'')
+        self.assertEqual(web.final_answer('leak '+web.CONTROL_PREFIX,[],False,600),'')
         self.assertEqual(web.final_answer('<tool_call>{"name":"web_search"}</tool_call>',[],False,600),'')
         self.assertLessEqual(len(web.final_answer('x'*700+' '+URL,[URL],True,100)),100)
     def test_private_source_url_rejected(self):
@@ -155,13 +154,18 @@ class ServiceSearchTests(unittest.IsolatedAsyncioTestCase):
         after=self.store.delivery(message().key,sid)[0]
         pending,_=self.store.pending_messages(message().key,20,after)
         self.assertEqual([m['message_id'] for m in pending],['late'])
-    async def test_legacy_action_never_published(self):
-        self.service.client=FakeClient();self.service.client.answer='{"agent_chat_search": {"query":"private"}}'
+    async def test_internal_search_control_never_published(self):
+        self.service.client=FakeClient();self.service.client.answer=web.CONTROL_PREFIX+'private'
         await self.submit();self.assertEqual(len(self.sent),1);self.assertNotIn('private',self.sent[0])
     async def test_interrupted_native_search_not_replayed_after_restart(self):
-        self.store.bind('g','sid','policy');dispatch=self.store.begin('g');self.store.begin_search('g',dispatch,6)
+        for stage in ('searching','answered','sending'):
+            key='g-'+stage
+            self.store.bind(key,'sid-'+stage,'policy')
+            dispatch=self.store.begin(key);self.store.begin_search(key,dispatch,6)
+            self.store.search_stage(dispatch,stage)
         self.store.close();self.store=Store(self.path);self.service.store=self.store
-        self.assertEqual(self.store.session('g')[2],1)
-        self.assertEqual(self.store.db.execute('SELECT stage FROM searches').fetchone()[0],'interrupted')
+        for stage in ('searching','answered','sending'):
+            self.assertEqual(self.store.session('g-'+stage)[2],1)
+        self.assertEqual(self.store.db.execute('SELECT DISTINCT stage FROM searches').fetchall(),[('interrupted',)])
 
 if __name__ == '__main__':unittest.main()

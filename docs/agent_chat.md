@@ -28,7 +28,7 @@ NoneBot 负责 QQ 收发、白名单、消息仲裁与限流；DSH 负责模型/
 | 只发图片，没有 @ | 可进入近期上下文；随机接话触发时可能看图 | 不会每张图片立即调用模型；之后的文字触发也可带入近期图片 |
 | 群内安静达到阈值 | 定时检查合格群，安排一次自主发言机会 | 无新活动、当天额度用完、无人回应、夜间、模型选择沉默或生成期间有新消息 |
 
-模型在直接对话、随机接话和自主发言路径都可以输出 `[SILENT]`。当前没有独立的“先判断要不要回复”模型调用；抽签命中后才调用 DSH，由同一轮决定回复或沉默。固定 2 秒消息合并属于去抖，不等于模型自主等待群友把话说完。
+模型在直接对话、随机接话和自主发言路径都可以输出 `[SILENT]`，它表示本次选择不发言，并不要求话题必须与机器人有关。普通消息抽签命中后，即使没人 @、群友在互聊，也可以顺着当前话题接梗、吐槽或共鸣；看不懂、不适合插话、话题已过或只能重复尬聊时才选择旁观。不会再次要求模型随机抽签，也不会让每条普通消息都调用模型。当前没有独立的“先判断要不要回复”模型调用；抽签命中后才调用 DSH，由同一轮决定回复或沉默。固定 2 秒消息合并属于去抖，不等于模型自主等待群友把话说完。
 
 模型明确输出 `[SILENT]` 才视为主动沉默。如果确认回合已结束，却没有最终正文（例如服务商只返回 `reasoning` 块），直接 @、引用和允许的私聊会收到一条简短失败提示；随机/主动发言仍保持安静。内部搜索控制输出无法作为答案发布时也适用此规则。不会把思考块或其标签后面的文字提升为答案，也不会因此自动重复模型请求。断线、超时及发送结果不确定仍走暂停保护，不能用此规则绕过。
 
@@ -53,7 +53,7 @@ NoneBot 负责 QQ 收发、白名单、消息仲裁与限流；DSH 负责模型/
 
 ## AI 自主联网搜索（AnySearch）
 
-搜索完全交给 DSH 已安装的 `@anysearch/anysearch-dsh`（本机 0.1.8）。模型在同一个 DSH 回合里自主调用原生 `web_search`，阅读工具结果后再生成最终群聊回复。Python 只负责消息桥接、搜索授权、用量记录和输出过滤，**不请求 Bing/搜狗、不解析搜索网页、不再发送两轮 JSON 搜索协议**。
+搜索完全交给 DSH 已安装的 `@anysearch/anysearch-dsh`（本机 0.1.8）。模型在同一个 DSH 回合里自主调用原生 `web_search`，阅读工具结果后再生成最终群聊回复。Python 负责消息桥接、搜索授权、用量记录和输出过滤；搜索请求与结果读取由 DSH 原生工具完成。
 
 在 DSH 的当前 profile 安装并启用 AnySearch，将 `web.searchProvider` 设为 `anysearch`，再安装本项目更新后的安全预设。首次迁移须重启 DSH 与 NoneBot；之后仅改以下开关只需重启 NoneBot：
 
@@ -73,9 +73,9 @@ AGENT_CHAT_TIMEOUT=300
 - 每个 DSH 回合最多执行 **2 次 `web_search`**，每次仅 1 个至多 120 字符的公开主题、最多 3 条来源。模型可在第一次结果不足时调整关键词再查；原生工具每次超时 20 秒，整个 DSH 回合仍受 `AGENT_CHAT_TIMEOUT`（代码默认 90 秒，当前部署 300 秒）约束。原生工具会把多段模型推理合并进一个回合，慢模型可能需要增加总预算；这不是取消超时，也不代表通常需要等满 300 秒。
 - 每个“机器人账号 + 群/私聊”每小时最多 6 个实际尝试搜索的回合。首次工具调用即记一次，失败和空结果也计数；普通未搜索回合不消耗搜索额度。重启 NoneBot 或 `ai 重置` 不返还额度。每群串行、总并发仍由原有机器人限制控制。
 - 原来的每小时 30 次额度现在统计 **DSH 回合**，不等于模型底层请求次数。一个原生工具回合内可能包含多次模型推理与工具结果阅读，仍会产生 token 费用。人设首次/压缩后投递和群聊增量发送保持不变。
-- AnySearch 凭据由 DSH 管理，不写入机器人的配置。未配置时插件可使用匿名访问，但能否成功、配额和收费取决于 AnySearch 当前服务。不要将聊天 API Key 复制给搜索服务。旧 `AGENT_CHAT_SEARCH_TIMEOUT` 已不再使用；搜索超时由安全预设中的 `searchTimeoutMs: 20000` 固定并验证。
-- 桥接只接收当前请求、当前回合的最终文本；不会发送“我去查查”等中间消息、工具结果原文、思考块或伪工具调用标签。旧 `agent_chat_search` / `QQ_SEARCH_RESULT` 文本也会拦截。只有实际工具结果元数据中的公开来源网址可作为本次搜索的引用，最多 2 个，最终回复仍受 600 字符默认上限约束。
-- Python 不再维护搜索网页缓存。查询与工具结果会随 DSH 会话保留；不要把会话历史当作普通日志公开。
+- AnySearch 凭据由 DSH 管理，不写入机器人的配置。未配置时插件可使用匿名访问，但能否成功、配额和收费取决于 AnySearch 当前服务。不要将聊天 API Key 复制给搜索服务。搜索超时由安全预设中的 `searchTimeoutMs: 20000` 固定并验证。
+- 桥接只接收当前请求、当前回合的最终文本；不会发送“我去查查”等中间消息、工具结果原文、思考块或伪工具调用标签。内部搜索授权控制头仍会拦截。只有实际工具结果元数据中的公开来源网址可作为本次搜索的引用，最多 2 个，最终回复仍受 600 字符默认上限约束。
+- 查询与工具结果会随 DSH 会话保留；不要把会话历史当作普通日志公开。
 
 ### 执行边界与失败处理
 
@@ -220,7 +220,7 @@ Get-CimInstance Win32_Process |
 
 8080 是本部署的 NoneBot 端口，其他部署按实际配置替换。DSH Desktop 是独立进程，界面进程与监听本机 API 端口的子进程可能不同；其窗口关闭是否等于退出，要以端口是否还在监听为准。DSH、NoneBot、NapCat/QQ 不是同一个进程。
 
-本机 2026-10-26 部署使用后台启动并重定向输出，日志目录为用户目录下的 `Documents/Codex/2026-10-24/new-chat/work/agent-chat/social-release/`：
+本机 2026-10-26 部署使用后台启动并重定向输出，日志目录为用户目录下的 `Documents/Codex/2026-10-24/new-chat/work/agent-chat/cleanup-release/`：
 
 - `bot.stdout.log`：标准输出，包含 NoneBot 启动、插件加载和网关连接等日志。
 - `bot.stderr.log`：标准错误，可能包含警告和错误；文件为空不代表没有发生过业务问题，应同时检查标准输出和 `ai 状态`。
@@ -230,14 +230,14 @@ Get-CimInstance Win32_Process |
 查看当前日志末尾（`-Wait` 可选；在独立查看窗口按 Ctrl+C 只结束查看）：
 
 ```powershell
-$logDir = Join-Path $env:USERPROFILE 'Documents\Codex\2026-10-24\new-chat\work\agent-chat\social-release'
+$logDir = Join-Path $env:USERPROFILE 'Documents\Codex\2026-10-24\new-chat\work\agent-chat\cleanup-release'
 Get-Content -LiteralPath (Join-Path $logDir 'bot.stdout.log') -Tail 100 -Wait
 ```
 
 导出已有日志不会断开机器人连接，也不需要重启：
 
 ```powershell
-$logDir = Join-Path $env:USERPROFILE 'Documents\Codex\2026-10-24\new-chat\work\agent-chat\social-release'
+$logDir = Join-Path $env:USERPROFILE 'Documents\Codex\2026-10-24\new-chat\work\agent-chat\cleanup-release'
 $exportDir = Join-Path $env:USERPROFILE ('Desktop\ErikaBot-logs-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
 New-Item -ItemType Directory -Path $exportDir | Out-Null
 Copy-Item -LiteralPath (Join-Path $logDir 'bot.stdout.log'), (Join-Path $logDir 'bot.stderr.log') -Destination $exportDir
@@ -355,19 +355,13 @@ DSH 不在线时，AI 会记录连接/协议错误并保持沉默，通常不会
 
 ## 测试与故障定位
 
-2026-10-26 会话恢复与 QQ 表达：116 项 Python 回归通过；真实 NoneBot 隔离探针验证了超级用户恢复权限、与 their_ana 仲裁、转发路由及引用/表情消息段；实际 DSH 独立会话中，当前模型成功选择了引用和捂脸表情，恢复检查保留同一会话且没有重发输出。该单轮成功不代表此前搜索多步生成的 API 超时已全面解决。转发解析按本机 NapCat 实现及模拟响应验证，没有向生产群发送测试消息。可运行 `tests/agent_chat_social_probe.py --env-file .env.agent_chat --confirm-model-calls` 复测（一次真实模型请求）。
+2026-10-26 提示与旧协议清理：117 项 Python 回归、9 项 Node 守卫/安装测试及真实 DSH 工具引擎检查通过。覆盖未被 @ 的普通话题可以进入随机接话、模型仍可选择沉默、直接对话不会被误标为随机机会，以及原生搜索各中断阶段的重启保护。移除了旧搜索协议分支、过时能力说明和历史部署记录；当前原生搜索授权、思考过滤及权限边界保持有效。测试没有向 QQ 发送消息；提示表达的实际接话效果仍取决于模型。
 
-2026-10-26 AnySearch 迁移：Python 已移除 Bing/搜狗抓取与两轮搜索协议，新增原生工具事件关联、结果来源校验、伪工具文本过滤和每轮权限绑定。重复历史压缩的范围端点按 DSH 的可见顺序处理，允许序号数值逆序，仍拒绝未关联的外来输入。旧 Bing 测试记录仅说明历史版本行为，不代表当前实现。
+2026-10-26 会话恢复与 QQ 表达：116 项 Python 回归通过；真实 NoneBot 隔离探针验证了超级用户恢复权限、与 their_ana 仲裁、转发路由及引用/表情消息段；实际 DSH 独立会话中，当前模型成功选择了引用和捂脸表情，恢复检查保留同一会话且没有重发输出。该单轮成功不代表此前搜索多步生成的 API 超时已全面解决。转发解析按本机 NapCat 实现及模拟响应验证，没有向生产群发送测试消息。可运行 `tests/agent_chat_social_probe.py --env-file .env.agent_chat --confirm-model-calls` 复测（一次真实模型请求）。
 
 本版 100 项 Python 回归、9 项 Node 守卫/安装测试及真实 NoneBot 隔离分发探针通过。独立 DSH 实例使用当前模型与真实 AnySearch，确认原生搜索可找到“明日堇sumire”的 B 站主页、直播间和视频；执行端只向该会话提供 `web_search`。但当前聊天 API 在消化结果时发生 `TIMEOUT` / `TRANSPORT`，完整最终回答探针未通过。总等待预算从 90 秒提高到 300 秒仍不能修复服务商连接故障；本次按管理员选择保留当前模型部署，不能将搜索成功视为整条回复链路稳定。后续恢复 API 或更换模型后，应重新执行下方探针；超时暂停仍按既有流程恢复。
 
-2026-10-25 中文专名与全天接话更新：107 项 Python 回归通过。隔离真实查询复现了“四时小路 B站 UP主”被 Bing 泛化成“四”，修复后的完整专名补查返回了正确 B 站主页；同一 DSH 会话消化后输出了带来源的回答，未向 QQ 发送测试消息。另覆盖不相关结果过滤、只补查一次、缓存隔离，以及起止小时相同时 24 小时均无夜间限制、每日额度和等待新消息规则仍然保留。
-
 2026-10-25 无回复修复：102 项 Python 回归通过；真实 OneBot/NoneBot 隔离探针复现并验证了“引用别人图片后紧跟 @机器人”的提及丢失，同时验证 @其他人、@全体和文字 CQ 不会误触发。当前新模型经独立几何图与随机数字测试确认支持视觉后，补齐了该模型在 DSH 中的图片输入声明。空最终正文现在会对直接提问给出失败提示，仍不发布思考块、不自动重试模型。
-
-2026-10-25 Bing 搜索更新：99 项 Python 测试、6 项 Node 测试、实际 NoneBot 隔离分发探针与已安装 DSH 工具守卫检查通过。搜索用例覆盖内部动作解析、敏感查询拒绝、固定公网连接、重定向/超大 XML 拒绝、超时、缓存隔离、两轮额度、搜索失败后的正常回复、模型失败暂停、取消/重启及搜索期间新消息的投递进度；另覆盖模型切换通知兼容和真正外来输入继续拦截。
-
-真实 Bing + 独立 DSH 会话验证了普通闲聊一轮、近期问题自主搜索后同会话消化（各两轮）。《STEINS;GATE RE:BOOT》问题附上了检索结果中的官网链接；Bing 未提供具体 VALORANT 补丁时，模型明确表示无法确认，没有编造版本号。查询质量和模型措辞仍会变化，测试不代表所有问题都能找到答案。
 
 可重复运行独立原生搜索探针（一个 DSH 回合，可含多次模型推理和最多两次搜索；不向 QQ 发消息、不停止生产进程）：
 
@@ -376,8 +370,6 @@ poetry run python -B tests/agent_chat_search_probe.py --confirm-model-calls
 ```
 
 探针使用临时 SQLite、新 DSH 会话和内存发送器；需要搜索结果确实可用，网络、页面索引或模型策略变化可能导致检查失败。
-
-正式部署时只重启 NoneBot，未重启 DSH、NapCat 或 QQ。部署前发现三个旧会话已因 DSH 断线或模型切换通知暂停；备份后核对原预设、结束回合和空队列，保留原会话与投递进度恢复，没有重发旧回复。该恢复是本次部署的逐项检查，不代表插件新增了自动解锁暂停会话的功能。
 
 ```powershell
 poetry run python -B -m unittest discover -s tests -p "test_agent_chat*.py" -v
@@ -396,8 +388,6 @@ node --test tests/test_agent_chat_guard.mjs tests/test_agent_chat_setup.mjs
 ```powershell
 poetry run python -B tests/agent_chat_incremental_probe.py --confirm-model-calls
 ```
-
-同日早期的人设与投递更新（历史记录，逐轮全文已被增量优化取代）：Python 套件扩展至 61 项，通过同次预设校验后提取角色、逐轮投递、关闭投递仍校验策略等检查；6 项 Node 测试及实际 NoneBot 分发探针通过。独立 DSH 抽查覆盖瓦、APEX、bxslj/斯莱关系与身份玩梗。文本示例用于发现明显偏差，不保证每次输出相同。
 
 2026-10-25 角色卡更新验证：39 项 Python 测试与 6 项 Node 测试通过；跨运行时测试将安装器输出交给实际 YAML 解析器与桥接校验器，覆盖完整角色文本、特殊换行及配置注入。需要 Node.js；不在 PATH 时可设置 `AGENT_CHAT_TEST_NODE` 为可执行文件完整路径，否则跨运行时用例会跳过。真实 DSH 引擎验证了完整人设排除通用身份章节、工具守卫继续拒绝执行；独立模型会话的两轮抽查正确呈现了绘梨花口吻和设定中的作品、国 V 偏好，没有向 QQ 发送测试消息。抽查用于发现明显偏差，不保证每次措辞都一致。
 

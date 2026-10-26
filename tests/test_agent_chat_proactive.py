@@ -117,3 +117,22 @@ class ProactiveTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(self.service.schedule(ambient, self.send))
         await self.drain()
         self.assertEqual(len(self.sent), 2)
+
+    async def test_ambient_can_join_unaddressed_chat_and_choose_silence(self):
+        self.service.cfg.agent_chat_ambient_probability = .05
+        ambient = replace(core.message(), directed=False, text='今天下班路上又下雨了')
+        self.service.observe(ambient)
+        with patch('random.random', return_value=.01):
+            self.assertTrue(self.service.schedule(ambient, self.send))
+        await self.drain()
+        self.assertEqual(len(self.sent), 1)
+        self.assertIn('随机接话机会', self.client.prompts[-1][1])
+        self.client.answer = '[SILENT]'
+        ambient = replace(ambient, message_id='2', text='刚才那个人私下的事先别聊了')
+        self.service.observe(ambient)
+        with patch('random.random', return_value=.01):
+            self.assertTrue(self.service.schedule(ambient, self.send))
+        await self.drain()
+        self.assertEqual(len(self.sent), 1)
+        await self.submit(core.message(mid='3'))
+        self.assertNotIn('随机接话机会', self.client.prompts[-1][1])
