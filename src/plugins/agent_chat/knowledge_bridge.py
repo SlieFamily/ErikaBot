@@ -18,16 +18,23 @@ class KnowledgeScope:
     members: dict
     messages: list
     tools: tuple
+    memory_revision: object = None
+    memory_writes: int = 0
 
 
 class KnowledgeHub:
-    def __init__(self, store, token):
+    def __init__(self, store, token, memory=None):
         self.store, self.token, self.leases = store, token, {}
+        self.memory = memory
 
     def scope(self, key, messages, memory=True, slang=True):
         members = {str(m['user_id']): str(m['name']) for m in messages if m.get('user_id') and m.get('name')}
-        return KnowledgeScope(self, key, members, messages,
+        scope = KnowledgeScope(self, key, members, messages,
                               (MEMORY_TOOLS if memory else ()) + (SLANG_TOOLS if slang else ()))
+        if self.memory:
+            scope.memory_revision=self.memory.settings(key)['revision']
+            scope.tools=tuple(t for t in scope.tools if t not in MEMORY_TOOLS or self.memory.allows(scope,t))
+        return scope
 
     @contextlib.contextmanager
     def lease(self, scope, sid, rid):
@@ -52,6 +59,8 @@ class KnowledgeHub:
         scope = lease['scope']
         if name not in scope.tools or name not in TOOLS or not isinstance(args,dict):
             raise KnowledgeError('tool_not_authorized')
+        if name in MEMORY_TOOLS and self.memory and not self.memory.allows(scope,name):
+            raise KnowledgeError('memory_disabled_or_changed')
         digest = hashlib.sha256(json.dumps([name,args],sort_keys=True).encode()).hexdigest()
         if cid in lease['calls']:
             old_digest, result = lease['calls'][cid]
@@ -85,7 +94,9 @@ class KnowledgeHub:
                 return {'ok':False,'error':'member_target_required',
                         'hint':'memberImpression 必须在 extra.target 填写群友 user_id，例如 extra={"target":"7"}；其他参数不能代替 target。',
                         'observed_members':dict(list(scope.members.items())[-10:])}
-            return s.append_memory(key,args.get('category'),args.get('content'),args.get('extra'),scope.members)
+            result=s.append_memory(key,args.get('category'),args.get('content'),args.get('extra'),scope.members)
+            if result.get('ok'):scope.memory_writes+=1
+            return result
         if name == 'qq_memory_query':
             entries=s.memory(key,args.get('category',''))
             visible=[]

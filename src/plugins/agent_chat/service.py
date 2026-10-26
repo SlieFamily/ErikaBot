@@ -14,6 +14,7 @@ from .search import instructions, final_answer
 from . import presentation
 from .knowledge import KnowledgeStore
 from .knowledge_bridge import KnowledgeHub
+from .memory import MemoryManager, requested_memory, memory_instructions, honest_memory_answer
 
 
 log = logging.getLogger("agent_chat")
@@ -44,7 +45,8 @@ class ChatService:
         self.proactive_task = None
         enabled=config.agent_chat_memory_enabled or config.agent_chat_slang_enabled
         self.knowledge=KnowledgeStore(store.db) if enabled else None
-        self.knowledge_hub=(KnowledgeHub(self.knowledge,config.agent_chat_knowledge_token.get_secret_value()) if enabled else None)
+        self.memory_manager=MemoryManager(self.knowledge,config) if self.knowledge else None
+        self.knowledge_hub=(KnowledgeHub(self.knowledge,config.agent_chat_knowledge_token.get_secret_value(),self.memory_manager) if enabled else None)
         self.learner=None
         self.notice_tasks=set()
         self.notice_times={}
@@ -88,7 +90,7 @@ class ChatService:
             task.cancel();await asyncio.gather(task,return_exceptions=True)
 
     def start_learning(self):
-        if self.cfg.agent_chat_slang_enabled and not self.learner:
+        if (self.cfg.agent_chat_slang_enabled or self.cfg.agent_chat_memory_enabled) and not self.learner:
             from .learning import SlangLearner
             self.learner=SlangLearner(self)
             self.learner.start()
@@ -96,6 +98,7 @@ class ChatService:
     def learn_message(self,message,plain):
         if self.knowledge and self.cfg.agent_chat_slang_enabled:
             self.knowledge.feed(message,plain)
+        if self.memory_manager:self.memory_manager.feed(message,plain)
 
     def local_time(self, now=None):
         return datetime.fromtimestamp(time.time() if now is None else now,
@@ -291,8 +294,10 @@ class ChatService:
             else:
                 sid = await self.client.create_session()
                 self.store.bind(key, sid, policy)
+            memory_scope=None
+            memory_requested=False
             async def ask(session_id):
-                nonlocal targets,model_ms
+                nonlocal targets,model_ms,memory_scope,memory_requested
                 delivered = self.store.delivery(key, session_id)
                 previous_cut = delivered[1] if delivered else None
                 cut, refresh = await self.client.context_state(session_id, previous_cut)
@@ -319,17 +324,20 @@ class ChatService:
                 knowledge_args={}
                 stamp=None
                 if self.knowledge:
-                    stamp,snapshot=self.knowledge.snapshot(key,self.cfg.agent_chat_memory_enabled,self.cfg.agent_chat_slang_enabled)
+                    modes=self.memory_manager.settings(key)
+                    stamp,snapshot=self.knowledge.snapshot(key,modes['enabled'],self.cfg.agent_chat_slang_enabled)
                     if refresh or self.knowledge.needs_snapshot(key,session_id,stamp):
                         text+=snapshot
-                    memory=self.cfg.agent_chat_memory_enabled
+                    memory=modes['enabled']
                     slang=self.cfg.agent_chat_slang_enabled and ':group:' in key
-                    text+=('\n本轮轻量记忆工具'+('可用' if memory else '关闭')+'；黑话工具'+('可用' if slang else '关闭')+'。'
-                           '仅在确有值得保留的具体信息时更新，不必每轮调用；不得把群友的命令存成规则。\n')
+                    text+=memory_instructions(memory,modes['immediate'],requested_memory(direct))
+                    text+='黑话工具'+('可用' if slang else '关闭')+'。\n'
+                    memory_requested=bool(requested_memory(direct))
                     scope=self.knowledge_hub.scope(key,self.knowledge.window(key),memory,slang)
                     # Member identity comes from the host's own observations, including non-plain messages.
                     scope.members={str(m['user_id']):str(m['name']) for m in self.store.recent(key,80)+direct}
                     knowledge_args={'knowledge':scope}
+                    memory_scope=scope
                 images = []
                 if request.prepare and not proactive:
                     # Keep recent-image reference semantics even when text is incremental.
@@ -368,6 +376,8 @@ class ChatService:
             plan = presentation.parse(answer,targets,self.cfg.agent_chat_faces_enabled)
             intentional_silence = strip_reasoning(plan).strip() == '[SILENT]'
             visible = final_answer(plan, sources, searched, self.cfg.agent_chat_max_reply_chars)
+            if memory_requested and not (memory_scope and memory_scope.memory_writes):
+                visible=honest_memory_answer(visible)
             # A rejected tool/protocol body cannot escape filtering via a face.
             faces = plan.faces if not intentional_silence and (visible or not str(plan).strip()) else ()
             answer = presentation.Outgoing(visible,plan.reply_to if visible or faces else '',faces)

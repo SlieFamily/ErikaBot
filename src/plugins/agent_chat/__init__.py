@@ -160,7 +160,7 @@ async def dispatch_chat(bot: Bot, event: MessageEvent, state: T_State):
     if not service or not bucket or not bucket["fresh"]:
         return
     message = bucket["message"]
-    if config.agent_chat_slang_enabled and isinstance(event,GroupMessageEvent) and not bucket.get('command'):
+    if (config.agent_chat_memory_enabled or config.agent_chat_slang_enabled) and isinstance(event,GroupMessageEvent) and not bucket.get('command'):
         service.learn_message(message,event.message.extract_plain_text())
     if bucket['claimed']:
         return
@@ -192,7 +192,7 @@ async def administer(bot: Bot, event: MessageEvent, args: Message = CommandArg()
     command = args.extract_plain_text().strip()
     if (isinstance(event,GroupMessageEvent) and event.group_id in config.agent_chat_groups or
             isinstance(event,PrivateMessageEvent) and event.user_id in config.agent_chat_private_users):
-        rendered=knowledge_command(service.knowledge,key,command)
+        rendered=knowledge_command(service.knowledge,key,command,memory=getattr(service,'memory_manager',None))
         if rendered is not None:
             await admin.finish(Message(MessageSegment.text(rendered)))
     if command in {"状态", "status"}:

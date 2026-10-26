@@ -24,6 +24,11 @@ class Config(BaseModel):
     agent_chat_dsh_cookie: SecretStr = SecretStr("")
     agent_chat_state_path: Path = Path("data/agent_chat/state.sqlite3")
     agent_chat_memory_enabled: bool = False
+    agent_chat_memory_immediate_enabled: bool = True
+    agent_chat_memory_background_enabled: bool = False
+    agent_chat_memory_batch_threshold: int = Field(30, ge=1, le=200)
+    agent_chat_memory_interval: int = Field(600, ge=60, le=86400)
+    agent_chat_memory_min_interval: int = Field(300, ge=30, le=86400)
     agent_chat_slang_enabled: bool = False
     agent_chat_knowledge_token: SecretStr = SecretStr("")
     agent_chat_learning_max_per_hour: int = Field(12, ge=1, le=60)

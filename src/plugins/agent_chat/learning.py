@@ -39,6 +39,7 @@ class SlangLearner:
         self.client=client or DshClient(config,preset_id=LEARNER_PRESET_ID)
         self.task=None
         self.backoff=0
+        self.memory_first=True
 
     def start(self):
         if not self.task:
@@ -70,20 +71,27 @@ class SlangLearner:
     async def tick(self):
         if not self.available():
             return False
-        for key in self.store.learning_keys():
+        manager=getattr(self.service,'memory_manager',None)
+        memory_jobs=[(key,'memory',None) for key in manager.keys() if manager.due(key)] if manager else []
+        slang_jobs=[]
+        if self.service.cfg.agent_chat_slang_enabled:
+            for key in self.store.learning_keys():
+                if self.store.extraction_due(key):slang_jobs.append((key,'extract',None))
+                else:
+                    targets=self.store.research_targets(key)
+                    if targets:slang_jobs.append((key,'research',targets[0]))
+        jobs=memory_jobs+slang_jobs if self.memory_first else slang_jobs+memory_jobs
+        for key,kind,target in jobs:
             parts=key.split(':')
             if len(parts)!=3 or parts[1]!='group' or not parts[2].isdigit() or int(parts[2]) not in self.service.cfg.agent_chat_groups:
                 continue
-            if self.store.extraction_due(key):
-                kind,target='extract',None
-            else:
-                targets=self.store.research_targets(key)
-                if not targets:continue
-                kind,target='research',targets[0]
             async with self.service.slots:
-                if self.service.tasks or self.service.pending:
-                    return False
-                await self.run(key,kind,target)
+                if self.service.tasks or self.service.pending or self.store.learning_count()>=self.service.cfg.agent_chat_learning_max_per_hour:return False
+                if kind=='memory':
+                    from .memory_learning import run_memory
+                    await run_memory(self,key)
+                else:await self.run(key,kind,target)
+            self.memory_first=kind!='memory'
             return True
         return False
 

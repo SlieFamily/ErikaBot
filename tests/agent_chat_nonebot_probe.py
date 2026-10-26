@@ -169,12 +169,30 @@ async def main():
             item=service.knowledge.submit_slang('100:group:42',term,[{'key':'100:group:42','message_id':term,'text':term,'name':'群友','user_id':'7'}])
             ids.append(item['id'])
         with db:db.execute("UPDATE knowledge_slang SET meaning='测试解释'")
-        command='ai 黑话确认 '+','.join(str(i) for i in ids)
+        command='ai 黑话确认 '+' '.join(str(i) for i in ids)
         await handle_event(bot,event(command,uid=7))
         assert db.execute("SELECT COUNT(*) FROM knowledge_slang WHERE status='confirmed'").fetchone()[0]==0
         await handle_event(bot,event(command,uid=1))
         assert db.execute("SELECT COUNT(*) FROM knowledge_slang WHERE status='confirmed'").fetchone()[0]==2
         assert '已确认 2 条' in str(sent[-1])
+        from src.plugins.agent_chat.memory import MemoryManager
+        ai.config.agent_chat_memory_enabled=True
+        ai.config.agent_chat_memory_background_enabled=True
+        service.memory_manager=MemoryManager(service.knowledge,ai.config)
+        await handle_event(bot,event('ai 后台记忆 全群 关',uid=7))
+        assert service.memory_manager.settings('100:group:42')['background'], 'ordinary members cannot change memory controls'
+        service.scheduled.clear()
+        await handle_event(bot,event('ai 后台记忆 全群 关',uid=1))
+        assert not service.memory_manager.settings('100:group:42')['background'] and not service.scheduled
+        assert not service.memory_manager.settings('100:group:43')['background']
+        await handle_event(bot,event('ai 后台记忆 开',uid=1))
+        assert service.memory_manager.settings('100:group:42')['background']
+        await handle_event(bot,event('ai 记忆状态',uid=1))
+        assert '待整理' in str(sent[-1])
+        ai.config.agent_chat_slang_enabled=False
+        before=len(service.learned)
+        await handle_event(bot,event('普通的新聊天'))
+        assert len(service.learned)==before+1, 'memory-only mode still receives unmentioned text'
         service.knowledge=None;db.close()
         ai.config.agent_chat_images_enabled = False
         ai.media_resolver = None

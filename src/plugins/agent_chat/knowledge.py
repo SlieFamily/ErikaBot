@@ -3,6 +3,7 @@
 Reference: a49877f, bridge.js appendMemoryV2/formatMemoryV2 and slang-learner.js.
 See third_party/qq-bridge-LICENSE. Stored content is always untrusted data.
 """
+from contextlib import nullcontext
 import hashlib
 import json
 import re
@@ -114,11 +115,11 @@ class KnowledgeStore:
         ''')
         with self.db:
             self.db.execute('UPDATE knowledge_learning_state SET session_id=NULL,policy=NULL WHERE chat_key IN '
-                            "(SELECT chat_key FROM knowledge_runs WHERE status='running')")
-            self.db.execute("UPDATE knowledge_runs SET status='interrupted' WHERE status='running'")
+                            "(SELECT chat_key FROM knowledge_runs WHERE status='running' AND kind!='memory')")
+            self.db.execute("UPDATE knowledge_runs SET status='interrupted' WHERE status='running' AND kind!='memory'")
 
-    def prune_memory(self, key):
-        with self.db:
+    def prune_memory(self, key, *, commit=True):
+        with self.db if commit else nullcontext():
             self.db.execute('DELETE FROM knowledge_memory WHERE chat_key=? AND expires>0 AND expires<=?',
                             (key, time.time()))
 
@@ -131,14 +132,14 @@ class KnowledgeStore:
         return [dict(id=i, category=c, content=text, extra=json.loads(extra), updated=t, expires=exp)
                 for i, c, text, extra, t, exp in rows]
 
-    def append_memory(self, key, category, content, extra=None, members=None):
+    def append_memory(self, key, category, content, extra=None, members=None, *, commit=True):
         category = category_value(category)
         content = text_value(content, 200, required=True)
         extra = {} if extra is None else extra
         if not isinstance(extra, dict) or set(extra) - {'target','participants','pendingQuestion','motivation','expiresAtMs'}:
             raise KnowledgeError('invalid_memory_extra')
         now = time.time()
-        self.prune_memory(key)
+        self.prune_memory(key, commit=commit)
         value, identity, expires, cap = {}, content, now + 86400, 20
         if category == 'activeTopic':
             participants = extra.get('participants', [])
@@ -175,7 +176,7 @@ class KnowledgeStore:
             value = {'target': target, 'name': str(members[target])[:64], 'traits': traits,
                      'interactionCount': min(100000, old.get('interactionCount', 0) + 1)}
             content = '、'.join(traits)
-        with self.db:
+        with self.db if commit else nullcontext():
             self.db.execute('INSERT INTO knowledge_memory(chat_key,category,identity,content,extra,updated,expires) '
                             'VALUES(?,?,?,?,?,?,?) ON CONFLICT(chat_key,category,identity) DO UPDATE SET '
                             'content=excluded.content,extra=excluded.extra,updated=excluded.updated,expires=excluded.expires',
