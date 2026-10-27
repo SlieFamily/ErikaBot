@@ -59,7 +59,7 @@ PRESENTATION_RULES = (
     '友好克制，不催回复、不骚扰，也不必每句都做。需要动作时输出 QQ_REPLY 加 JSON：'
     '{"text":"最终发言","reply_to":"消息ID或空串","faces":[],"mentions":[],"reaction":null,"poke":""}。'
     'faces最多两个QQ表情名；mentions最多两个QQ号字符串；reaction为{"message_id":"消息ID","emoji":"👍"}或null；'
-    'poke为一个QQ号或空串。mentions/reaction/poke可省略，其余字段必填。只贴表情或戳人可无正文，实质问题仍要回答。'
+    'poke为一个QQ号或空串。text必填，其余不用的字段可省略。只贴表情或戳人可无正文，实质问题仍要回答。'
     '引用/互动目标仅限最新 QQ_ALLOWED 对应列表，空列表表示禁止；faces=false禁止QQ表情，禁止@全体或转发内部ID。'
     '附图时可加可选image_notes对象，键为本轮附件名、值为至多200字的可见内容记录；它不发送到QQ。'
     '动作由桥接校验、冷却后执行，别声称已经成功。不要代码围栏、额外字段、CQ码；[SILENT]取消全部动作。'
@@ -75,23 +75,61 @@ def instructions(targets, faces=True, social=None, seed_rules=True):
             + 'QQ_ALLOWED ' + json.dumps(allowed, ensure_ascii=False, separators=(',', ':')) + '\n')
 
 
+def _envelope(value):
+    """Recognize only whole, bounded envelopes; never mine JSON from prose."""
+    if len(value) > 100000:
+        raise ValueError()
+    recognized = False
+    for _ in range(2):
+        fence = re.fullmatch(r'```(?:json)?\s*\n([\s\S]*?)\n```', value, re.I)
+        if fence:
+            value = fence[1].strip()
+            continue
+        xml = re.fullmatch(r'<QQ_REPLY>\s*([\s\S]*?)\s*</QQ_REPLY>', value)
+        if xml:
+            recognized = True
+            value = xml[1].strip()
+            continue
+        break
+    marker = re.match(r'^QQ_REPLY\s*[:：]?\s*(?=\{)', value)
+    if marker:
+        recognized = True
+        value = value[marker.end():]
+    if not recognized: raise ValueError()
+    def unique(pairs):
+        result = {}
+        for key, item in pairs:
+            if key in result: raise ValueError()
+            result[key] = item
+        return result
+    return json.loads(value, object_pairs_hook=unique)
+
+
 def parse(text, targets, faces=True, social=None, images=()):
     value = strip_reasoning(text).strip()
-    if 'QQ_REPLY' in text and not value.startswith(PREFIX):
-        return Outgoing('')
-    if not value.startswith(PREFIX):
-        # Partial/misformatted envelopes must not be published as protocol text.
-        return Outgoing('' if value.startswith('QQ_REPLY') else value)
+    # Reasoning may mention the protocol without making the final answer an envelope.
+    # An orphan reasoning tag inside an envelope must still fail closed.
+    raw_control = bool(re.match(r'^(?:QQ_REPLY|<QQ_REPLY>|```(?:json)?\s*\n\s*(?:QQ_REPLY|<QQ_REPLY>))', text.strip()))
+    if 'QQ_REPLY' not in value:
+        return Outgoing('' if raw_control else value)
     try:
-        obj = json.loads(value[len(PREFIX):])
-        if not isinstance(obj,dict) or not {'text','reply_to','faces'} <= set(obj) or set(obj)-{'text','reply_to','faces','mentions','reaction','poke','image_notes'}: raise ValueError()
-        if not isinstance(obj['text'],str) or not isinstance(obj['reply_to'],str): raise ValueError()
-        if not isinstance(obj['faces'],list) or len(obj['faces'])>2: raise ValueError()
-        if any(not isinstance(f,str) for f in obj['faces']): raise ValueError()
-        image_notes=obj.get('image_notes',{})
-        names={im.get('name') for im in images}
-        if (not isinstance(image_notes,dict) or len(image_notes)>4 or
-                any(k not in names or not isinstance(v,str) or len(v)>200 for k,v in image_notes.items())):raise ValueError()
+        obj = _envelope(value)
+        if not isinstance(obj,dict) or not isinstance(obj.get('text'),str): raise ValueError()
+    except (ValueError,TypeError,RecursionError):
+        return Outgoing('')
+    body = strip_reasoning(obj['text']).strip()
+    if 'QQ_REPLY' in body: return Outgoing('')
+    if body == '[SILENT]': return Outgoing('[SILENT]')
+    try:
+        if set(obj)-{'text','reply_to','faces','mentions','reaction','poke','image_notes'}: raise ValueError()
+        reply = obj.get('reply_to','')
+        # JSON number is a common model spelling; normalize only an exact bounded integer.
+        if type(reply) is int and -(2**63) <= reply < 2**63: reply = str(reply)
+        if reply is None: reply = ''
+        if not isinstance(reply,str): raise ValueError()
+        chosen_faces = obj.get('faces',[])
+        if not isinstance(chosen_faces,list) or len(chosen_faces)>2: raise ValueError()
+        if any(not isinstance(f,str) for f in chosen_faces): raise ValueError()
         mentions = obj.get('mentions',[])
         reaction = obj.get('reaction')
         poke = obj.get('poke','')
@@ -99,16 +137,21 @@ def parse(text, targets, faces=True, social=None, images=()):
         if not isinstance(poke,str): raise ValueError()
         if reaction is not None and (not isinstance(reaction,dict) or set(reaction)!={'message_id','emoji'}
                 or not all(isinstance(v,str) for v in reaction.values())): raise ValueError()
-        if strip_reasoning(obj['text']).strip() == '[SILENT]': return Outgoing('[SILENT]')
         scope = social or {'mentions':set(), 'reaction':set(), 'poke':set()}
-        selected_faces = [FACES[f] for f in obj['faces'] if faces and f in FACES]
-        selected_mentions = list(dict.fromkeys(u for u in mentions if u in scope['mentions'])) if obj['text'].strip() or selected_faces else []
+        selected_faces = [FACES[f] for f in chosen_faces if faces and f in FACES]
+        selected_mentions = list(dict.fromkeys(u for u in mentions if u in scope['mentions'])) if body or selected_faces else []
         selected_reaction = ((reaction['message_id'],REACTIONS[reaction['emoji']])
             if reaction and reaction['message_id'] in scope['reaction'] and reaction['emoji'] in REACTIONS else ())
-        return Outgoing(obj['text'],obj['reply_to'] if obj['reply_to'] in targets else '',selected_faces,
+        # Private image annotations are optional and cannot invalidate a valid answer.
+        names={im.get('name') for im in images}
+        notes=obj.get('image_notes',{})
+        image_notes=({k:v for k,v in list(notes.items())[:4]
+                      if k in names and isinstance(v,str) and len(v)<=200} if isinstance(notes,dict) else {})
+        return Outgoing(body,reply if reply in targets else '',selected_faces,
                         selected_mentions,selected_reaction,poke if poke in scope['poke'] else '',image_notes)
     except (ValueError,TypeError):
-        return Outgoing('')
+        # An invalid optional action never consumes an otherwise valid final answer.
+        return Outgoing(body)
 
 
 def segments(value):

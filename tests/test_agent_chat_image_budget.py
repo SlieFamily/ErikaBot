@@ -127,6 +127,8 @@ class NotesTests(unittest.TestCase):
   obj={'text':'看到了','reply_to':'','faces':[],'image_notes':{'qq-image-1.jpg':'[CQ:at,qq=all]'}}
   result=p.parse('QQ_REPLY '+json.dumps(obj),set(),images=[{'name':'qq-image-1.jpg'}])
   self.assertEqual(result.image_notes,obj['image_notes']);self.assertNotIn('CQ',json.dumps(p.segments(result)))
-  self.assertFalse(p.parse('QQ_REPLY '+json.dumps(obj),set()))
+  result=p.parse('QQ_REPLY '+json.dumps(obj),set())
+  self.assertEqual(result,'看到了');self.assertFalse(result.image_notes)
   for bad in [{'file:///secret':'x'},{'qq-image-1.jpg':'x'*201},['bad']]:
-   obj['image_notes']=bad;self.assertFalse(p.parse('QQ_REPLY '+json.dumps(obj),set(),images=[{'name':'qq-image-1.jpg'}]))
+   obj['image_notes']=bad;result=p.parse('QQ_REPLY '+json.dumps(obj),set(),images=[{'name':'qq-image-1.jpg'}])
+   self.assertEqual(result,'看到了');self.assertFalse(result.image_notes)

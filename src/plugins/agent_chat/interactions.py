@@ -1,7 +1,7 @@
 """Optional social actions through NoneBot's existing factories and Bot API dispatch."""
 import asyncio
 import logging
-from .presentation import Outgoing, REACTIONS, segments, social_targets
+from .presentation import Outgoing, REACTIONS, segments, social_targets, reply_targets
 
 log = logging.getLogger('agent_chat')
 
@@ -49,16 +49,26 @@ class SocialActions:
         parts = key.split(':')
         group = (int(parts[2]) if len(parts)==3 and parts[0]==str(bot.self_id)
                  and parts[1]=='group' and parts[2].isdigit() else None)
-        scope = (social_targets(self.store.recent(key,200),key,self.config)
+        history = self.store.recent(key,200)
+        scope = (social_targets(history,key,self.config)
                  if group in self.config.agent_chat_groups else {'mentions':set(),'reaction':set(),'poke':set()})
         mentions = tuple(u for u in value.mentions if u in scope['mentions'])[:2]
         reaction = (value.reaction if len(value.reaction)==2 and value.reaction[0] in scope['reaction']
                     and value.reaction[1] in REACTIONS.values() else ())
         poke = value.poke if value.poke in scope['poke'] else ''
-        body = Outgoing(str(value),value.reply_to,value.faces,mentions if str(value) or value.faces else ())
+        reply = value.reply_to if value.reply_to in reply_targets(history,key) else ''
+        body = Outgoing(str(value),reply,value.faces,mentions if str(value) or value.faces else ())
         sent = False
         if segments(body):
-            receipt=await send_message(body)
+            try:
+                receipt=await send_message(body)
+            except Exception as error:
+                info=getattr(error,'info',{})
+                code=info.get('retcode') if isinstance(info,dict) else None
+                code=code if type(code) is int else None
+                log.warning('agent_chat message send failed: error=%s retcode=%s reply=%s; no replay',
+                            type(error).__name__,code,bool(reply))
+                raise
             if isinstance(receipt,dict) and str(receipt.get('message_id','')).lstrip('-').isdigit():
                 value.sent_message_id=str(receipt['message_id'])
             sent = True

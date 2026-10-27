@@ -36,7 +36,9 @@ class SocialTargetTests(unittest.TestCase):
   scope=P.social_targets([message().payload()],KEY,cfg())
   for ext in [{'mentions':['7']*3},{'mentions':[7]},{'poke':7},{'reaction':[]},
               {'reaction':{'message_id':'1','emoji':'👍','api':'delete_msg'}},{'api':'group_poke'}]:
-   self.assertFalse(P.parse(envelope(**ext),set(),social=scope))
+   result=P.parse(envelope(**ext),set(),social=scope)
+   self.assertEqual(result,'好呀🙂')
+   self.assertFalse(result.reply_to or result.faces or result.mentions or result.poke or result.reaction)
  def test_silent_cancels_all_and_optional_only_actions_remain_truthy(self):
   scope=P.social_targets([message().payload()],KEY,cfg())
   data=dict(text='[SILENT]',reply_to='',faces=[],mentions=['7'],reaction={'message_id':'1','emoji':'👍'},poke='7')

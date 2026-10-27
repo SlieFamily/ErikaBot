@@ -170,6 +170,10 @@ async def main():
         native_bot=Bot(adapter,'101')
         for raw,expected in [
             ('QQ_REPLY '+json.dumps({'text':'好呀😏','reply_to':str(observed.message_id),'faces':['捂脸']}),['reply','text','face']),
+            ('<QQ_REPLY>'+json.dumps({'text':'好呀🙂','reply_to':observed.message_id,'faces':['捂脸']})+'</QQ_REPLY>',['reply','text','face']),
+            ('```json\nQQ_REPLY '+json.dumps({'text':'好呀🙂','reply_to':str(observed.message_id)})+'\n```',['reply','text']),
+            ('<thinking>consider QQ_REPLY</thinking>正文🙂',['text']),
+            ('QQ_REPLY '+json.dumps({'text':'保留正文','reply_to':[],'faces':[1]}),['text']),
             ('就这样😂',['text']),
             ('QQ_REPLY '+json.dumps({'text':'','reply_to':'','faces':['可爱']}),['face'])]:
             await native_bot.send(forwarded,ai.outgoing_message(parse(raw,{str(observed.message_id)})))

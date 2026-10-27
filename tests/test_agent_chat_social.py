@@ -32,7 +32,10 @@ class PresentationTests(unittest.TestCase):
         cases=[{'text':'x','reply_to':'1','faces':[],'image':'file:///secret'},
                {'text':['x'],'reply_to':'1','faces':[]},{'text':'x','reply_to':'1','faces':[1]},
                {'text':'x','reply_to':'1','faces':['捂脸']*3}]
-        for item in cases:self.assertFalse(view.parse('QQ_REPLY '+json.dumps(item),{'1'}))
+        for item in cases:
+            result=view.parse('QQ_REPLY '+json.dumps(item),{'1'})
+            self.assertEqual(result,'x' if isinstance(item['text'],str) else '')
+            self.assertFalse(result.reply_to or result.faces or result.mentions or result.poke or result.reaction)
         self.assertFalse(view.parse('QQ_REPLY {broken',{'1'}))
         self.assertFalse(view.parse('QQ_REPLY {"text":"secret</thinking>tail","reply_to":"1","faces":[]}',{'1'}))
         parsed=view.parse('QQ_REPLY '+json.dumps({'text':'[SILENT]','reply_to':'1','faces':['捂脸']}),{'1'})
