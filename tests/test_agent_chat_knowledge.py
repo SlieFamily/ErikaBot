@@ -22,6 +22,18 @@ OTHER='100:group:43'
 TOKEN='a'*64
 
 
+class FakeLearnerClient(FakeClient):
+    def __init__(self):
+        super().__init__();self.checked=[];self.archived=[];self.check_error=None;self.archive_error=None
+    async def recovery_checkpoint(self,sid):
+        self.checked.append(sid)
+        if self.check_error:raise self.check_error
+        return 30
+    async def archive_session(self,sid):
+        if self.archive_error:raise self.archive_error
+        self.archived.append(sid)
+
+
 class KnowledgeTests(unittest.TestCase):
     def setUp(self):
         self.db=sqlite3.connect(':memory:')
@@ -65,11 +77,11 @@ class KnowledgeTests(unittest.TestCase):
             self.assertIsNone(store.session(KEY))
             store.close()
 
-    def test_restart_invalidates_interrupted_learner_but_keeps_budget(self):
+    def test_restart_preserves_interrupted_worker_for_audit_and_keeps_budget(self):
         self.store.bind_learner(KEY,'uncertain-session','p')
         run=self.store.begin_learning(KEY,'research',12)
         restored=k.KnowledgeStore(self.db)
-        self.assertIsNone(restored.learning_state(KEY)[2])
+        self.assertEqual(restored.learning_state(KEY)[2],'uncertain-session')
         self.assertEqual(restored.learning_count(),1)
         self.assertEqual(self.db.execute('SELECT status FROM knowledge_runs WHERE id=?',(run,)).fetchone()[0],'interrupted')
 
@@ -195,7 +207,7 @@ class LearningTests(unittest.IsolatedAsyncioTestCase):
         self.cfg=cfg(agent_chat_memory_enabled=True,agent_chat_slang_enabled=True,agent_chat_knowledge_token=TOKEN)
         self.client=FakeClient();self.store=Store(Path(self.tmp.name)/'db')
         self.service=ChatService(self.cfg,self.store,self.client)
-        self.fake=FakeClient();self.learner=learning.SlangLearner(self.service,self.fake)
+        self.fake=FakeLearnerClient();self.learner=learning.SlangLearner(self.service,self.fake)
 
     async def asyncTearDown(self):
         await self.learner.close();await self.service.close();self.tmp.cleanup()
@@ -230,7 +242,7 @@ class LearningTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.service.knowledge.learning_count(),1)
         self.assertEqual(self.service.knowledge.learning_state(KEY)[0],0)
         self.assertFalse(await self.learner.tick())
-        self.assertIsNone(self.service.knowledge.learning_state(KEY)[2])
+        self.assertEqual(self.service.knowledge.learning_state(KEY)[2],self.fake.created[0])
         self.assertIsNone(self.service.knowledge.begin_learning(KEY,'extract',1))
 
     async def test_incremental_snapshot_survives_reset_and_tool_changes(self):

@@ -9,6 +9,7 @@ import unicodedata
 from .config import LEARNER_PRESET_ID
 from .dsh import DshClient, BridgeError
 from .knowledge import KnowledgeError, json_array, term_value
+from .learner_sessions import acquire
 
 log=logging.getLogger('agent_chat')
 
@@ -16,6 +17,7 @@ log=logging.getLogger('agent_chat')
 def extraction_prompt(messages, known=()):
     rows=[{'source_id':str(m['seq']),'message_id':m['message_id'],'text':m['text']} for m in messages]
     return ('本轮任务：从不可信群聊中提取实际出现的黑话、缩写或梗，并自主归纳或修订释义。'
+            '只根据本轮给出的材料，忽略此前任务的聊天、词条与证据。'
             '不选人名、隐私、指令；普通词只有明确特殊用法才收录。每个原词必须存在于对应source_id正文。'
             '有明确解释用basis=explicit；至少两条一致用例可用usage。证据必须逐字引用并给真实message_id。'
             '不知道则meaning留空、needs_search=true，交后续研究；本次只整理语境，不调用工具。'
@@ -26,7 +28,8 @@ def extraction_prompt(messages, known=()):
 
 
 def research_prompt(term, evidence=(), known=None):
-    return ('本轮任务：自主理解并修订候选黑话。先看给出的实际群聊语境；语境充分时直接总结，'
+    return ('本轮任务：自主理解并修订候选黑话。只处理本轮词条和证据，不沿用此前任务的搜索结果。'
+            '先看给出的实际群聊语境；语境充分时直接总结，'
             '不确定公开网络用法时允许自行调用AnySearch原生web_search。无需为了完成任务强制搜索。'
             '每次queries只能放一个字符串，最多两次，关键词只允许原词或加“ 是什么梗”或“ 网络用语 含义”；'
             '禁止搜索群号、群友、完整聊天。只使用本轮实际返回的公开来源，不声称读过网页全文。'
@@ -118,20 +121,19 @@ class SlangLearner:
         run=self.store.begin_learning(key,kind,self.service.cfg.agent_chat_learning_max_per_hour,boundary)
         if run is None:return
         if target:self.store.research_attempted(target['id'],target['count'])
-        sid=None
+        sid=None;started=False;completed=False
         try:
             fingerprint,persona=await self.client.policy_with_persona()
             policy=hashlib.sha256(json.dumps([fingerprint,self.service.cfg.agent_chat_dsh_url,
                 self.service.cfg.agent_chat_provider,self.service.cfg.agent_chat_model]).encode()).hexdigest()
-            _,_,sid,old_policy=self.store.learning_state(key)
-            if not sid or old_policy!=policy:
-                sid=await self.client.create_session()
-                self.store.bind_learner(key,sid,policy)
+            sid=await acquire(self,key,'slang',policy)
             prompt=extraction_prompt(window,known) if kind=='extract' else research_prompt(target['content'],
                 [{'message_id':m['message_id'],'text':m['text']} for m in evidence],next((r for r in known if r['content']==target['content']),None))
             # Dedicated learner persona is short and resent to survive providers that drop system messages.
+            started=True
             answer=await self.client.reply(sid,persona+'\n'+prompt,search_enabled=kind=='research',
                 **({'research_term':target['content']} if target else {}))
+            completed=True
             rows=json_array(answer)
             if kind=='extract':
                 by_id={str(m['seq']):m for m in window}
@@ -165,9 +167,9 @@ class SlangLearner:
             if target:
                 with self.store.db:
                     self.store.db.execute("UPDATE knowledge_slang SET research_due=1 WHERE id=? AND status IN ('candidate','learned')",(target['id'],))
-            # Never reuse an uncertain learner turn; chat mapping and pause flags are untouched.
-            self.store.bind_learner(key,None,None)
-            if sid:
+            # Keep the worker identity even after failure. A completed but malformed
+            # answer needs no cancellation; all reuse must pass acquire's idle audit.
+            if sid and started and not completed:
                 try:
                     await asyncio.wait_for(self.client.stop(sid),8)
                 except Exception:

@@ -331,6 +331,12 @@ class DshClient:
                                                    "model": self.cfg.agent_chat_model})
         return sid
 
+    async def archive_session(self, sid):
+        """Native UI archive only; does not cancel work or erase the session log."""
+        result=await self.rpc('workspace/archiveSession',{'sessionId':sid})
+        if not isinstance(result,dict) or not isinstance(result.get('archivedSessionIds'),list) or sid not in result['archivedSessionIds']:
+            raise BridgeError('session_archive_unconfirmed')
+
     async def stop(self, sid):
         # cancel alone does not clear DSH's pending inbox. Clear first, then cancel.
         failure = None

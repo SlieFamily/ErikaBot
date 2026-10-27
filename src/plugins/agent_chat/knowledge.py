@@ -116,8 +116,7 @@ class KnowledgeStore(SlangEvolution):
         ''')
         self.init_slang_evolution()
         with self.db:
-            self.db.execute('UPDATE knowledge_learning_state SET session_id=NULL,policy=NULL WHERE chat_key IN '
-                            "(SELECT chat_key FROM knowledge_runs WHERE status='running' AND kind!='memory')")
+            # Preserve interrupted worker identities; the next use audits DSH first.
             self.db.execute("UPDATE knowledge_runs SET status='interrupted' WHERE status='running' AND kind!='memory'")
 
     def prune_memory(self, key, *, commit=True):

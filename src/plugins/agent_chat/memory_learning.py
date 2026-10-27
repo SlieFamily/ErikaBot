@@ -1,7 +1,8 @@
 """Tool-free, evidence-bound background memory extraction on the safe learner preset."""
 import asyncio,hashlib,json,logging,time
-from .knowledge import json_array
+from .knowledge import json_array,KnowledgeError
 from .dsh import BridgeError
+from .learner_sessions import acquire
 log=logging.getLogger('agent_chat')
 
 def memory_prompt(batch):
@@ -22,26 +23,26 @@ async def run_memory(learner,key):
     if not batch or not settings['enabled'] or not settings['background']:return
     run=store.begin_learning(key,'memory',learner.service.cfg.agent_chat_learning_max_per_hour)
     if run is None:return
-    manager.attempt(key);sid=None
+    manager.attempt(key);sid=None;started=False;completed=False
     try:
         fingerprint,persona=await learner.client.policy_with_persona()
         policy=hashlib.sha256(json.dumps([fingerprint,learner.service.cfg.agent_chat_dsh_url,
             learner.service.cfg.agent_chat_provider,learner.service.cfg.agent_chat_model]).encode()).hexdigest()
-        sid,old=manager.state(key)
-        if not sid or old!=policy:
-            sid=await learner.client.create_session();manager.bind(key,sid,policy)
+        sid=await acquire(learner,key,'memory',policy)
+        started=True
         answer=await learner.client.reply(sid,persona+'\n'+memory_prompt(batch),search_enabled=False)
+        completed=True
         count=manager.apply(key,batch,settings['revision'],json_array(answer))
         store.finish_learning(run,'discarded' if count is None else 'completed')
         log.info('agent_chat memory extraction completed: input=%d saved=%s',len(batch),count)
     except BaseException as error:
         store.finish_learning(run,'cancelled' if isinstance(error,asyncio.CancelledError) else 'failed')
-        manager.bind(key,None,None);learner.backoff=time.time()+300
+        learner.backoff=time.time()+300
         with manager.db:manager.db.execute("UPDATE memory_learning_state SET status='failed' WHERE chat_key=?",(key,))
-        if sid:
+        if sid and started and not completed:
             try:await asyncio.wait_for(learner.client.stop(sid),8)
             except Exception:pass
         if isinstance(error,asyncio.CancelledError):raise
         if not isinstance(error,Exception):raise
         log.warning('agent_chat memory extraction failed: %s; chat sessions unchanged',
-                    str(error) if isinstance(error,BridgeError) else type(error).__name__)
+                    str(error) if isinstance(error,(BridgeError,KnowledgeError)) else type(error).__name__)

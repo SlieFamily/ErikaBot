@@ -4,7 +4,7 @@ from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 from test_agent_chat import PACKAGE,cfg,domain,Store,ChatService,FakeClient,message,dsh
-from test_agent_chat_knowledge import k,kb,admin,learning,KEY,OTHER,TOKEN
+from test_agent_chat_knowledge import k,kb,admin,learning,KEY,OTHER,TOKEN,FakeLearnerClient
 memory=importlib.import_module(PACKAGE+'.memory')
 
 class MemoryTests(unittest.TestCase):
@@ -66,11 +66,11 @@ class MemoryTests(unittest.TestCase):
    self.m.set(KEY,'immediate',False)
    with self.assertRaises(k.KnowledgeError):hub.handle(body)
   readonly=hub.scope(KEY,[]);self.assertEqual(set(readonly.tools)&set(k.MEMORY_TOOLS),{'qq_memory_query'})
- def test_restart_preserves_backlog_and_budget_resets_only_own_session(self):
+ def test_restart_preserves_backlog_budget_and_worker_identity_for_audit(self):
   self.feed();self.m.bind(KEY,'memory-sid','p');self.k.bind_learner(KEY,'slang-sid','p')
   self.k.begin_learning(KEY,'memory',12);self.m.attempt(KEY)
   restored=k.KnowledgeStore(self.db);manager=memory.MemoryManager(restored,self.cfg)
-  self.assertIsNone(manager.state(KEY)[0]);self.assertEqual(restored.learning_state(KEY)[2],'slang-sid')
+  self.assertEqual(manager.state(KEY)[0],'memory-sid');self.assertEqual(restored.learning_state(KEY)[2],'slang-sid')
   self.assertEqual(len(manager.batch(KEY)),1);self.assertEqual(restored.learning_count(),1)
  def test_queue_limits_and_filtered_commands(self):
   for plain in ['ai 即时记忆 关','/ai 状态','password:secret','']:
@@ -90,7 +90,7 @@ class MemoryLearningTests(unittest.IsolatedAsyncioTestCase):
   self.cfg=cfg(agent_chat_memory_enabled=True,agent_chat_slang_enabled=True,agent_chat_memory_background_enabled=True,
                agent_chat_memory_batch_threshold=2,agent_chat_knowledge_token=TOKEN)
   self.client=FakeClient();self.service=ChatService(self.cfg,self.store,self.client)
-  self.fake=FakeClient();self.fake.answer='[]';self.learner=learning.SlangLearner(self.service,self.fake)
+  self.fake=FakeLearnerClient();self.fake.answer='[]';self.learner=learning.SlangLearner(self.service,self.fake)
  async def asyncTearDown(self):await self.learner.close();await self.service.close();self.tmp.cleanup()
  def feed(self,n=2):
   for i in range(n):
@@ -112,7 +112,7 @@ class MemoryLearningTests(unittest.IsolatedAsyncioTestCase):
   self.feed();self.fake.error=dsh.BridgeError('timeout');self.store.bind(KEY,'chat','p')
   self.assertTrue(await self.learner.tick());self.assertFalse(await self.learner.tick())
   self.assertEqual(len(self.service.memory_manager.batch(KEY)),2);self.assertEqual(self.store.session(KEY)[2],0)
-  self.assertIsNone(self.service.memory_manager.state(KEY)[0]);self.assertEqual(self.service.knowledge.learning_count(),1)
+  self.assertEqual(self.service.memory_manager.state(KEY)[0],self.fake.created[0]);self.assertEqual(self.service.knowledge.learning_count(),1)
  async def test_immediate_saved_in_same_turn_and_false_claim_guard(self):
   sent=[]
   async def send(text):sent.append(str(text))

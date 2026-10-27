@@ -24,7 +24,7 @@ class MemoryManager:
             session_id TEXT,policy TEXT,status TEXT NOT NULL DEFAULT '',dropped INTEGER NOT NULL DEFAULT 0);
         ''')
         with self.db:
-            self.db.execute("UPDATE memory_learning_state SET session_id=NULL,policy=NULL,status='interrupted' WHERE chat_key IN "
+            self.db.execute("UPDATE memory_learning_state SET status='interrupted' WHERE chat_key IN "
                 "(SELECT chat_key FROM knowledge_runs WHERE kind='memory' AND status='running')")
             self.db.execute("UPDATE knowledge_runs SET status='interrupted' WHERE kind='memory' AND status='running'")
 
