@@ -265,7 +265,7 @@ class DshClient:
     async def rpc(self, method, payload=None, rpc_id=None):
         await self.authenticate()
         rid = rpc_id or str(uuid.uuid4())
-        if method == "agentPresets/list":
+        if method in {"agentPresets/list", "session/modelCatalog"}:
             args = {}
         elif method == "agentPresets/read":
             args = {"agentPreset": (payload or {}).get("agentPreset")}
