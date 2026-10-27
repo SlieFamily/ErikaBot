@@ -267,11 +267,16 @@ async def administer(bot: Bot, event: MessageEvent, args: Message = CommandArg()
         try:
             result = await service.recover(key)
         except BridgeError as error:
+            logger.warning('agent_chat recovery stopped: {}', str(error))
             messages = {
                 'recovery_busy':'当前仍有请求在处理，请等它结束后再恢复。',
                 'recovery_delivery_uncertain':'上次消息是否发送成功无法确认，暂不自动恢复。请先人工核对；ai 重置会改用新会话。',
                 'recovery_policy_changed':'预设或模型配置已改变，不能直接恢复旧绑定，请检查配置或使用 ai 重置。',
                 'recovery_foreign_input':'检测到非桥接输入，暂不恢复。请检查 DSH 会话，避免同时手动聊天。',
+                'recovery_turn_active':'DSH 仍有未结束的任务或排队内容，暂时保持暂停，请稍后再恢复。',
+                'recovery_history_unverified':'还不能确认 DSH 上一轮已经完整结束，保留会话并保持暂停，请检查本地日志。',
+                'dsh_session_missing':'DSH 未找到原会话，保持暂停。请检查会话是否存在，不要急于重置历史。',
+                'dsh_auth_expired':'DSH 本机访问凭据已失效，需更新凭据后再恢复。',
             }
             await admin.finish(messages.get(str(error),'尚未确认 DSH 会话可以安全恢复，保持暂停。请检查 DSH/API 后再试。'))
         except Exception:

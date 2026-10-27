@@ -567,15 +567,23 @@ class ChatService:
                 self.cfg.agent_chat_provider,self.cfg.agent_chat_model]).encode()).hexdigest()
             if policy != bound[1]:
                 raise BridgeError('recovery_policy_changed')
-            await self.client.stop(bound[0])
-            for attempt in range(6):
-                try:
-                    cut = await self.client.recovery_checkpoint(bound[0])
-                    break
-                except BridgeError as error:
-                    if str(error) != 'recovery_turn_active' or attempt == 5:
-                        raise
-                    await asyncio.sleep(.3)
+            # A stored, idle session need not have a live DSH Agent after restart.
+            # cancel reports session/not-found for such sessions despite intact history.
+            # Audit first; never cancel unrelated input or clear an already empty inbox.
+            try:
+                cut = await self.client.recovery_checkpoint(bound[0])
+            except BridgeError as error:
+                if str(error) != 'recovery_turn_active':
+                    raise
+                await self.client.stop(bound[0])
+                for attempt in range(6):
+                    try:
+                        cut = await self.client.recovery_checkpoint(bound[0])
+                        break
+                    except BridgeError as error:
+                        if str(error) != 'recovery_turn_active' or attempt == 5:
+                            raise
+                        await asyncio.sleep(.3)
             self.store.resume(key, bound, boundary, cut)
             return 'resumed'
         finally:

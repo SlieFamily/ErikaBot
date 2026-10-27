@@ -57,3 +57,44 @@ class RecoveryTests(unittest.IsolatedAsyncioTestCase):
         await self.submit(message())
         self.assertEqual(await self.service.recover(message().key),'active')
         self.assertEqual(len(self.client.prompts),1)
+
+    async def test_idle_cold_session_recovers_without_cancel(self):
+        await self.prepare_paused()
+        async def cold_cancel(sid):
+            raise dsh.MissingSession('dsh_session_missing')
+        self.client.stop=cold_cancel
+        self.assertEqual(await self.service.recover(message().key),'resumed')
+        self.assertEqual(self.store.session(message().key),self.bound)
+
+    async def test_foreign_or_offline_history_never_cancels(self):
+        await self.prepare_paused()
+        stops=[]
+        async def stop(sid):stops.append(sid)
+        self.client.stop=stop
+        for code in ('recovery_foreign_input','dsh_stream_disconnected','recovery_history_unverified','dsh_session_missing'):
+            async def checkpoint(sid):raise dsh.BridgeError(code)
+            self.client.recovery_checkpoint=checkpoint
+            with self.assertRaisesRegex(dsh.BridgeError,code):
+                await self.service.recover(message().key)
+            self.assertEqual(self.store.session(message().key)[2],1)
+        self.assertEqual(stops,[])
+
+    async def test_active_turn_still_requires_cancel_and_finished_checkpoint(self):
+        await self.prepare_paused()
+        stops=[]
+        async def checkpoint(sid):
+            if not stops:raise dsh.BridgeError('recovery_turn_active')
+            return 31
+        async def stop(sid):stops.append(sid)
+        self.client.stop=stop;self.client.recovery_checkpoint=checkpoint
+        self.assertEqual(await self.service.recover(message().key),'resumed')
+        self.assertEqual(stops,[self.bound[0]])
+        self.assertEqual(self.store.delivery(message().key,self.bound[0])[1],31)
+
+    async def test_failed_active_cancel_never_unpauses(self):
+        await self.prepare_paused()
+        async def checkpoint(sid):raise dsh.BridgeError('recovery_turn_active')
+        async def stop(sid):raise dsh.BridgeError('dsh_transport_or_protocol_error')
+        self.client.stop=stop;self.client.recovery_checkpoint=checkpoint
+        with self.assertRaises(dsh.BridgeError):await self.service.recover(message().key)
+        self.assertEqual(self.store.session(message().key)[2],1)
