@@ -2,9 +2,10 @@
 import re
 from .knowledge import KnowledgeError, category_value
 from .slang_report import build_report, USAGE
+from .memory_report import build_memory_report
 
 HELP=('记忆开关：ai 记忆状态；ai 即时记忆 开/关；ai 后台记忆 开/关；ai 记忆开关 开/关（总开关）；加 全群 可统一设置。\n'
-      '记忆：ai 记忆 [activeTopic/pendingThought/memberImpression]；ai 忘记 编号；ai 清空记忆 [类别]\n'
+      '记忆：ai 记忆 [话题/想法/群友] [页码]（合并转发）；ai 记忆 管理 查看删除编号；ai 忘记 编号；ai 清空记忆 [类别]\n'
       '黑话：ai 黑话 [候选/自动/已锁定/已拒绝] [全部] [页码]（按来源群合并转发，默认至少2次）；ai 黑话确认 编号 [解释]；批量：ai 黑话确认 1 2 3（使用各自已有解释）；ai 黑话拒绝 编号；'
       'ai 黑话删除 编号；ai 黑话添加 词语 | 解释\n'
       '多行自填：ai 黑话确认 后换行，每行 编号 | 解释；每次最多30条，逐条返回结果。\n'
@@ -76,9 +77,7 @@ def handle(store,key,command,memory=None,admin_bot=None):
             memory.set('*' if glob else key,mode,on)
             note='；保留已存记忆，清除待整理消息，进行中的旧整理结果会丢弃' if not on and mode in ('enabled','background') else ''
             return ('所有群' if glob else '本群')+head+'已'+('开启' if on else '关闭')+note+'。无需重启。'
-        if head=='记忆':
-            rows=store.memory(key,category_value(tail,optional=True))
-            return ('当前群轻量记忆：\n'+'\n'.join(f"#{r['id']} [{r['category']}] {r['extra'].get('name','')} {r['content']}" for r in rows))[:3500] if rows else '当前群没有有效轻量记忆。'
+        if head=='记忆':return build_memory_report(store,key,tail)
         if head=='忘记':
             entry_id=int(tail)
             if memory:memory.invalidate(key)

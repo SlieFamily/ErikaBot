@@ -23,7 +23,8 @@ from .interactions import qq_message
 from .forwards import ForwardResolver, forward_refs, forward_context
 from .knowledge_bridge import install_route
 from .knowledge_admin import handle as knowledge_command
-from .slang_report import SlangReport, SLANG_COMMANDS, send_report
+from .slang_report import SLANG_COMMANDS
+from .forward_report import ForwardReport, send_report
 
 
 driver = get_driver()
@@ -231,12 +232,12 @@ async def administer(bot: Bot, event: MessageEvent, args: Message = CommandArg()
     if allowed or remote_slang:
         rendered=knowledge_command(service.knowledge,key,command,memory=getattr(service,'memory_manager',None),
                                    admin_bot=str(bot.self_id) if head in SLANG_COMMANDS else None)
-        if isinstance(rendered,SlangReport):
+        if isinstance(rendered,ForwardReport):
             try:await asyncio.wait_for(send_report(bot,event,rendered),60)
             except Exception as error:
                 code=getattr(error,'info',{}).get('retcode') if isinstance(getattr(error,'info',None),dict) else None
-                logger.warning('agent_chat slang report forward failed: kind={} retcode={}; no retry or text expansion',type(error).__name__,code)
-                await admin.finish('合并转发未确认发送成功；未展开成多条消息。请稍后重试 ai 黑话。')
+                logger.warning('agent_chat report forward failed: kind={} retcode={}; no retry or text expansion',type(error).__name__,code)
+                await admin.finish('合并转发未确认发送成功；未展开成多条消息。请稍后重试 '+rendered.command+'。')
             await admin.finish()
         if rendered is not None:
             await admin.finish(Message(MessageSegment.text(rendered)))

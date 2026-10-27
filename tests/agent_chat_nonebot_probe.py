@@ -17,7 +17,7 @@ async def main():
         Path("db").mkdir()
         import nonebot
         nonebot.init(_env_file=None, driver="~fastapi", superusers={"1"}, command_start={"/", ""}, log_level="ERROR")
-        from nonebot.adapters.onebot.v11 import Adapter, Bot, GroupMessageEvent, Message, MessageSegment, PokeNotifyEvent
+        from nonebot.adapters.onebot.v11 import Adapter, Bot, GroupMessageEvent, Message, MessageSegment, PokeNotifyEvent, PrivateMessageEvent
         from nonebot.adapters.onebot.v11.bot import _check_reply, _check_at_me
         from nonebot.message import handle_event
         ai_plugin = nonebot.load_plugin("src.plugins.agent_chat")
@@ -227,6 +227,38 @@ async def main():
         assert service.memory_manager.settings('100:group:42')['background']
         await handle_event(bot,event('ai 记忆状态',uid=1))
         assert '待整理' in str(sent[-1])
+        service.knowledge.append_memory('100:group:42','activeTopic','准备一起玩游戏')
+        service.knowledge.append_memory('100:group:42','memberImpression','喜欢FPS',{'target':'7'},{'7':'群友甲'})
+        service.knowledge.append_memory('100:group:43','activeTopic','另群记忆不可泄露')
+        memory_count=db.execute('SELECT COUNT(*) FROM knowledge_memory').fetchone()[0]
+        before_api=len(api_calls)
+        await handle_event(bot,event('ai 记忆',uid=7))
+        assert len(api_calls)==before_api, 'ordinary members cannot export memory'
+        await handle_event(bot,event('ai 记忆',uid=1))
+        action,card=api_calls[-1]
+        assert action=='send_group_forward_msg' and card['group_id']==42
+        assert card['source']=='当前对话记忆' and len(card['news'])==2
+        body='\n'.join(str(node.data['content']) for node in card['messages'])
+        assert '群友甲：喜欢FPS' in body and '准备一起玩游戏' in body
+        assert 'activeTopic' not in body and 'memberImpression' not in body and '删除编号' not in body
+        assert '另群记忆不可泄露' not in body and '准备一起玩游戏' not in str(card['news'])
+        for node in card['messages']:
+            assert len(node.data['content'])==1 and node.data['content'][0].type=='text'
+        await handle_event(bot,event('ai 记忆 管理',uid=1))
+        assert '删除编号' in str(api_calls[-1][1]['messages'])
+        before_api=len(api_calls)
+        await handle_event(bot,event('ai 记忆',uid=1,group=99))
+        assert not any(api=='send_group_forward_msg' for api,_ in api_calls[before_api:])
+        ai.config.agent_chat_private_users=frozenset({1})
+        service.knowledge.append_memory('100:private:1','activeTopic','私聊记忆')
+        private_event=PrivateMessageEvent.parse_obj(dict(time=int(time.time()),self_id=100,post_type='message',
+            message_type='private',sub_type='friend',message_id=9999,user_id=1,
+            message=[{'type':'text','data':{'text':'ai 记忆'}}],raw_message='ai 记忆',font=0,sender={'user_id':1,'nickname':'主人'}))
+        await handle_event(bot,private_event)
+        assert api_calls[-1][0]=='send_private_forward_msg' and api_calls[-1][1]['user_id']==1
+        assert '私聊记忆' in str(api_calls[-1][1]['messages']) and '群友甲' not in str(api_calls[-1][1]['messages'])
+        ai.config.agent_chat_private_users=frozenset()
+        assert db.execute('SELECT COUNT(*) FROM knowledge_memory').fetchone()[0]==memory_count+1
         ai.config.agent_chat_slang_enabled=False
         before=len(service.learned)
         await handle_event(bot,event('普通的新聊天'))
@@ -308,6 +340,9 @@ async def main():
         before=len(sent)
         await handle_event(bot,event('ai 黑话 全部',uid=1,group=99))
         assert len(failed)==1 and len(sent)==before+1 and '合并转发未确认' in str(sent[-1])
+        before=len(sent)
+        await handle_event(bot,event('ai 记忆',uid=1))
+        assert len(failed)==2 and len(sent)==before+1 and 'ai 记忆' in str(sent[-1])
         bot.call_api=original_call
         assert service.knowledge.learning_count()==0
         service.knowledge=None;db.close();service.store.db.close()
@@ -316,7 +351,7 @@ async def main():
         ai.service = None
         await handle_event(bot, event("你好", directed=True))
         assert sent, "disabled AI retains old @ reply"
-        print("PASS: native PokeNotifyEvent routing and literal response, real NoneBot dispatch, SuperAna arbitration, mention recovery, literal CQ, image/forward routing, reply+face segments, SUPERUSER recovery, remote slang review, grouped forward wire, native mention/reaction/poke APIs, failure no-flood, allowlist, disabled fallback")
+        print("PASS: readable memory forward/group-private scope/owner gate/failure no-flood, native PokeNotifyEvent routing and literal response, real NoneBot dispatch, SuperAna arbitration, mention recovery, literal CQ, image/forward routing, reply+face segments, SUPERUSER recovery, remote slang review, grouped forward wire, native mention/reaction/poke APIs, failure no-flood, allowlist, disabled fallback")
         os.chdir(ROOT)
 
 
