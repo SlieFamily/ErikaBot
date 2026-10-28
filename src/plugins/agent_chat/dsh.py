@@ -39,6 +39,28 @@ class ImageUnsupported(BridgeError):
     pass
 
 
+def terminal_failure_code(reason):
+    """Classify provider rejection metadata; never publish the remote error body."""
+    error=reason.get('error',{}) if isinstance(reason,dict) else {}
+    if not isinstance(error,dict):return 'turn_not_completed'
+    rejected={'CONTENT_FILTERED','content_filter','content_policy_violation'}
+    if error.get('code') in rejected:return 'model_content_filtered'
+    # DSH normalizes compatible API errors as INVALID_REQUEST and retains the
+    # provider's JSON error inside '400: {...}'. Parse only that bounded envelope.
+    message=error.get('message')
+    if error.get('code')=='INVALID_REQUEST' and isinstance(message,str) and len(message)<=8192:
+        match=re.fullmatch(r'400:\s*(\{.*\})',message,re.S)
+        if match:
+            try:
+                value=json.loads(match[1])
+                body=value.get('error',value) if isinstance(value,dict) else {}
+                if isinstance(body,dict) and any(body.get(k) in rejected for k in ('type','code')):
+                    return 'model_content_filtered'
+            except (ValueError,TypeError):pass
+        return 'model_invalid_request'
+    return 'turn_not_completed'
+
+
 class _RedactAuthURL(logging.Filter):
     def filter(self, record):
         # httpx's INFO access log otherwise includes the launch token in the URL.
@@ -222,9 +244,9 @@ class TurnCollector:
                 raise BridgeError("oversized_reply")
         elif kind == "turn/end" and self.owned and data.get("turn") == self.turn:
             reason = data.get("reason", {})
-            reason = reason.get("kind") if isinstance(reason, dict) else reason
-            if reason != "completed":
-                raise BridgeError("turn_not_completed")
+            reason_kind = reason.get("kind") if isinstance(reason, dict) else reason
+            if reason_kind != "completed":
+                raise BridgeError(terminal_failure_code(reason))
             if self.search_calls != self.search_results or set(self.knowledge_calls) != self.knowledge_results:
                 raise BridgeError('incomplete_tool_results')
             return ReplyText(self.text, len(self.search_calls), self.sources, self.knowledge_calls.values())

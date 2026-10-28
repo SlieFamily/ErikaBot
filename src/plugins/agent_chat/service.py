@@ -504,6 +504,8 @@ class ChatService:
             if not sending:
                 await self._finish_progress(request)
                 await self._notice(request,'failed',
+                    '模型服务的内容检查未通过，这次没有生成回复，会话已暂停。请主人检查人设和最近输入，处理后发送 ai 恢复。' if code=='model_content_filtered' else
+                    '模型服务拒绝了请求参数，这次没有生成回复。请主人检查 API／模型配置，处理后发送 ai 恢复。' if code=='model_invalid_request' else
                     '这次没等到可用结果，先跳过了；后面的提问可以继续，刚才那题需要再问一次。' if recovered else
                     '这次连接或处理出了问题，没能回答；如果后续仍无回复，请让主人发送 ai 恢复。')
 
