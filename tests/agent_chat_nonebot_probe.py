@@ -274,6 +274,12 @@ async def main():
         remote_id=service.knowledge.submit_slang('100:group:43','另群测试词',[
             dict(key='100:group:43',message_id=str(i),text='秘密原文 另群测试词',name='私有昵称',user_id='771122') for i in range(2)])['id']
         with db:db.execute("UPDATE knowledge_slang SET meaning='字面[CQ:at,qq=all] 解释' WHERE id=?",(remote_id,))
+        await handle_event(bot,event('ai 黑话 全部',uid=1,group=42))
+        api,local_report=api_calls[-1]
+        assert api=='send_group_forward_msg' and local_report['group_id']==42
+        local_text='\n'.join(str(node.data['content']) for node in local_report['messages'])
+        assert '当前群 42' in local_text and '来源群 42' in local_text
+        assert '来源群 43' not in local_text and '另群测试词' not in local_text
         outsider_id=service.knowledge.submit_slang('101:group:43','其他账号私词',[
             dict(key='101:group:43',message_id='900',text='其他账号私词',name='成员',user_id='8')])['id']
         before_api=len(api_calls);before_observed=len(service.observed);before_learned=len(service.learned)

@@ -7,7 +7,8 @@ STATUSES={'候选':'candidate','自动':'learned','已确认':'confirmed','已�
 LABELS={v:k for k,v in STATUSES.items()}
 USAGE=('用法：ai 黑话 [候选/自动/已锁定/已拒绝] [全部] [页码]。\n'
        '默认汇总累计学习至少2次的词；加“全部”包含低频词和手工词条。例如 ai 黑话 候选 全部 2。\n'
-       '按来源群分组，每次只发送一份合并转发；ai 黑话确认 12 15 18 可跨群批量锁定；ai 黑话解锁 12 恢复自动修订。')
+       'AI群只展示当前群的来源记录；非AI审核群按来源群汇总，每次只发送一份合并转发。'
+       '“全部”只放宽词频，不改变群范围；ai 黑话确认 12 15 18 可跨群批量锁定；ai 黑话解锁 12 恢复自动修订。')
 
 def report_options(tail):
     status=None;minimum=2;page=1;seen=set()
@@ -35,10 +36,17 @@ def entry_text(row,observed):
     return '\n'.join(lines)
 
 
-def build_report(store,bot_id,tail):
+def build_report(store,bot_id,tail,*,chat_key=None):
     try:status,minimum,page=report_options(tail)
     except ValueError:return USAGE
     rows=[r for r in store.slang_report_rows(bot_id) if r['count']>=minimum and (status is None or r['status']==status)]
+    if chat_key is not None:
+        if not re.fullmatch(re.escape(str(bot_id))+r':group:[0-9]{1,20}',chat_key):
+            raise ValueError('invalid_report_group')
+        # Shared definitions keep their ID, but only this group's observed origin
+        # is exported. Unattributed manual entries belong to the central report.
+        rows=[dict(row,groups=[(key,n) for key,n in row['groups'] if key==chat_key])
+              for row in rows if any(key==chat_key for key,_ in row['groups'])]
     if not rows:return '暂无符合条件的黑话。默认只看至少2次的已学习词；可用 ai 黑话 全部 查看低频和手工词条。'
     groups={}
     for row in rows:
@@ -59,7 +67,8 @@ def build_report(store,bot_id,tail):
     pages=max(1,(len(chunks)+CHUNKS_PER_PAGE-1)//CHUNKS_PER_PAGE)
     if page>pages:return f'当前只有 {pages} 页。'+USAGE
     options=(' '+LABELS[status] if status else '')+(' 全部' if minimum==0 else '')
-    header=(f'黑话审核汇总 · 第{page}/{pages}页\n共{len(rows)}个词条，{len(groups)}个来源分组；'
+    scope='当前群 '+chat_key.rsplit(':',1)[-1] if chat_key else '黑话审核汇总'
+    header=(f'{scope} · 第{page}/{pages}页\n共{len(rows)}个词条，{len(groups)}个来源分组；'
             +('包含低频/手工词条。' if minimum==0 else '累计学习至少2次。')+
             '\n按累计学习次数降序；它不是全量聊天词频，本群来源数受留存上限影响。'
             '\n同一词在多个来源群重复展示时共用编号；自动词义可使用且持续修订；确认后锁定。'

@@ -24,6 +24,23 @@ class SlangReportTests(unittest.TestCase):
   value=report.build_report(self.store,'100','')
   self.assertEqual(value.entries,1);self.assertEqual(self.text(value).count(f'#{entry} 重复黑话'),2)
   self.assertIn('本群留存来源 3 条',self.text(value));self.assertIn('本群留存来源 2 条',self.text(value))
+ def test_local_group_report_excludes_other_origins_even_with_all(self):
+  shared=self.add('两群共有词',key=KEY,n=3);self.add('两群共有词',key=OTHER,n=2)
+  local=self.add('本群低频词',key=KEY,n=1);self.add('另群独有词',key=OTHER,n=5)
+  self.store.add_manual_slang('无来源手工词','全局解释')
+  value=admin.handle(self.store,KEY,'黑话 全部',admin_bot='100',report_key=KEY)
+  text=self.text(value)
+  self.assertIn('当前群 42',text);self.assertIn('来源群 42',text)
+  self.assertIn(f'#{local}',text);self.assertEqual(text.count(f'#{shared} 两群共有词'),1)
+  for token in ('来源群 43','另群独有词','无来源手工词','本群留存来源 2 条'):
+   self.assertNotIn(token,text)
+  self.assertEqual(value.entries,2)
+  central=self.text(admin.handle(self.store,'100:group:999','黑话 全部',admin_bot='100'))
+  self.assertIn('来源群 43',central);self.assertIn('无来源手工词',central)
+ def test_local_empty_group_never_falls_back_to_global(self):
+  self.add('别群词',key=OTHER,n=3)
+  self.assertIn('暂无',report.build_report(self.store,'100','全部',chat_key=KEY))
+  with self.assertRaises(ValueError):report.build_report(self.store,'100','',chat_key='101:group:43')
  def test_status_low_frequency_and_manual_sections(self):
   a=self.add('待确认词',n=1);b=self.add('已确认词',n=3);c=self.add('已拒绝词',n=4)
   self.store.review_slang(KEY,b,'confirm');self.store.review_slang(KEY,c,'reject')

@@ -56,7 +56,7 @@ def confirm_many(store,key,tail,admin_bot=None):
     return '\n'.join(parts)
 
 
-def handle(store,key,command,memory=None,admin_bot=None):
+def handle(store,key,command,memory=None,admin_bot=None,report_key=None):
     parts=command.split(None,1)
     head=parts[0] if parts else ''
     tail=parts[1].strip() if len(parts)==2 else ''
@@ -86,7 +86,7 @@ def handle(store,key,command,memory=None,admin_bot=None):
             category_value(tail,optional=True)
             if memory:memory.invalidate(key)
             return f"已清理当前群 {store.clear_memory(key,tail)['removed']} 条记忆；其他群不变。"
-        if head=='黑话':return build_report(store,admin_bot or key.split(':',1)[0],tail)
+        if head=='黑话':return build_report(store,admin_bot or key.split(':',1)[0],tail,chat_key=report_key)
         if head=='黑话添加':
             term,sep,meaning=tail.partition('|')
             if not sep:return HELP

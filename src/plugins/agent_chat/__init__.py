@@ -231,7 +231,8 @@ async def administer(bot: Bot, event: MessageEvent, args: Message = CommandArg()
     remote_slang=isinstance(event,GroupMessageEvent) and head in SLANG_COMMANDS
     if allowed or remote_slang:
         rendered=knowledge_command(service.knowledge,key,command,memory=getattr(service,'memory_manager',None),
-                                   admin_bot=str(bot.self_id) if head in SLANG_COMMANDS else None)
+                                   admin_bot=str(bot.self_id) if head in SLANG_COMMANDS else None,
+                                   report_key=key if allowed and isinstance(event,GroupMessageEvent) else None)
         if isinstance(rendered,ForwardReport):
             try:await asyncio.wait_for(send_report(bot,event,rendered),60)
             except Exception as error:

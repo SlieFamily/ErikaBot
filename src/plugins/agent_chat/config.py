@@ -19,6 +19,8 @@ class Config(BaseModel):
     agent_chat_enabled: bool = False
     agent_chat_groups: FrozenSet[int] = frozenset()
     agent_chat_private_users: FrozenSet[int] = frozenset()
+    # Role identity only; NoneBot SUPERUSERS still controls all admin commands.
+    agent_chat_owner_ids: FrozenSet[int] = frozenset()
     agent_chat_dsh_url: str = "http://127.0.0.1:3080"
     agent_chat_dsh_token: SecretStr = SecretStr("")
     agent_chat_dsh_cookie: SecretStr = SecretStr("")
@@ -87,7 +89,7 @@ class Config(BaseModel):
     class Config:
         extra = "ignore"
 
-    @validator("agent_chat_groups", "agent_chat_private_users", "agent_chat_proactive_groups",
+    @validator("agent_chat_groups", "agent_chat_private_users", "agent_chat_proactive_groups", "agent_chat_owner_ids",
                "agent_chat_image_cache_roots", pre=True)
     def parse_ids(cls, value):
         return json.loads(value) if isinstance(value, str) else value
@@ -107,7 +109,7 @@ class Config(BaseModel):
             raise ValueError("Use http://127.0.0.1:3080 (SSH tunnel for a remote server)")
         return value.rstrip("/")
 
-    @validator("agent_chat_groups", "agent_chat_private_users", "agent_chat_proactive_groups")
+    @validator("agent_chat_groups", "agent_chat_private_users", "agent_chat_proactive_groups", "agent_chat_owner_ids")
     def positive_ids(cls, values):
         if any(v <= 0 for v in values):
             raise ValueError("QQ identifiers must be positive")

@@ -351,11 +351,13 @@ class ChatService:
                 forward = self.cfg.agent_chat_forward_persona
                 seed = forward and (refresh or not delivered or not delivered[2])
                 protocol = hashlib.sha256((CHAT_RULES + presentation.PRESENTATION_RULES +
-                                           SEARCH_RULES + MEMORY_RULES + SLANG_RULES).encode()).hexdigest()
+                                           SEARCH_RULES + MEMORY_RULES + SLANG_RULES +
+                                           json.dumps(sorted(self.cfg.agent_chat_owner_ids))).encode()).hexdigest()
                 seed_rules = refresh or not delivered or self.store.prompt_seed(key, session_id) != protocol
                 text = prompt_text(history, str(uuid.uuid4()), proactive=proactive, ambient=request.kind == "ambient",
                                    persona=persona if seed else "", remind_persona=forward and not seed,
-                                   direct_ids=[m['message_id'] for m in direct], seed_rules=seed_rules)
+                                   direct_ids=[m['message_id'] for m in direct], seed_rules=seed_rules,
+                                   owner_ids=self.cfg.agent_chat_owner_ids)
                 if request.kind=='poke':
                     text+='\n本轮是QQ戳一戳通知，对方只是戳了你，没有提出必须回答的问题。可自然简短回应、发emoji/QQ表情或回戳，也可只输出[SILENT]。概率已由宿主决定，不必再抽签；不要把通知编号当QQ消息引用，不重复回答旧问题。\n'
                 if request.kind=='followup':
