@@ -43,6 +43,10 @@ class Store:
             CREATE TABLE IF NOT EXISTS searches (
                 dispatch_id INTEGER PRIMARY KEY, chat_key TEXT NOT NULL,
                 created REAL NOT NULL, stage TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS recovery_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, chat_key TEXT NOT NULL,
+                session_id TEXT NOT NULL, created REAL NOT NULL, context_seq INTEGER NOT NULL,
+                message_seq INTEGER NOT NULL, skipped_dispatches TEXT NOT NULL);
         """)
         # An interrupted request is not blindly re-sent after restart.
         with self.db:
@@ -188,18 +192,29 @@ class Store:
             # Preserve daily budget, and do not revive an idle opportunity after reset.
             self.db.execute("UPDATE activity SET consumed_generation=generation WHERE chat_key=?", (key,))
 
-    def recovery_boundary(self, key):
-        if self.db.execute("SELECT 1 FROM dispatches WHERE chat_key=? AND status IN "
-                           "('inflight','sending','delivery_uncertain')", (key,)).fetchone():
+    def recovery_pending(self, key):
+        return self.db.execute("SELECT id,status FROM dispatches WHERE chat_key=? AND status IN "
+                               "('inflight','sending','delivery_uncertain') ORDER BY id", (key,)).fetchall()
+
+    def recovery_boundary(self, key, *, owner=False):
+        if not owner and self.recovery_pending(key):
             return None
         return self.db.execute("SELECT COALESCE(MAX(seq),0) FROM messages WHERE chat_key=?", (key,)).fetchone()[0]
 
-    def resume(self, key, bound, boundary, context_seq):
-        # Called only after DSH cancellation, preset validation and an idle audit.
+    def resume(self, key, bound, boundary, context_seq, *, owner_pending=None):
+        # Called only after preset validation and an idle audit (cancel if needed).
         # Keep the same session, history and quotas; never replay a failed send.
         with self.db:
-            if self.session(key) != bound or self.recovery_boundary(key) is None:
+            self.db.execute('BEGIN IMMEDIATE')
+            pending = self.recovery_pending(key)
+            if self.session(key) != bound or (pending if owner_pending is None else pending != owner_pending):
                 raise ValueError('recovery_state_changed')
+            if owner_pending is not None:
+                self.db.executemany("UPDATE dispatches SET status='owner_skipped' WHERE id=? AND chat_key=?",
+                                    [(row[0],key) for row in pending])
+                self.db.execute('INSERT INTO recovery_events(chat_key,session_id,created,context_seq,message_seq,skipped_dispatches) '
+                                'VALUES(?,?,?,?,?,?)',(key,bound[0],time.time(),context_seq,boundary,json.dumps(pending)))
+                self.db.execute('DELETE FROM recovery_events WHERE created<?',(time.time()-30*86400,))
             self.db.execute("UPDATE sessions SET suspended=0 WHERE chat_key=?", (key,))
             self.db.execute("DELETE FROM prompt_seeds WHERE chat_key=?", (key,))
             self.db.execute("DELETE FROM image_reads WHERE chat_key=?", (key,))

@@ -37,7 +37,9 @@ async def main():
             def observe(self, message): self.observed.append(message); self.store.append(message); return True
             def schedule(self, message, send, prepare=None): self.scheduled.append((message, send)); self.prepare = prepare
             def schedule_poke(self,message,send):self.poked.append((message,send))
-            async def recover(self,key):self.recovered.append(key);return 'resumed'
+            async def recover(self,key,*,owner=False):
+                assert owner, 'only SUPERUSER command explicitly authorizes takeover'
+                self.recovered.append(key);return 'resumed'
             def learn_message(self,message,plain):self.learned.append((message.message_id,plain))
 
         service = FakeService(); ai.service = service

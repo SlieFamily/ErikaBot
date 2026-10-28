@@ -548,44 +548,88 @@ class ChatService:
             await self.client.stop(bound[0])
         self.store.reset(key)
 
-    async def recover(self, key):
+    async def recover(self, key, *, owner=False):
         self.observer.close(key)
-        if key in self.recovering or key in self.tasks:
+        if key in self.recovering or self.closed or key in self.tasks and not owner:
             raise BridgeError('recovery_busy')
         bound = self.store.session(key)
         if not bound:
+            if key in self.tasks:raise BridgeError('recovery_busy')
             return 'missing'
-        if not bound[2]:
+        if not bound[2] and not owner:
             return 'active'
-        boundary = self.store.recovery_boundary(key)
-        if boundary is None:
-            raise BridgeError('recovery_delivery_uncertain')
         self.recovering.add(key)
         try:
-            composition = await self.client.policy()
+            # DSH restart may invalidate the cached cookie. rpc clears it on 401;
+            # retry once so a configured local token can authenticate this command.
+            for attempt in range(2 if owner else 1):
+                try:
+                    composition = await self.client.policy()
+                    break
+                except BridgeError as error:
+                    if str(error) != 'dsh_auth_expired' or attempt or not owner:raise
             policy = hashlib.sha256(json.dumps([composition,self.cfg.agent_chat_dsh_url,
                 self.cfg.agent_chat_provider,self.cfg.agent_chat_model]).encode()).hexdigest()
             if policy != bound[1]:
                 raise BridgeError('recovery_policy_changed')
+            task = self.tasks.get(key)
+            if owner and task:
+                # Stop the old request before acknowledging uncertain sends. Do not
+                # replay it, and do not let a fresh request race with this takeover.
+                task.cancel()
+                done, _ = await asyncio.wait({task}, timeout=12)
+                if not done:
+                    self.store.suspend(key)
+                    raise BridgeError('recovery_busy')
+                await asyncio.gather(task, return_exceptions=True)
+            current = self.store.session(key)
+            if not current or current[:2] != bound[:2]:
+                raise BridgeError('recovery_state_changed')
+            bound = current
+            boundary = self.store.recovery_boundary(key, owner=owner)
+            if boundary is None:
+                raise BridgeError('recovery_delivery_uncertain')
+            pending = self.store.recovery_pending(key) if owner else None
+            async def checkpoint():
+                if owner:
+                    return await self.client.recovery_checkpoint(bound[0], allow_foreign=True)
+                return await self.client.recovery_checkpoint(bound[0])
             # A stored, idle session need not have a live DSH Agent after restart.
             # cancel reports session/not-found for such sessions despite intact history.
-            # Audit first; never cancel unrelated input or clear an already empty inbox.
+            # Audit first; owner recovery may explicitly discard old queued input.
             try:
-                cut = await self.client.recovery_checkpoint(bound[0])
+                cut = await checkpoint()
             except BridgeError as error:
                 if str(error) != 'recovery_turn_active':
                     raise
-                await self.client.stop(bound[0])
+                try:
+                    await asyncio.wait_for(self.client.stop(bound[0]), 10)
+                except (BridgeError,asyncio.TimeoutError):
+                    if not owner:raise
+                    # A cold session can clear its inbox but reject cancel because
+                    # no Agent is attached. Only a fresh idle audit may clear it.
                 for attempt in range(6):
                     try:
-                        cut = await self.client.recovery_checkpoint(bound[0])
+                        cut = await checkpoint()
                         break
                     except BridgeError as error:
                         if str(error) != 'recovery_turn_active' or attempt == 5:
                             raise
                         await asyncio.sleep(.3)
-            self.store.resume(key, bound, boundary, cut)
+            self.store.resume(key, bound, boundary, cut, owner_pending=pending)
+            if owner:
+                log.info('agent_chat owner recovery completed: chat=%s context=%d skipped=%d',key,cut,len(pending))
             return 'resumed'
+        except asyncio.TimeoutError:
+            self.store.suspend(key)
+            raise BridgeError('recovery_check_timeout') from None
+        except (Exception,asyncio.CancelledError) as error:
+            # A failed health check on an apparently active binding also pauses it.
+            if owner and self.store.session(key) and self.store.session(key)[:2] == bound[:2]:
+                self.store.suspend(key)
+            if isinstance(error,ValueError) and str(error)=='recovery_state_changed':
+                raise BridgeError('recovery_state_changed') from None
+            raise
         finally:
             self.recovering.discard(key)
 

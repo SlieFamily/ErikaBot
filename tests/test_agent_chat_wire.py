@@ -94,11 +94,15 @@ class WireTests(unittest.IsolatedAsyncioTestCase):
             if self.mode == "old-preset-switch": snapshot["projections"]["values"]["agentPreset"] = "standard"
             if self.mode.startswith('recovery'):
                 text = 'QQ_BRIDGE_SEARCH_POLICY '+json.dumps({'version':1,'sessionId':sid,'rpcId':'original'})+'\nchat'
-                if self.mode == 'recovery-foreign': text = 'manual message'
+                if 'foreign' in self.mode: text = 'manual message'
                 snapshot['records'].insert(0,{'event':{'seq':18,'type':'user/message','data':{
                     'source':{'kind':'user','rpcId':'original'},'content':[{'type':'text','text':text}]}}})
-                if self.mode == 'recovery-active':snapshot['records'][-1]['event']['type']='turn/start'
-                if self.mode == 'recovery-queued':snapshot['projections']['values']['inbox']['next-turn']=[{'id':'queued'}]
+                if 'active' in self.mode:snapshot['records'][-1]['event']['type']='turn/start'
+                if 'queued' in self.mode:snapshot['projections']['values']['inbox']['next-turn']=[{'id':'queued'}]
+                if self.mode == 'recovery-foreign-unfinished':
+                    snapshot['cursor']=21
+                    snapshot['records'].append({'event':{'seq':21,'type':'user/message','data':{
+                        'source':{'kind':'user'},'content':[{'type':'text','text':'new manual input'}]}}})
             await ws.send_json({"type":"item","streamId":self.stream,"value":snapshot})
             try:
                 while True: await ws.receive_text()
@@ -154,6 +158,18 @@ class WireTests(unittest.IsolatedAsyncioTestCase):
                           ('recovery-foreign','recovery_foreign_input')]:
             self.mode=mode
             with self.assertRaisesRegex(dsh.BridgeError,code):await self.client.recovery_checkpoint('session-1')
+        self.assertEqual(self.prompts,[])
+
+    async def test_owner_checkpoint_accepts_foreign_but_keeps_all_other_guards(self):
+        self.mode='recovery-foreign'
+        self.assertEqual(await self.client.recovery_checkpoint('session-1',allow_foreign=True),20)
+        for mode,code in [('recovery-foreign-active','recovery_turn_active'),
+                          ('recovery-foreign-queued','recovery_turn_active'),
+                          ('recovery-foreign-unfinished','recovery_history_unverified'),
+                          ('old-preset-switch','unsafe_current_session_preset')]:
+            self.mode=mode
+            with self.assertRaisesRegex(dsh.BridgeError,code):
+                await self.client.recovery_checkpoint('session-1',allow_foreign=True)
         self.assertEqual(self.prompts,[])
 
     async def test_native_search_control_bound_to_current_rpc_and_sources_collected(self):

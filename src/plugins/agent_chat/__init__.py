@@ -265,25 +265,31 @@ async def administer(bot: Bot, event: MessageEvent, args: Message = CommandArg()
              if service.knowledge else ''))
     if command in {"恢复", "resume", "recover"}:
         try:
-            result = await service.recover(key)
+            result = await service.recover(key, owner=True)
         except BridgeError as error:
             logger.warning('agent_chat recovery stopped: {}', str(error))
             messages = {
-                'recovery_busy':'当前仍有请求在处理，请等它结束后再恢复。',
-                'recovery_delivery_uncertain':'上次消息是否发送成功无法确认，暂不自动恢复。请先人工核对；ai 重置会改用新会话。',
+                'recovery_busy':'恢复正在进行，或旧任务尚未确认停止；请稍后再发 ai 恢复。',
+                'recovery_state_changed':'恢复期间会话状态发生变化，未跳过旧记录；请稍后再发 ai 恢复。',
                 'recovery_policy_changed':'预设或模型配置已改变，不能直接恢复旧绑定，请检查配置或使用 ai 重置。',
-                'recovery_foreign_input':'检测到非桥接输入，暂不恢复。请检查 DSH 会话，避免同时手动聊天。',
                 'recovery_turn_active':'DSH 仍有未结束的任务或排队内容，暂时保持暂停，请稍后再恢复。',
                 'recovery_history_unverified':'还不能确认 DSH 上一轮已经完整结束，保留会话并保持暂停，请检查本地日志。',
                 'dsh_session_missing':'DSH 未找到原会话，保持暂停。请检查会话是否存在，不要急于重置历史。',
                 'dsh_auth_expired':'DSH 本机访问凭据已失效，需更新凭据后再恢复。',
+                'dsh_auth_missing':'DSH 登录已失效且未配置可重新登录的本机令牌；请更新桥接凭据后重试。',
+                'dsh_auth_failed':'DSH 本机登录失败，请检查桥接凭据后再发 ai 恢复。',
+                'dsh_unreachable':'暂时连接不上 DSH；请打开原来的 DSH，稍后再发 ai 恢复。',
+                'dsh_transport_or_protocol_error':'DSH 连接失败；请确认 DSH 已启动，稍后再发 ai 恢复。',
+                'dsh_stream_disconnected':'检查时 DSH 连接中断，保持暂停；连接正常后再发 ai 恢复。',
+                'recovery_check_timeout':'DSH 检查或停止旧任务超时，保持暂停；稍后再发 ai 恢复。',
+                'unsafe_current_session_preset':'当前 DSH 会话未使用桥接安全预设，保持暂停；请恢复安全预设后再试。',
             }
             await admin.finish(messages.get(str(error),'尚未确认 DSH 会话可以安全恢复，保持暂停。请检查 DSH/API 后再试。'))
         except Exception:
             await admin.finish('恢复检查失败，保持原状态，请检查本地日志。')
         await admin.finish({'missing':'当前没有 AI 会话，下次触发时会自动创建。',
             'active':'当前会话未暂停，无需恢复。这不代表聊天 API 已通过健康测试。',
-            'resumed':'当前 AI 会话已恢复，保留原有记忆。未重发旧消息，额度不重置；下次新消息触发时继续。'}[result])
+            'resumed':'当前 AI 会话已恢复，保留原会话、历史、记忆和黑话。旧任务与待确认回复已跳过，不补发；未回答的问题请重新 @ 我。额度不重置；本次未调用模型测试 API。'}[result])
     if command in {"重置", "reset"}:
         try:
             await service.reset(key)

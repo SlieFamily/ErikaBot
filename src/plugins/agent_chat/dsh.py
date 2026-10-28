@@ -380,15 +380,17 @@ class DshClient:
         except (OSError, websockets.WebSocketException):
             raise BridgeError("dsh_stream_disconnected") from None
 
-    async def recovery_checkpoint(self, sid):
+    async def recovery_checkpoint(self, sid, *, allow_foreign=False):
+        # Only explicit SUPERUSER recovery may accept completed manual input.
+        # Automatic recovery and background maintenance retain strict ownership.
         try:
-            return await asyncio.wait_for(self._recovery_checkpoint(sid), 15)
+            return await asyncio.wait_for(self._recovery_checkpoint(sid, allow_foreign=allow_foreign), 15)
         except asyncio.TimeoutError:
             raise BridgeError('recovery_check_timeout') from None
         except (OSError, websockets.WebSocketException):
             raise BridgeError('dsh_stream_disconnected') from None
 
-    async def _recovery_checkpoint(self, sid):
+    async def _recovery_checkpoint(self, sid, *, allow_foreign=False):
         await self.authenticate()
         stream = str(uuid.uuid4())
         async with self.connect(self.cfg.agent_chat_dsh_url.replace('http','ws',1)+'/api/remote.mux',
@@ -438,7 +440,8 @@ class DshClient:
                         if (control.get('version')!=1 or control.get('sessionId')!=sid or
                                 not source.get('rpcId') or control.get('rpcId')!=source['rpcId']): raise ValueError()
                     except (ValueError,KeyError,IndexError,TypeError,AttributeError):
-                        raise BridgeError('recovery_foreign_input') from None
+                        if not allow_foreign:
+                            raise BridgeError('recovery_foreign_input') from None
                     owner = True
                     owner_seq = event['seq']
             if latest_turn and owner:
