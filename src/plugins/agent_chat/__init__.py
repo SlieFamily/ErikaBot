@@ -24,7 +24,7 @@ from .forwards import ForwardResolver, forward_refs, forward_context
 from .knowledge_bridge import install_route
 from .knowledge_admin import handle as knowledge_command
 from .slang_report import SLANG_COMMANDS
-from .forward_report import ForwardReport, send_report
+from .forward_report import ForwardReport, send_report, failure_notice
 
 
 driver = get_driver()
@@ -236,9 +236,12 @@ async def administer(bot: Bot, event: MessageEvent, args: Message = CommandArg()
         if isinstance(rendered,ForwardReport):
             try:await asyncio.wait_for(send_report(bot,event,rendered),60)
             except Exception as error:
-                code=getattr(error,'info',{}).get('retcode') if isinstance(getattr(error,'info',None),dict) else None
-                logger.warning('agent_chat report forward failed: kind={} retcode={}; no retry or text expansion',type(error).__name__,code)
-                await admin.finish('合并转发未确认发送成功；未展开成多条消息。请稍后重试 '+rendered.command+'。')
+                logger.warning('agent_chat report forward failed: api={} kind={} retcode={} reason={} page={}/{} nodes={} chars={} bytes={}; no retry or text expansion',
+                    getattr(error,'api','report'),getattr(error,'kind',type(error).__name__),getattr(error,'retcode',None),
+                    getattr(error,'reason','timeout' if isinstance(error,asyncio.TimeoutError) else 'report_error'),
+                    rendered.page,rendered.pages,len(rendered.nodes),sum(len(n) for n in rendered.nodes),
+                    sum(len(n.encode('utf8')) for n in rendered.nodes))
+                await admin.finish(failure_notice(error,rendered.command))
             await admin.finish()
         if rendered is not None:
             await admin.finish(Message(MessageSegment.text(rendered)))

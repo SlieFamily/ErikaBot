@@ -1,6 +1,11 @@
 """Bounded, paged moderation reports; no model calls or raw chat excerpts."""
-from .forward_report import ForwardReport as SlangReport, send_report, MAX_NODE_CHARS, CHUNKS_PER_PAGE
+from .forward_report import ForwardReport as SlangReport, send_report, MAX_NODE_CHARS
 import re
+
+# 黑话报告独立的小页预算：不改变记忆报告，不截断词条，也不自动连发后续页。
+CHUNKS_PER_PAGE=3          # 每页最多3个来源段，另加1个说明节点
+MAX_PAGE_CHARS=2200       # 每页正文字符总数（含来源标题，不含说明节点）
+MAX_ENTRIES_PER_PAGE=12   # 每页最多12次词条展示；跨群同词分别计数
 
 SLANG_COMMANDS=frozenset({'黑话','黑话确认','黑话拒绝','黑话删除','黑话添加','黑话帮助','学习帮助','黑话解锁','黑话历史','黑话回退'})
 STATUSES={'候选':'candidate','自动':'learned','已确认':'confirmed','已拒绝':'rejected','已锁定':'confirmed'}
@@ -51,20 +56,29 @@ def build_report(store,bot_id,tail,*,chat_key=None):
     groups={}
     for row in rows:
         for key,count in row['groups'] or [('manual',None)]:groups.setdefault(key,[]).append((row,count))
-    chunks=[]
+    report_pages=[];chunks=[];page_chars=0;page_entries=0
     for key in sorted(groups,key=lambda k:(k=='manual',int(k.rsplit(':',1)[-1]) if k!='manual' else 0)):
         label='共享手工词条（无本机器人来源群记录）' if key=='manual' else '来源群 '+key.rsplit(':',1)[-1]
         values=sorted(groups[key],key=lambda item:(-item[0]['count'],-(item[1] or 0),item[0]['id']))
-        part=1;current=f'{label} · 第{part}段\n'
+        part=0;current=None
         for row,observed in values:
             text=entry_text(row,observed)
-            if len(current)+len(text)+2>MAX_NODE_CHARS:
-                chunks.append(current.rstrip());part+=1;current=f'{label} · 第{part}段\n'
-            # Storage bounds and field limits keep each complete entry inside one node.
-            if len(text)+len(current)>MAX_NODE_CHARS:raise ValueError('oversized_slang_record')
-            current+=text+'\n\n'
-        if current.strip():chunks.append(current.rstrip())
-    pages=max(1,(len(chunks)+CHUNKS_PER_PAGE-1)//CHUNKS_PER_PAGE)
+            new_node=current is None or len(chunks[current])+len(text)+2>MAX_NODE_CHARS
+            addition=(f'{label} · 第{part+1}段\n' if new_node else '\n\n')+text
+            if chunks and (page_entries>=MAX_ENTRIES_PER_PAGE or
+                           page_chars+len(addition)>MAX_PAGE_CHARS or
+                           new_node and len(chunks)>=CHUNKS_PER_PAGE):
+                report_pages.append(tuple(chunks));chunks=[];page_chars=0;page_entries=0
+                new_node=True
+                addition=f'{label} · 第{part+1}段\n'+text
+            # An entry stays whole; reject corrupt oversized records instead of truncating.
+            if new_node:
+                if len(addition)>min(MAX_NODE_CHARS,MAX_PAGE_CHARS):raise ValueError('oversized_slang_record')
+                part+=1;chunks.append(addition);current=len(chunks)-1
+            else:chunks[current]+=addition
+            page_chars+=len(addition);page_entries+=1
+    if chunks:report_pages.append(tuple(chunks))
+    pages=len(report_pages)
     if page>pages:return f'当前只有 {pages} 页。'+USAGE
     options=(' '+LABELS[status] if status else '')+(' 全部' if minimum==0 else '')
     scope='当前群 '+chat_key.rsplit(':',1)[-1] if chat_key else '黑话审核汇总'
@@ -74,4 +88,4 @@ def build_report(store,bot_id,tail,*,chat_key=None):
             '\n同一词在多个来源群重复展示时共用编号；自动词义可使用且持续修订；确认后锁定。'
             '\n确认：ai 黑话确认 12 15 18；确认即锁定；可用 ai 黑话历史 编号 查看修订、ai 黑话回退 编号 版本 回退并锁定。'
             +(f'\n下一页：ai 黑话{options} {page+1}' if page<pages else '\n已到最后一页。'))
-    return SlangReport(tuple([header]+chunks[(page-1)*CHUNKS_PER_PAGE:page*CHUNKS_PER_PAGE]),page,pages,len(rows))
+    return SlangReport((header,)+report_pages[page-1],page,pages,len(rows))

@@ -355,6 +355,15 @@ async def main():
         before=len(sent)
         await handle_event(bot,event('ai 记忆',uid=1))
         assert len(failed)==2 and len(sent)==before+1 and 'ai 记忆' in str(sent[-1])
+        from nonebot.adapters.onebot.v11 import ActionFailed
+        async def missing_receipt(api,**data):
+            if api=='send_group_forward_msg':
+                failed.append(api)
+                raise ActionFailed(retcode=100,message='group message delivery was not confirmed: QQ returned no message receipt')
+            return await original_call(api,**data)
+        bot.call_api=missing_receipt;before=len(sent)
+        await handle_event(bot,event('ai 黑话',uid=1,group=99))
+        assert len(failed)==3 and len(sent)==before+1 and 'QQ 没有返回送达回执' in str(sent[-1])
         bot.call_api=original_call
         assert service.knowledge.learning_count()==0
         service.knowledge=None;db.close();service.store.db.close()

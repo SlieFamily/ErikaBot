@@ -58,11 +58,39 @@ class SlangReportTests(unittest.TestCase):
    result=report.build_report(self.store,'100',f'候选 {page}')
    self.assertLessEqual(len(result.nodes),report.CHUNKS_PER_PAGE+1)
    self.assertTrue(all(len(node)<=report.MAX_NODE_CHARS for node in result.nodes))
+   self.assertLessEqual(sum(len(node) for node in result.nodes[1:]),report.MAX_PAGE_CHARS)
+   self.assertLessEqual(sum(node.count('\n解释：') for node in result.nodes[1:]),report.MAX_ENTRIES_PER_PAGE)
    all_text.extend(result.nodes[1:])
   text='\n'.join(all_text)
   for i in ids:self.assertEqual(text.count(f'#{i} 分页词'),1)
   self.assertIn('下一页：ai 黑话 候选 2',self.text(first))
   self.assertIsInstance(report.build_report(self.store,'100',str(first.pages+1)),str)
+ def test_short_entries_and_many_groups_paginate_without_losing_origins(self):
+  for i in range(27):self.add('短词'+str(i),key=KEY if i<17 else f'100:group:{50+i}')
+  first=report.build_report(self.store,'100','');self.assertGreater(first.pages,1)
+  bodies=[]
+  for page in range(1,first.pages+1):
+   value=report.build_report(self.store,'100',str(page))
+   self.assertLessEqual(len(value.nodes),report.CHUNKS_PER_PAGE+1)
+   self.assertLessEqual(sum(n.count('\n解释：') for n in value.nodes[1:]),report.MAX_ENTRIES_PER_PAGE)
+   self.assertLessEqual(sum(map(len,value.nodes[1:])),report.MAX_PAGE_CHARS)
+   bodies.extend(value.nodes[1:])
+  text='\n'.join(bodies)
+  for i in range(27):self.assertEqual(text.count(f' 短词{i} ['),1)
+  for i in range(17,27):self.assertIn(f'来源群 {50+i}',text)
+ def test_long_unicode_entry_keeps_complete_fields_and_memory_budget_unchanged(self):
+  for i in range(7):
+   entry=self.add('完整词'+str(i),meaning='🙂'*400)
+   with self.db:self.db.execute('UPDATE knowledge_slang SET risk=?,usage=?,example=? WHERE id=?',('风险'*150,'用法'*60,'例句'*60,entry))
+  first=report.build_report(self.store,'100','');bodies=[]
+  for page in range(1,first.pages+1):
+   value=report.build_report(self.store,'100',str(page))
+   self.assertLessEqual(sum(map(len,value.nodes[1:])),report.MAX_PAGE_CHARS)
+   bodies.extend(value.nodes[1:])
+  text='\n'.join(bodies)
+  self.assertEqual(text.count('🙂'*400),7);self.assertEqual(text.count('注意：'+'风险'*150),7)
+  memory=importlib.import_module(PACKAGE+'.memory_report')
+  self.assertEqual(memory.CHUNKS_PER_PAGE,9)
  def test_invalid_options_empty_results_and_untrusted_cq_remain_data(self):
   for value in ['0','-1','2 3','候选 已确认','全部 全部','全群','99999999','1;bash']:
    self.assertEqual(report.build_report(self.store,'100',value),report.USAGE)
